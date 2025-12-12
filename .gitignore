@@ -1,0 +1,98 @@
+# ============================================
+# System files
+# ============================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# ============================================
+# Environment & Secrets (CRITICAL)
+# ============================================
+.env
+.env.local
+.env.*.local
+**/.env
+mcp.json
+**/mcp.json
+
+# ============================================
+# Language-specific modules & dependencies
+# ============================================
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+.venv/
+
+# Go
+vendor/
+*.exe
+*.test
+*.out
+
+# Rust
+target/
+Cargo.lock
+
+# Java
+*.class
+*.jar
+*.war
+.gradle/
+build/
+
+# Ruby
+*.gem
+.bundle/
+vendor/bundle/
+
+# PHP
+vendor/
+composer.lock
+
+# .NET
+bin/
+obj/
+*.dll
+*.exe
+
+# ============================================
+# IDE & Editor files
+# ============================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# ============================================
+# Build & Output directories
+# ============================================
+dist/
+out/
+*.log
+
+
+#Ignore vscode AI rules
+.github/instructions/codacy.instructions.md
+.codacy/
