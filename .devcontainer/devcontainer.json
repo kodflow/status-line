@@ -1,0 +1,62 @@
+{
+  "name": "${localWorkspaceFolderBasename} Dev Environment",
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "devcontainer",
+  "workspaceFolder": "/workspace",
+  // Features - additional languages (tools are already in base image)
+  "features": {
+    // ========== LANGUAGES (optional) ==========
+    // Uncomment languages you need - base image already has Node.js
+    // "./features/languages/carbon": {},
+    // "./features/languages/cpp": {},
+    // "./features/languages/dart-flutter": {},
+    // "./features/languages/elixir": {},
+    // "./features/languages/go": {},
+    // "./features/languages/java": {},
+    // "./features/languages/php": {},
+    // "./features/languages/python": {},
+    // "./features/languages/ruby": {},
+    // "./features/languages/rust": {},
+    // ========== EXTERNAL ==========
+    // Docker support
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
+      "moby": false,
+      "installDockerBuildx": true,
+      "dockerDashComposeVersion": "v2"
+    }
+  },
+  // Configure tool-specific properties
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "zsh",
+        "terminal.integrated.profiles.linux": {
+          "zsh": {
+            "path": "/bin/zsh"
+          }
+        },
+        "editor.formatOnSave": true,
+        "files.eol": "\n",
+        "files.insertFinalNewline": true,
+        "files.trimTrailingWhitespace": true
+      },
+      "extensions": [
+        "usernamehw.errorlens",
+        "vscode-icons-team.vscode-icons",
+        "redhat.vscode-yaml",
+        "tamasfe.even-better-toml",
+        "editorconfig.editorconfig"
+      ]
+    }
+  },
+  // ========== LIFECYCLE COMMANDS ==========
+  "initializeCommand": "bash ${localWorkspaceFolder}/.devcontainer/hooks/lifecycle/initialize.sh",
+  "onCreateCommand": "chmod +x /workspace/.devcontainer/hooks/lifecycle/*.sh && /workspace/.devcontainer/hooks/lifecycle/onCreate.sh",
+  "updateContentCommand": "/workspace/.devcontainer/hooks/lifecycle/updateContent.sh",
+  "postCreateCommand": "/workspace/.devcontainer/hooks/lifecycle/postCreate.sh",
+  "postStartCommand": "/workspace/.devcontainer/hooks/lifecycle/postStart.sh",
+  "postAttachCommand": "/workspace/.devcontainer/hooks/lifecycle/postAttach.sh",
+  "forwardPorts": [],
+  "remoteUser": "vscode",
+  "shutdownAction": "none"
+}

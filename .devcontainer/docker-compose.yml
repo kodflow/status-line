@@ -1,0 +1,148 @@
+services:
+  devcontainer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # Build arguments for optimization
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+
+    env_file:
+      - .env
+    volumes:
+      # Mount workspace
+      - ..:/workspace:cached
+      # Named volumes for persistence (survive rebuilds)
+      - zsh-history:/home/vscode/.zsh_history_dir
+      - package-cache:/home/vscode/.cache
+      - config-dir:/home/vscode/.config
+      - local-bin:/home/vscode/.local/bin
+
+      # npm global packages persistence (survives rebuilds)
+      - npm-global:/home/vscode/.local/share/npm-global
+
+      # Claude CLI session persistence (survives rebuilds)
+      - claude-config:/home/vscode/.claude
+      - anthropic-config:/home/vscode/.config/@anthropic
+      - anthropic-cache:/home/vscode/.cache/@anthropic
+      - anthropic-data:/home/vscode/.local/share/@anthropic
+
+      # 1Password CLI session persistence (survives rebuilds)
+      - op-config:/home/vscode/.config/op
+      - op-cache:/home/vscode/.op
+
+      # Docker socket for Docker-from-Docker (use host Docker daemon)
+      - /var/run/docker.sock:/var/run/docker.sock
+
+    # Network configuration
+    networks:
+      - default
+
+    # Keep container running
+    command: /bin/sh -c "while sleep 1000; do :; done"
+
+    # Environment variables for package managers cache
+    environment:
+      # Claude CLI configuration
+      - CLAUDE_CONFIG_DIR=/home/vscode/.claude
+
+      # 1Password configuration
+      - OP_CONFIG_DIR=/home/vscode/.config/op
+
+      # Node.js / npm / yarn / pnpm / nvm
+      - NVM_DIR=/home/vscode/.cache/nvm
+      - npm_config_cache=/home/vscode/.cache/npm
+      - YARN_CACHE_FOLDER=/home/vscode/.cache/yarn
+      - PNPM_HOME=/home/vscode/.cache/pnpm
+
+      # Python / pip / poetry / pipenv / pyenv
+      - PYENV_ROOT=/home/vscode/.cache/pyenv
+      - PIP_CACHE_DIR=/home/vscode/.cache/pip
+      - POETRY_CACHE_DIR=/home/vscode/.cache/poetry
+      - PIPENV_CACHE_DIR=/home/vscode/.cache/pipenv
+
+      # Go / gvm
+      - GVM_ROOT=/home/vscode/.cache/gvm
+      - GOPATH=/home/vscode/.cache/go
+      - GOCACHE=/home/vscode/.cache/go-build
+      - GOMODCACHE=/home/vscode/.cache/go/pkg/mod
+
+      # Ruby / Bundler / rbenv
+      - RBENV_ROOT=/home/vscode/.cache/rbenv
+      - GEM_HOME=/home/vscode/.cache/gems
+      - BUNDLE_PATH=/home/vscode/.cache/bundle
+
+      # Rust / Cargo / rustup
+      - CARGO_HOME=/home/vscode/.cache/cargo
+      - RUSTUP_HOME=/home/vscode/.cache/rustup
+
+      # Java / Maven / Gradle / sdkman
+      - SDKMAN_DIR=/home/vscode/.cache/sdkman
+      - MAVEN_OPTS=-Dmaven.repo.local=/home/vscode/.cache/maven
+      - GRADLE_USER_HOME=/home/vscode/.cache/gradle
+
+      # PHP / Composer / Symfony
+      - COMPOSER_HOME=/home/vscode/.cache/composer
+      - COMPOSER_CACHE_DIR=/home/vscode/.cache/composer/cache
+      - SYMFONY_CLI_HOME=/home/vscode/.cache/symfony
+
+      # Dart / Flutter / Pub
+      - PUB_CACHE=/home/vscode/.cache/pub-cache
+      - FLUTTER_ROOT=/home/vscode/.cache/flutter
+
+      # Elixir / Hex / Mix / asdf
+      - ASDF_DATA_DIR=/home/vscode/.cache/asdf
+      - MIX_HOME=/home/vscode/.cache/mix
+      - HEX_HOME=/home/vscode/.cache/hex
+
+      # C / C++ / CMake / Conan / vcpkg
+      - CCACHE_DIR=/home/vscode/.cache/ccache
+      - CONAN_USER_HOME=/home/vscode/.cache/conan
+      - VCPKG_ROOT=/home/vscode/.cache/vcpkg
+      - CMAKE_BUILD_PARALLEL_LEVEL=4
+
+      # Carbon (Google's C++ successor)
+      - CARBON_PATH=/home/vscode/.cache/carbon
+      - BAZEL_USER_ROOT=/home/vscode/.cache/bazel
+
+      # Cloud CLIs (AWS / Google Cloud / Azure)
+      - AWS_CONFIG_FILE=/home/vscode/.config/aws/config
+      - AWS_SHARED_CREDENTIALS_FILE=/home/vscode/.config/aws/credentials
+      - AWS_CLI_CACHE_DIR=/home/vscode/.cache/aws
+      # Uncomment if using Google Cloud SDK (requires cloud-cli feature)
+      # - GOOGLE_APPLICATION_CREDENTIALS=/home/vscode/.config/gcloud/application_default_credentials.json
+      - CLOUDSDK_CONFIG=/home/vscode/.config/gcloud
+      - AZURE_CONFIG_DIR=/home/vscode/.config/azure
+
+      # Infrastructure as Code (Terraform)
+      - TF_PLUGIN_CACHE_DIR=/home/vscode/.cache/terraform
+
+      # Kubernetes / Helm
+      - KUBECONFIG=/home/vscode/.config/kube/config
+      - HELM_CACHE_HOME=/home/vscode/.cache/helm
+
+      # PATH - Add all bin directories (user packages first, then system)
+      - PATH=/home/vscode/.local/share/npm-global/bin:/home/vscode/.local/bin:/home/vscode/.cache/nvm/bin:/home/vscode/.cache/pyenv/bin:/home/vscode/.cache/rbenv/bin:/home/vscode/.cache/sdkman/bin:/home/vscode/.cache/composer/vendor/bin:/home/vscode/.cache/pub-cache/bin:/home/vscode/.cache/flutter/bin:/home/vscode/.cache/mix/escripts:/home/vscode/.cache/vcpkg:/home/vscode/.cache/carbon/bin:/home/vscode/.cache/go/bin:/home/vscode/.cache/cargo/bin:/home/vscode/.cache/gems/bin:/home/vscode/.cache/pnpm:/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin
+
+    # User
+    user: vscode
+
+volumes:
+  zsh-history:
+  package-cache:
+  config-dir:
+  local-bin:
+  # npm global packages volume
+  npm-global:
+  # Claude CLI volumes (persist sessions across rebuilds)
+  claude-config:
+  anthropic-config:
+  anthropic-cache:
+  anthropic-data:
+  # 1Password CLI volumes (persist sessions across rebuilds)
+  op-config:
+  op-cache:
+
+networks:
+  default:
+    driver: bridge
