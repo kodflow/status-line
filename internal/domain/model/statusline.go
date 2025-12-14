@@ -1,0 +1,14 @@
+// Package model contains domain entities and value objects.
+package model
+
+// StatusLineData contains all data needed to render the status line.
+type StatusLineData struct {
+	Model    ModelInfo
+	Progress Progress
+	Icons    IconConfig
+	Git      GitStatus
+	System   SystemInfo
+	Terminal TerminalInfo
+	Dir      string
+	Time     string
+}
