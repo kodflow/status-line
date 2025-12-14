@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"github.com/florent/status-line/internal/adapter/git"
+	"github.com/florent/status-line/internal/adapter/mcp"
 	"github.com/florent/status-line/internal/adapter/system"
 	"github.com/florent/status-line/internal/adapter/terminal"
 	"github.com/florent/status-line/internal/application"
@@ -28,7 +29,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	svc := buildService()
+	svc := buildService(input.WorkingDir())
 	fmt.Print(svc.Generate(input))
 }
 
@@ -57,14 +58,18 @@ func readInput() (*model.Input, error) {
 
 // buildService creates and wires all dependencies for the status line service.
 //
+// Params:
+//   - projectDir: the project directory for MCP config lookup
+//
 // Returns:
 //   - *application.StatusLineService: fully configured service instance
-func buildService() *application.StatusLineService {
+func buildService(projectDir string) *application.StatusLineService {
 	// Return service with all adapters injected
 	return application.NewStatusLineService(
 		git.NewRepository(),
 		system.NewProvider(),
 		terminal.NewProvider(),
+		mcp.NewProvider(projectDir),
 		renderer.NewPowerline(),
 	)
 }
