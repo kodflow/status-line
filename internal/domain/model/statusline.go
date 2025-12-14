@@ -2,6 +2,7 @@
 package model
 
 // StatusLineData contains all data needed to render the status line.
+// It aggregates information from all sources for rendering.
 type StatusLineData struct {
 	Model    ModelInfo
 	Progress Progress

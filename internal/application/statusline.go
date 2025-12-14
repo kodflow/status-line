@@ -8,9 +8,11 @@ import (
 	"github.com/florent/status-line/internal/domain/port"
 )
 
-const timeFormat = "15:04:05"
+// timeFormat defines the format for displaying time.
+const timeFormat string = "15:04:05"
 
 // StatusLineService orchestrates the status line generation.
+// It coordinates between adapters and the renderer to produce output.
 type StatusLineService struct {
 	gitRepo      port.GitRepository
 	systemProv   port.SystemProvider
@@ -19,12 +21,22 @@ type StatusLineService struct {
 }
 
 // NewStatusLineService creates a new status line service.
+//
+// Params:
+//   - gitRepo: git repository adapter
+//   - systemProv: system information provider
+//   - terminalProv: terminal information provider
+//   - renderer: status line renderer
+//
+// Returns:
+//   - *StatusLineService: configured service instance
 func NewStatusLineService(
 	gitRepo port.GitRepository,
 	systemProv port.SystemProvider,
 	terminalProv port.TerminalProvider,
 	renderer port.Renderer,
 ) *StatusLineService {
+	// Return service with all dependencies injected
 	return &StatusLineService{
 		gitRepo:      gitRepo,
 		systemProv:   systemProv,
@@ -34,7 +46,14 @@ func NewStatusLineService(
 }
 
 // Generate creates the status line string from input.
+//
+// Params:
+//   - input: parsed JSON input from Claude Code
+//
+// Returns:
+//   - string: formatted status line ready for output
 func (s *StatusLineService) Generate(input *model.Input) string {
+	// Gather all data from various sources
 	data := model.StatusLineData{
 		Model:    input.ModelInfo(),
 		Progress: input.Progress(),
@@ -46,5 +65,6 @@ func (s *StatusLineService) Generate(input *model.Input) string {
 		Time:     time.Now().Format(timeFormat),
 	}
 
+	// Delegate rendering to the renderer
 	return s.renderer.Render(data)
 }

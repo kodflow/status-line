@@ -15,8 +15,14 @@ import (
 	"github.com/florent/status-line/internal/presentation/renderer"
 )
 
+// main is the entry point of the application.
+// It reads JSON input from stdin, builds the service, and outputs the status line.
+//
+// Returns:
+//   - void: exits with code 1 on error
 func main() {
 	input, err := readInput()
+	// Check for input reading errors
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Error:", err)
 		os.Exit(1)
@@ -26,20 +32,35 @@ func main() {
 	fmt.Print(svc.Generate(input))
 }
 
+// readInput reads and parses JSON input from stdin.
+//
+// Returns:
+//   - *model.Input: parsed input data
+//   - error: reading or parsing error if any
 func readInput() (*model.Input, error) {
 	data, err := io.ReadAll(os.Stdin)
+	// Check for stdin read errors
 	if err != nil {
+		// Return wrapped error for context
 		return nil, fmt.Errorf("reading stdin: %w", err)
 	}
 
 	var input model.Input
+	// Check for JSON parsing errors
 	if err := json.Unmarshal(data, &input); err != nil {
+		// Return wrapped error for context
 		return nil, fmt.Errorf("parsing JSON: %w", err)
 	}
+	// Return successfully parsed input
 	return &input, nil
 }
 
+// buildService creates and wires all dependencies for the status line service.
+//
+// Returns:
+//   - *application.StatusLineService: fully configured service instance
 func buildService() *application.StatusLineService {
+	// Return service with all adapters injected
 	return application.NewStatusLineService(
 		git.NewRepository(),
 		system.NewProvider(),
