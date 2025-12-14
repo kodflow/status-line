@@ -2,6 +2,7 @@
 package model
 
 // TerminalInfo contains terminal information.
+// It holds terminal dimensions for rendering.
 type TerminalInfo struct {
 	Width int
 }
