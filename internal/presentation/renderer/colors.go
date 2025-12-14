@@ -15,32 +15,40 @@ const (
 	Bold string = "\033[1m"
 )
 
-// Background color constants using 256-color palette.
+// Background color constants using 256-color palette (pale tones).
 const (
-	// BgBlue is the blue background color.
-	BgBlue string = "\033[48;5;31m"
-	// BgCyan is the cyan background color.
-	BgCyan string = "\033[48;5;37m"
+	// BgBlue is the pale blue background color.
+	BgBlue string = "\033[48;5;111m"
+	// BgCyan is the pale cyan background color.
+	BgCyan string = "\033[48;5;116m"
 	// BgWhite is the white background color.
 	BgWhite string = "\033[48;5;255m"
 )
 
-// Model-specific background colors.
+// Darker foreground variants for text on colored backgrounds.
 const (
-	// BgHaiku is the light pink background for Haiku.
+	// FgBlueDark is a darker blue for text on blue background.
+	FgBlueDark string = "\033[38;5;25m"
+	// FgCyanDark is a darker cyan for text on cyan background.
+	FgCyanDark string = "\033[38;5;30m"
+)
+
+// Model-specific background colors (pale tones).
+const (
+	// BgHaiku is the pale pink background for Haiku.
 	BgHaiku string = "\033[48;5;218m"
-	// BgSonnet is the purple background for Sonnet.
-	BgSonnet string = "\033[48;5;141m"
-	// BgOpus is the gold/orange background for Opus.
-	BgOpus string = "\033[48;5;214m"
+	// BgSonnet is the pale purple background for Sonnet.
+	BgSonnet string = "\033[48;5;183m"
+	// BgOpus is the pale orange background for Opus.
+	BgOpus string = "\033[48;5;222m"
 )
 
 // Foreground color constants using 256-color palette.
 const (
-	// FgBlue is the blue foreground color.
-	FgBlue string = "\033[38;5;31m"
-	// FgCyan is the cyan foreground color.
-	FgCyan string = "\033[38;5;37m"
+	// FgBlue is the pale blue foreground color for separators.
+	FgBlue string = "\033[38;5;111m"
+	// FgCyan is the pale cyan foreground color for separators.
+	FgCyan string = "\033[38;5;116m"
 	// FgWhite is the white foreground color.
 	FgWhite string = "\033[38;5;255m"
 	// FgBlack is the black foreground color.
@@ -49,26 +57,68 @@ const (
 	FgYellow string = "\033[38;5;220m"
 )
 
-// Model-specific foreground colors for pill caps.
+// Model-specific foreground colors for pill caps (pale tones).
 const (
-	// FgHaiku is the light pink foreground for Haiku.
+	// FgHaiku is the pale pink foreground for Haiku pill caps.
 	FgHaiku string = "\033[38;5;218m"
-	// FgSonnet is the purple foreground for Sonnet.
-	FgSonnet string = "\033[38;5;141m"
-	// FgOpus is the gold/orange foreground for Opus.
-	FgOpus string = "\033[38;5;214m"
+	// FgSonnet is the pale purple foreground for Sonnet pill caps.
+	FgSonnet string = "\033[38;5;183m"
+	// FgOpus is the pale orange foreground for Opus pill caps.
+	FgOpus string = "\033[38;5;222m"
+)
+
+// Darker foreground variants for model text.
+const (
+	// FgHaikuDark is a darker pink for text on Haiku background.
+	FgHaikuDark string = "\033[38;5;168m"
+	// FgSonnetDark is a darker purple for text on Sonnet background.
+	FgSonnetDark string = "\033[38;5;97m"
+	// FgOpusDark is a darker orange for text on Opus background.
+	FgOpusDark string = "\033[38;5;172m"
 )
 
 // Progress bar color constants.
 const (
-	// ColorGreen is the color for low usage.
+	// ColorGreen is the foreground color for low usage.
 	ColorGreen string = "\033[38;5;76m"
-	// ColorYellow is the color for medium usage.
+	// ColorYellow is the foreground color for medium usage.
 	ColorYellow string = "\033[38;5;220m"
-	// ColorOrange is the color for high usage.
+	// ColorOrange is the foreground color for high usage.
 	ColorOrange string = "\033[38;5;208m"
-	// ColorRed is the color for critical usage.
+	// ColorRed is the foreground color for critical usage.
 	ColorRed string = "\033[38;5;196m"
+)
+
+// Code changes segment colors (pale backgrounds, darker text).
+const (
+	// BgGreen is the pale green background for lines added.
+	BgGreen string = "\033[48;5;114m"
+	// FgGreenText is the darker green for text on green background.
+	FgGreenText string = "\033[38;5;28m"
+	// FgGreenSep is the pale green foreground for separator.
+	FgGreenSep string = "\033[38;5;114m"
+	// BgRed is the pale red background for lines removed.
+	BgRed string = "\033[48;5;174m"
+	// FgRedText is the darker red for text on red background.
+	FgRedText string = "\033[38;5;124m"
+	// FgRedSep is the pale red foreground for separator.
+	FgRedSep string = "\033[38;5;174m"
+)
+
+// MCP server color constants (pale backgrounds, darker text).
+const (
+	// BgMCPEnabled is the pale teal background for enabled MCP servers.
+	BgMCPEnabled string = "\033[48;5;116m"
+	// FgMCPEnabled is the pale teal foreground for enabled MCP pill caps.
+	FgMCPEnabled string = "\033[38;5;116m"
+	// FgMCPEnabledText is the dark teal for text on enabled MCP background.
+	FgMCPEnabledText string = "\033[38;5;30m"
+	// BgMCPDisabled is the pale gray background for disabled MCP servers.
+	BgMCPDisabled string = "\033[48;5;250m"
+	// FgMCPDisabled is the pale gray foreground for disabled MCP pill caps.
+	FgMCPDisabled string = "\033[38;5;250m"
+	// FgMCPDisabledText is the dark gray for text on disabled MCP background.
+	FgMCPDisabledText string = "\033[38;5;240m"
 )
 
 // GetProgressColor returns color for a progress level.
@@ -108,25 +158,26 @@ func GetProgressColor(level model.ProgressLevel) string {
 // Returns:
 //   - bgColor: background color for the pill
 //   - fgColor: foreground color for the pill caps
-func GetModelColors(modelName string) (bgColor, fgColor string) {
+//   - textColor: darker foreground color for text on the pill
+func GetModelColors(modelName string) (bgColor, fgColor, textColor string) {
 	nameLower := strings.ToLower(modelName)
 	// Detect model type and return appropriate colors
 	switch {
 	// Pink colors for Haiku model
 	case strings.Contains(nameLower, "haiku"):
 		// Return Haiku colors
-		return BgHaiku, FgHaiku
+		return BgHaiku, FgHaiku, FgHaikuDark
 	// Purple colors for Sonnet model
 	case strings.Contains(nameLower, "sonnet"):
 		// Return Sonnet colors
-		return BgSonnet, FgSonnet
+		return BgSonnet, FgSonnet, FgSonnetDark
 	// Orange colors for Opus model
 	case strings.Contains(nameLower, "opus"):
 		// Return Opus colors
-		return BgOpus, FgOpus
+		return BgOpus, FgOpus, FgOpusDark
 	// White colors for unknown models
 	default:
 		// Return default colors
-		return BgWhite, FgWhite
+		return BgWhite, FgWhite, FgBlack
 	}
 }

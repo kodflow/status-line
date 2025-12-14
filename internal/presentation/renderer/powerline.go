@@ -51,7 +51,7 @@ func (r *Powerline) Render(data model.StatusLineData) string {
 	return sb.String()
 }
 
-// renderLine1 renders the first line with OS, Path, and Git segments.
+// renderLine1 renders the first line with OS, Path, Git, and Changes segments.
 //
 // Params:
 //   - sb: string builder to write to
@@ -59,13 +59,27 @@ func (r *Powerline) Render(data model.StatusLineData) string {
 func (r *Powerline) renderLine1(sb *strings.Builder, data model.StatusLineData) {
 	// Render OS segment
 	r.renderOSSegment(sb, data.System, data.Icons.OS)
-	// Render path segment
-	r.renderPathSegment(sb, data.Dir, data.Git.IsInRepo(), data.Icons.Path)
+
+	// Determine what follows git segment (or path if no git)
+	changesNextBg := ""
+	// Check if added segment follows
+	if data.Changes.HasAdded() {
+		changesNextBg = BgGreen
+	} else if data.Changes.HasRemoved() {
+		// Check if removed segment follows
+		changesNextBg = BgRed
+	}
+
+	// Render path segment (pass changesNextBg for case when no git)
+	r.renderPathSegment(sb, data.Dir, data.Git.IsInRepo(), data.Icons.Path, changesNextBg)
+
 	// Render git segment if in repo
-	r.renderGitSegment(sb, data.Git, data.Icons.Git)
+	r.renderGitSegment(sb, data.Git, data.Icons.Git, changesNextBg)
+	// Render code changes if any
+	r.renderChangesSegment(sb, data.Changes)
 }
 
-// renderLine2 renders the second line with Model pill.
+// renderLine2 renders the second line with Model pill and MCP pills.
 //
 // Params:
 //   - sb: string builder to write to
@@ -73,6 +87,8 @@ func (r *Powerline) renderLine1(sb *strings.Builder, data model.StatusLineData) 
 func (r *Powerline) renderLine2(sb *strings.Builder, data model.StatusLineData) {
 	// Render model pill
 	r.renderModelPill(sb, data.Model, data.Icons.Model)
+	// Render MCP server pills
+	r.renderMCPPills(sb, data.MCP)
 }
 
 // renderOSSegment renders the operating system segment.
@@ -104,21 +120,25 @@ func (r *Powerline) renderOSSegment(sb *strings.Builder, sys model.SystemInfo, s
 //   - dir: directory path
 //   - hasGit: whether git segment follows
 //   - showIcon: whether to show the folder icon
-func (r *Powerline) renderPathSegment(sb *strings.Builder, dir string, hasGit bool, showIcon bool) {
+//   - nextBg: background color of next segment if no git
+func (r *Powerline) renderPathSegment(sb *strings.Builder, dir string, hasGit bool, showIcon bool, nextBg string) {
 	truncated := TruncatePath(dir, defaultMaxPath)
 	// Check if icon should be shown
 	if showIcon {
-		// Write path with folder icon
-		sb.WriteString(BgBlue + FgBlack + Bold + " " + IconFolder + " " + truncated + " " + Reset)
+		// Write path with folder icon and dark blue text
+		sb.WriteString(BgBlue + FgBlueDark + Bold + " " + IconFolder + " " + truncated + " " + Reset)
 	} else {
-		// Write path without icon
-		sb.WriteString(BgBlue + FgBlack + Bold + " " + truncated + " " + Reset)
+		// Write path without icon with dark blue text
+		sb.WriteString(BgBlue + FgBlueDark + Bold + " " + truncated + " " + Reset)
 	}
 
 	// Check if git segment follows
 	if hasGit {
 		// Write separator to git segment
 		sb.WriteString(BgCyan + FgBlue + SepRight + Reset)
+	} else if nextBg != "" {
+		// Write separator to next colored segment
+		sb.WriteString(nextBg + FgBlue + SepRight + Reset)
 	} else {
 		// Write final separator
 		sb.WriteString(FgBlue + SepRight + Reset)
@@ -131,7 +151,8 @@ func (r *Powerline) renderPathSegment(sb *strings.Builder, dir string, hasGit bo
 //   - sb: string builder to write to
 //   - git: git status information
 //   - showIcon: whether to show the git branch icon
-func (r *Powerline) renderGitSegment(sb *strings.Builder, git model.GitStatus, showIcon bool) {
+//   - nextBg: background color of next segment for separator
+func (r *Powerline) renderGitSegment(sb *strings.Builder, git model.GitStatus, showIcon bool, nextBg string) {
 	// Skip if not in a git repository
 	if !git.IsInRepo() {
 		// Return early if not in repo
@@ -140,24 +161,32 @@ func (r *Powerline) renderGitSegment(sb *strings.Builder, git model.GitStatus, s
 
 	// Check if icon should be shown
 	if showIcon {
-		// Write branch with icon
-		sb.WriteString(BgCyan + FgBlack + Bold + " " + IconGitBranch + " " + git.Branch)
+		// Write branch with icon and dark cyan text
+		sb.WriteString(BgCyan + FgCyanDark + Bold + " " + IconGitBranch + " " + git.Branch)
 	} else {
-		// Write branch without icon
-		sb.WriteString(BgCyan + FgBlack + Bold + " " + git.Branch)
+		// Write branch without icon with dark cyan text
+		sb.WriteString(BgCyan + FgCyanDark + Bold + " " + git.Branch)
 	}
 
 	// Add modified indicator if present
 	if git.Modified > 0 {
-		sb.WriteString(" " + FgYellow + "!" + itoa(git.Modified) + FgBlack)
+		sb.WriteString(" !" + itoa(git.Modified))
 	}
 	// Add untracked indicator if present
 	if git.Untracked > 0 {
-		sb.WriteString(" " + FgYellow + "?" + itoa(git.Untracked) + FgBlack)
+		sb.WriteString(" ?" + itoa(git.Untracked))
 	}
 
-	// Write segment end
-	sb.WriteString(" " + Reset + FgCyan + SepRight + Reset)
+	// Write segment end with appropriate separator
+	sb.WriteString(" " + Reset)
+	// Check if next segment has background
+	if nextBg != "" {
+		// Write separator to next colored segment
+		sb.WriteString(nextBg + FgCyan + SepRight + Reset)
+	} else {
+		// Write final separator
+		sb.WriteString(FgCyan + SepRight + Reset)
+	}
 }
 
 // renderModelPill renders the model name as a nested pill.
@@ -167,30 +196,122 @@ func (r *Powerline) renderGitSegment(sb *strings.Builder, git model.GitStatus, s
 //   - m: model information
 //   - showIcon: whether to show the model icon
 func (r *Powerline) renderModelPill(sb *strings.Builder, m model.ModelInfo, showIcon bool) {
-	bgColor, fgColor := GetModelColors(m.Name)
+	bgColor, fgColor, textColor := GetModelColors(m.Name)
 
 	// Write left rounded cap
 	sb.WriteString(fgColor + LeftRound + Reset)
 
 	// Check if icon should be shown
 	if showIcon {
-		// Write model name with icon
-		sb.WriteString(bgColor + FgBlack + Bold + " " + IconModel + " " + m.Name + " " + Reset)
+		// Write model name with icon and dark text
+		sb.WriteString(bgColor + textColor + Bold + " " + IconModel + " " + m.Name + " " + Reset)
 	} else {
-		// Write model name without icon
-		sb.WriteString(bgColor + FgBlack + Bold + " " + m.Name + " " + Reset)
+		// Write model name without icon and dark text
+		sb.WriteString(bgColor + textColor + Bold + " " + m.Name + " " + Reset)
 	}
 
 	// Check if version exists for nested pill
 	if m.Version != "" {
 		// Write nested version pill
 		sb.WriteString(bgColor + FgWhite + LeftRound + Reset)
+		// Version on white background uses black text
 		sb.WriteString(BgWhite + FgBlack + Bold + " " + m.Version + " " + Reset)
 		sb.WriteString(FgWhite + RightRound + Reset)
 	} else {
 		// Write simple right cap
 		sb.WriteString(fgColor + RightRound + Reset)
 	}
+}
+
+// renderChangesSegment renders the lines added/removed as powerline segments.
+//
+// Params:
+//   - sb: string builder to write to
+//   - changes: code changes information
+func (r *Powerline) renderChangesSegment(sb *strings.Builder, changes model.CodeChanges) {
+	// Skip if no changes
+	if !changes.HasChanges() {
+		// Return early if nothing to show
+		return
+	}
+
+	// Render added segment if any
+	if changes.HasAdded() {
+		// Write added segment with dark green text on pale green background
+		sb.WriteString(BgGreen + FgGreenText + Bold + " +" + itoa(changes.Added) + " " + Reset)
+
+		// Determine separator destination
+		if changes.HasRemoved() {
+			// Separator to red segment
+			sb.WriteString(BgRed + FgGreenSep + SepRight + Reset)
+		} else {
+			// Final separator
+			sb.WriteString(FgGreenSep + SepRight + Reset)
+		}
+	}
+
+	// Render removed segment if any
+	if changes.HasRemoved() {
+		// Write removed segment with dark red text on pale red background
+		sb.WriteString(BgRed + FgRedText + Bold + " -" + itoa(changes.Removed) + " " + Reset)
+		// Final separator
+		sb.WriteString(FgRedSep + SepRight + Reset)
+	}
+}
+
+// renderMCPPills renders MCP server pills.
+//
+// Params:
+//   - sb: string builder to write to
+//   - servers: list of MCP servers
+func (r *Powerline) renderMCPPills(sb *strings.Builder, servers model.MCPServers) {
+	// Skip if no servers
+	if len(servers) == 0 {
+		// Return early if nothing to show
+		return
+	}
+
+	// Add space before MCP pills
+	sb.WriteString(" ")
+
+	// Render each server as a pill
+	for idx, server := range servers {
+		// Add space between pills
+		if idx > 0 {
+			sb.WriteString(" ")
+		}
+		// Render individual MCP pill
+		r.renderMCPPill(sb, server)
+	}
+}
+
+// renderMCPPill renders a single MCP server pill.
+//
+// Params:
+//   - sb: string builder to write to
+//   - server: MCP server information
+func (r *Powerline) renderMCPPill(sb *strings.Builder, server model.MCPServer) {
+	var bgColor, fgColor, textColor string
+
+	// Select colors based on enabled status
+	if server.Enabled {
+		// Use enabled colors (pale bg, dark text)
+		bgColor = BgMCPEnabled
+		fgColor = FgMCPEnabled
+		textColor = FgMCPEnabledText
+	} else {
+		// Use disabled gray colors (pale bg, dark text)
+		bgColor = BgMCPDisabled
+		fgColor = FgMCPDisabled
+		textColor = FgMCPDisabledText
+	}
+
+	// Write left rounded cap
+	sb.WriteString(fgColor + LeftRound + Reset)
+	// Write server name
+	sb.WriteString(bgColor + textColor + " " + server.Name + " " + Reset)
+	// Write right rounded cap
+	sb.WriteString(fgColor + RightRound + Reset)
 }
 
 // itoa converts an integer to string.

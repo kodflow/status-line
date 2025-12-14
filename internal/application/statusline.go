@@ -17,6 +17,7 @@ type StatusLineService struct {
 	gitRepo      port.GitRepository
 	systemProv   port.SystemProvider
 	terminalProv port.TerminalProvider
+	mcpProv      port.MCPProvider
 	renderer     port.Renderer
 }
 
@@ -26,6 +27,7 @@ type StatusLineService struct {
 //   - gitRepo: git repository adapter
 //   - systemProv: system information provider
 //   - terminalProv: terminal information provider
+//   - mcpProv: MCP configuration provider
 //   - renderer: status line renderer
 //
 // Returns:
@@ -34,6 +36,7 @@ func NewStatusLineService(
 	gitRepo port.GitRepository,
 	systemProv port.SystemProvider,
 	terminalProv port.TerminalProvider,
+	mcpProv port.MCPProvider,
 	renderer port.Renderer,
 ) *StatusLineService {
 	// Return service with all dependencies injected
@@ -41,6 +44,7 @@ func NewStatusLineService(
 		gitRepo:      gitRepo,
 		systemProv:   systemProv,
 		terminalProv: terminalProv,
+		mcpProv:      mcpProv,
 		renderer:     renderer,
 	}
 }
@@ -63,6 +67,8 @@ func (s *StatusLineService) Generate(input *model.Input) string {
 		Terminal: s.terminalProv.Info(),
 		Dir:      input.WorkingDir(),
 		Time:     time.Now().Format(timeFormat),
+		Changes:  input.CodeChanges(),
+		MCP:      s.mcpProv.Servers(),
 	}
 
 	// Delegate rendering to the renderer

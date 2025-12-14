@@ -12,4 +12,6 @@ type StatusLineData struct {
 	Terminal TerminalInfo
 	Dir      string
 	Time     string
+	Changes  CodeChanges
+	MCP      MCPServers
 }

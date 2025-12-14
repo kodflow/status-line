@@ -17,6 +17,17 @@ type Input struct {
 	Model         InputModel     `json:"model"`
 	Workspace     InputWorkspace `json:"workspace"`
 	ContextWindow InputContext   `json:"context_window"`
+	Cost          InputCost      `json:"cost"`
+}
+
+// InputCost contains cost and code change information from JSON.
+// It tracks session costs and lines of code modified.
+type InputCost struct {
+	TotalCostUSD       float64 `json:"total_cost_usd"`
+	TotalDurationMs    int64   `json:"total_duration_ms"`
+	TotalAPIDurationMs int64   `json:"total_api_duration_ms"`
+	TotalLinesAdded    int     `json:"total_lines_added"`
+	TotalLinesRemoved  int     `json:"total_lines_removed"`
 }
 
 // InputModel contains model display information from JSON.
@@ -98,6 +109,18 @@ func (i *Input) TotalTokens() int {
 func (i *Input) Progress() Progress {
 	// Create progress from token counts
 	return NewProgress(i.TotalTokens(), i.ContextWindowSize())
+}
+
+// CodeChanges returns the lines added and removed.
+//
+// Returns:
+//   - CodeChanges: lines added and removed in session
+func (i *Input) CodeChanges() CodeChanges {
+	// Return code changes from cost data
+	return CodeChanges{
+		Added:   i.Cost.TotalLinesAdded,
+		Removed: i.Cost.TotalLinesRemoved,
+	}
 }
 
 // parseModelName splits a model name into base name and version.
