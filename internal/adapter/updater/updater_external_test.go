@@ -50,3 +50,45 @@ func TestUpdater_CheckAndUpdate(t *testing.T) {
 		})
 	}
 }
+
+func TestUpdater_CheckForUpdate(t *testing.T) {
+	tests := []struct {
+		name    string
+		version string
+	}{
+		{name: "dev build returns empty info", version: ""},
+		{name: "versioned build checks for update", version: "v0.0.1"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			u := updater.NewUpdater(tt.version)
+			// Check for update
+			info := u.CheckForUpdate()
+			// Dev build should return empty info
+			if tt.version == "" && info.Available {
+				t.Error("CheckForUpdate() should not return available for dev build")
+			}
+		})
+	}
+}
+
+func TestUpdater_DownloadUpdate(t *testing.T) {
+	tests := []struct {
+		name      string
+		version   string
+		wantError bool
+	}{
+		{name: "handles invalid version", version: "v0.0.0-invalid", wantError: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			u := updater.NewUpdater("v1.0.0")
+			// Try to download
+			err := u.DownloadUpdate(tt.version)
+			// Verify error handling
+			if tt.wantError && err == nil {
+				t.Error("DownloadUpdate() expected error for invalid version")
+			}
+		})
+	}
+}

@@ -42,6 +42,19 @@ func NewStatusLineService(deps ServiceDeps, renderer port.Renderer) *StatusLineS
 // Returns:
 //   - string: formatted status line ready for output
 func (s *StatusLineService) Generate(input port.InputProvider) string {
+	// Generate without update info
+	return s.GenerateWithUpdate(input, model.UpdateInfo{})
+}
+
+// GenerateWithUpdate creates the status line string with update notification.
+//
+// Params:
+//   - input: input provider for status line data
+//   - update: update information to display
+//
+// Returns:
+//   - string: formatted status line ready for output
+func (s *StatusLineService) GenerateWithUpdate(input port.InputProvider, update model.UpdateInfo) string {
 	// Fetch usage data (ignore error, use zero value on failure)
 	usage, _ := s.deps.Usage.Usage()
 
@@ -59,6 +72,7 @@ func (s *StatusLineService) Generate(input port.InputProvider) string {
 		Changes:     s.deps.Git.DiffStats(),
 		MCP:         s.deps.MCP.Servers(),
 		Taskwarrior: s.deps.Taskwarrior.Info(),
+		Update:      update,
 	}
 
 	// Delegate rendering to the renderer

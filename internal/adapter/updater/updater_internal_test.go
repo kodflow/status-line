@@ -217,3 +217,4 @@ func TestUpdater_downloadAndReplace(t *testing.T) {
 		})
 	}
 }
+

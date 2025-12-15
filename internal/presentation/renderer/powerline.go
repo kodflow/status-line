@@ -96,7 +96,7 @@ func (r *Powerline) renderLine1(sb *strings.Builder, data model.StatusLineData) 
 	r.renderChangesSegment(sb, data.Changes)
 }
 
-// renderLine2 renders the second line with dynamic pills (Taskwarrior, MCP).
+// renderLine2 renders the second line with dynamic pills (Taskwarrior, MCP, Update).
 //
 // Params:
 //   - sb: string builder to write to
@@ -118,6 +118,16 @@ func (r *Powerline) renderLine2(sb *strings.Builder, data model.StatusLineData) 
 			sb.WriteString(" ")
 		}
 		r.renderMCPPills(sb, data.MCP)
+		hasContent = true
+	}
+
+	// Render update pill if update is available
+	if data.Update.Available {
+		// Add separator space if previous content exists
+		if hasContent {
+			sb.WriteString(" ")
+		}
+		r.renderUpdatePill(sb, data.Update)
 	}
 }
 
@@ -400,6 +410,29 @@ func (r *Powerline) renderTaskwarriorProjectPill(sb *strings.Builder, project mo
 	// Add task count (completed/total)
 	sb.WriteString(BgWhite + FgBlack + Bold + itoa(project.Completed) + "/" + itoa(project.Total()) + " " + Reset)
 	// Write right cap
+	sb.WriteString(FgWhite + RightRound + Reset)
+}
+
+// renderUpdatePill renders the update notification pill.
+//
+// Params:
+//   - sb: string builder to write to
+//   - update: update information
+func (r *Powerline) renderUpdatePill(sb *strings.Builder, update model.UpdateInfo) {
+	// Skip if no update available
+	if !update.Available {
+		// Return early if nothing to show
+		return
+	}
+
+	// Add space before pill
+	sb.WriteString(" ")
+
+	// Write left rounded cap (white)
+	sb.WriteString(FgWhite + LeftRound + Reset)
+	// Write update icon and version on white background
+	sb.WriteString(BgWhite + FgBlack + Bold + " " + IconUpdate + " " + update.Version + " " + Reset)
+	// Write right rounded cap
 	sb.WriteString(FgWhite + RightRound + Reset)
 }
 
