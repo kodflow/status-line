@@ -159,7 +159,7 @@ func (r *Powerline) renderModelSegment(sb *strings.Builder, data *ModelSegmentDa
 	// Check if we have valid cursor data
 	if data.Cursor != nil && data.Cursor.IsValid() {
 		// Render with burn-rate cursor
-		bar = RenderProgressBarWithCursor(data.Progress, data.Cursor.CursorPosition(), FgCursorOrange, bgColor+textColor+Bold)
+		bar = RenderProgressBarWithCursor(data.Progress, data.Cursor.CursorPosition(), FgBlack, bgColor+textColor+Bold)
 	} else {
 		// Render without cursor (no API data available)
 		bar = RenderProgressBar(data.Progress, StyleHeavy)
