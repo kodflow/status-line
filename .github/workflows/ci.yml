@@ -21,6 +21,7 @@ concurrency:
 
 env:
   GO_VERSION: 'stable'
+  BINARY_NAME: status-line
 
 jobs:
   # =============================================================================
@@ -113,6 +114,12 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
       - name: Determine next version
         id: version
         run: |
@@ -128,7 +135,6 @@ jobs:
 
           # Analyze commits since last tag for version bump type
           if [ "$LATEST_TAG" = "v0.0.0" ]; then
-            # First release
             COMMITS=$(git log --oneline)
           else
             COMMITS=$(git log ${LATEST_TAG}..HEAD --oneline)
@@ -166,20 +172,44 @@ jobs:
           echo "New version: $NEW_VERSION"
           echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
 
-      - name: Check if tag already exists
-        id: check_tag
+      - name: Check if release already exists
+        id: check_release
         run: |
-          if git rev-parse "${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
+          if gh release view "${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
             echo "exists=true" >> $GITHUB_OUTPUT
           else
             echo "exists=false" >> $GITHUB_OUTPUT
           fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create and push tag
-        if: steps.check_tag.outputs.exists == 'false'
+      - name: Build binaries
+        if: steps.check_release.outputs.exists == 'false'
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "${{ steps.version.outputs.version }}" -m "Release ${{ steps.version.outputs.version }}"
-          git push https://x-access-token:${{ secrets.PAT }}@github.com/${{ github.repository }}.git "${{ steps.version.outputs.version }}"
-          echo "✅ Created and pushed tag ${{ steps.version.outputs.version }}"
+          mkdir -p dist
+          for os in linux darwin windows; do
+            for arch in amd64 arm64; do
+              BINARY="${BINARY_NAME}-${os}-${arch}"
+              if [ "$os" = "windows" ]; then
+                BINARY="${BINARY}.exe"
+              fi
+              echo "Building ${BINARY}..."
+              GOOS=$os GOARCH=$arch CGO_ENABLED=0 go build \
+                -ldflags="-s -w -X main.version=${{ steps.version.outputs.version }}" \
+                -o "dist/${BINARY}" \
+                ./cmd/statusline
+              cd dist && sha256sum "${BINARY}" > "${BINARY}.sha256" && cd ..
+            done
+          done
+          ls -la dist/
+
+      - name: Create Release
+        if: steps.check_release.outputs.exists == 'false'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          name: Release ${{ steps.version.outputs.version }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: dist/*
