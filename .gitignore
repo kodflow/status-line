@@ -46,6 +46,8 @@ vendor/
 *.exe
 *.test
 *.out
+/bin/
+/status-line
 
 # Rust
 target/
