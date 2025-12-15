@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 
 	"github.com/florent/status-line/internal/domain/model"
 	"github.com/florent/status-line/internal/domain/port"
@@ -305,10 +306,18 @@ func (p *Provider) convertServers(servers map[string]mcpServerConfig) model.MCPS
 		return model.MCPServers{}
 	}
 
+	// Extract and sort keys for deterministic order
+	names := make([]string, 0, len(servers))
+	for name := range servers {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
 	// Preallocate with known capacity
 	result := make(model.MCPServers, 0, len(servers))
-	// Convert map to slice
-	for name, serverConfig := range servers {
+	// Convert map to slice in sorted order
+	for _, name := range names {
+		serverConfig := servers[name]
 		server := model.MCPServer{
 			Name:    name,
 			Enabled: !serverConfig.Disabled,
