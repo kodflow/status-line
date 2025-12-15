@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestProvider_globalSettingsPath(t *testing.T) {
+func TestProvider_claudeConfigPath(t *testing.T) {
 	tests := []struct {
 		name string
 	}{
@@ -15,15 +15,15 @@ func TestProvider_globalSettingsPath(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			p := &Provider{projectDir: "/workspace"}
-			path := p.globalSettingsPath()
+			path := p.claudeConfigPath()
 			if path != "" && !filepath.IsAbs(path) {
-				t.Errorf("globalSettingsPath() = %q, want absolute path", path)
+				t.Errorf("claudeConfigPath() = %q, want absolute path", path)
 			}
 		})
 	}
 }
 
-func TestProvider_projectSettingsPath(t *testing.T) {
+func TestProvider_mcpConfigPath(t *testing.T) {
 	tests := []struct {
 		name       string
 		projectDir string
@@ -35,55 +35,74 @@ func TestProvider_projectSettingsPath(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			p := &Provider{projectDir: tt.projectDir}
-			path := p.projectSettingsPath()
+			path := p.mcpConfigPath()
 			if tt.wantEmpty && path != "" {
-				t.Errorf("projectSettingsPath() = %q, want empty", path)
+				t.Errorf("mcpConfigPath() = %q, want empty", path)
 			}
 			if !tt.wantEmpty && path == "" {
-				t.Error("projectSettingsPath() = empty, want non-empty")
+				t.Error("mcpConfigPath() = empty, want non-empty")
 			}
 		})
 	}
 }
 
-func TestProvider_readSettingsFile(t *testing.T) {
+func TestProvider_readClaudeConfig(t *testing.T) {
 	tests := []struct {
 		name string
-		path string
 	}{
-		{name: "empty path", path: ""},
-		{name: "nonexistent file", path: "/nonexistent/path/settings.json"},
+		{name: "returns empty for nonexistent file"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := &Provider{}
-			servers := p.readSettingsFile(tt.path)
+			p := &Provider{projectDir: "/nonexistent/project"}
+			servers := p.readClaudeConfig()
 			if servers == nil {
-				t.Error("readSettingsFile() = nil, want non-nil")
+				t.Error("readClaudeConfig() = nil, want non-nil")
 			}
 		})
 	}
 }
 
-func TestProvider_readSettingsFile_ValidJSON(t *testing.T) {
+func TestProvider_readMCPConfig(t *testing.T) {
+	tests := []struct {
+		name       string
+		projectDir string
+	}{
+		{name: "empty project dir", projectDir: ""},
+		{name: "nonexistent project", projectDir: "/nonexistent/project"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &Provider{projectDir: tt.projectDir}
+			servers := p.readMCPConfig()
+			if servers == nil {
+				t.Error("readMCPConfig() = nil, want non-nil")
+			}
+		})
+	}
+}
+
+func TestProvider_readMCPConfig_ValidJSON(t *testing.T) {
 	tests := []struct {
 		name    string
 		content string
 		wantLen int
 	}{
-		{name: "valid settings", content: `{"mcpServers": {"test-server": {"disabled": false}}}`, wantLen: 1},
+		{name: "valid mcp config", content: `{"mcpServers": {"test-server": {"disabled": false}}}`, wantLen: 1},
+		{name: "empty mcpServers", content: `{"mcpServers": {}}`, wantLen: 0},
+		{name: "disabled server", content: `{"mcpServers": {"test": {"disabled": true}}}`, wantLen: 1},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tmpDir := t.TempDir()
-			settingsPath := filepath.Join(tmpDir, "settings.json")
-			if err := os.WriteFile(settingsPath, []byte(tt.content), 0644); err != nil {
+			mcpPath := filepath.Join(tmpDir, ".mcp.json")
+			if err := os.WriteFile(mcpPath, []byte(tt.content), 0644); err != nil {
 				t.Fatalf("Failed to write temp file: %v", err)
 			}
-			p := &Provider{}
-			servers := p.readSettingsFile(settingsPath)
+			p := &Provider{projectDir: tmpDir}
+			servers := p.readMCPConfig()
 			if len(servers) != tt.wantLen {
-				t.Errorf("readSettingsFile() len = %d, want %d", len(servers), tt.wantLen)
+				t.Errorf("readMCPConfig() len = %d, want %d", len(servers), tt.wantLen)
 			}
 		})
 	}

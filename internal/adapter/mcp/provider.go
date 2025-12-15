@@ -10,19 +10,21 @@ import (
 	"github.com/florent/status-line/internal/domain/port"
 )
 
-// Settings file paths.
+// Config file paths and names.
 const (
-	// globalSettingsDir is the Claude config directory name.
-	globalSettingsDir string = ".claude"
-	// settingsFileName is the settings file name.
-	settingsFileName string = "settings.json"
+	// claudeDir is the Claude config directory name.
+	claudeDir string = ".claude"
+	// claudeConfigFileName is the main Claude config file name.
+	claudeConfigFileName string = ".claude.json"
+	// mcpConfigFileName is the project MCP config file name.
+	mcpConfigFileName string = ".mcp.json"
 )
 
 // Compile-time interface implementation check.
 var _ port.MCPProvider = (*Provider)(nil)
 
 // Provider implements port.MCPProvider by reading Claude settings.
-// It reads MCP server configurations from settings files.
+// It reads MCP server configurations from Claude config files.
 type Provider struct {
 	projectDir string
 }
@@ -40,64 +42,64 @@ func NewProvider(projectDir string) *Provider {
 }
 
 // Servers returns the list of configured MCP servers.
+// Reads from multiple config locations and merges results.
 //
 // Returns:
 //   - model.MCPServers: list of MCP server configurations
 func (p *Provider) Servers() model.MCPServers {
-	// Read global settings
-	globalServers := p.readSettingsFile(p.globalSettingsPath())
+	// Read from ~/.claude/.claude.json (project-specific config)
+	claudeServers := p.readClaudeConfig()
 
-	// Read project settings
-	projectServers := p.readSettingsFile(p.projectSettingsPath())
+	// Read from {project}/.mcp.json
+	mcpServers := p.readMCPConfig()
 
 	// Preallocate with known capacity
-	servers := make(model.MCPServers, 0, len(globalServers)+len(projectServers))
-	// Append global servers
-	servers = append(servers, globalServers...)
-	// Append project servers
-	servers = append(servers, projectServers...)
+	servers := make(model.MCPServers, 0, len(claudeServers)+len(mcpServers))
+	// Append Claude config servers
+	servers = append(servers, claudeServers...)
+	// Append MCP config servers
+	servers = append(servers, mcpServers...)
 
 	// Return combined servers
 	return servers
 }
 
-// globalSettingsPath returns the path to global settings.
+// claudeConfigPath returns the path to Claude config file.
 //
 // Returns:
-//   - string: path to global settings file
-func (p *Provider) globalSettingsPath() string {
+//   - string: path to ~/.claude/.claude.json
+func (p *Provider) claudeConfigPath() string {
 	home, err := os.UserHomeDir()
 	// Check if home directory is accessible
 	if err != nil {
 		// Return empty path if home not found
 		return ""
 	}
-	// Return global settings path
-	return filepath.Join(home, globalSettingsDir, settingsFileName)
+	// Return Claude config path
+	return filepath.Join(home, claudeDir, claudeConfigFileName)
 }
 
-// projectSettingsPath returns the path to project settings.
+// mcpConfigPath returns the path to project MCP config.
 //
 // Returns:
-//   - string: path to project settings file
-func (p *Provider) projectSettingsPath() string {
+//   - string: path to {project}/.mcp.json
+func (p *Provider) mcpConfigPath() string {
 	// Check if project directory is set
 	if p.projectDir == "" {
 		// Return empty path if no project dir
 		return ""
 	}
-	// Return project settings path
-	return filepath.Join(p.projectDir, globalSettingsDir, settingsFileName)
+	// Return MCP config path
+	return filepath.Join(p.projectDir, mcpConfigFileName)
 }
 
-// readSettingsFile reads MCP servers from a settings file.
-//
-// Params:
-//   - path: path to settings file
+// readClaudeConfig reads MCP servers from Claude config file.
+// Looks for servers in projects[projectDir].mcpServers.
 //
 // Returns:
-//   - model.MCPServers: list of MCP servers from file
-func (p *Provider) readSettingsFile(path string) model.MCPServers {
+//   - model.MCPServers: list of MCP servers from Claude config
+func (p *Provider) readClaudeConfig() model.MCPServers {
+	path := p.claudeConfigPath()
 	// Check if path is provided
 	if path == "" {
 		// Return empty list for empty path
@@ -111,20 +113,70 @@ func (p *Provider) readSettingsFile(path string) model.MCPServers {
 		return model.MCPServers{}
 	}
 
-	var settings settingsFile
+	var config claudeConfigFile
 	// Check if JSON is valid
-	if err := json.Unmarshal(data, &settings); err != nil {
+	if err := json.Unmarshal(data, &config); err != nil {
+		// Return empty list if parsing fails
+		return model.MCPServers{}
+	}
+
+	// Look for project-specific config
+	projCfg, exists := config.Projects[p.projectDir]
+	// Check if project exists in config
+	if !exists {
+		// Return empty list if project not found
+		return model.MCPServers{}
+	}
+
+	// Preallocate with known capacity
+	servers := make(model.MCPServers, 0, len(projCfg.MCPServers))
+	// Convert map to slice
+	for name, serverConfig := range projCfg.MCPServers {
+		server := model.MCPServer{
+			Name:    name,
+			Enabled: !serverConfig.Disabled,
+		}
+		// Append server to list
+		servers = append(servers, server)
+	}
+
+	// Return parsed servers
+	return servers
+}
+
+// readMCPConfig reads MCP servers from project .mcp.json file.
+//
+// Returns:
+//   - model.MCPServers: list of MCP servers from .mcp.json
+func (p *Provider) readMCPConfig() model.MCPServers {
+	path := p.mcpConfigPath()
+	// Check if path is provided
+	if path == "" {
+		// Return empty list for empty path
+		return model.MCPServers{}
+	}
+
+	data, err := os.ReadFile(path)
+	// Check if file is readable
+	if err != nil {
+		// Return empty list if file not accessible
+		return model.MCPServers{}
+	}
+
+	var config mcpJsonFile
+	// Check if JSON is valid
+	if err := json.Unmarshal(data, &config); err != nil {
 		// Return empty list if parsing fails
 		return model.MCPServers{}
 	}
 
 	// Preallocate with known capacity
-	servers := make(model.MCPServers, 0, len(settings.MCPServers))
+	servers := make(model.MCPServers, 0, len(config.MCPServers))
 	// Convert map to slice
-	for name, config := range settings.MCPServers {
+	for name, serverConfig := range config.MCPServers {
 		server := model.MCPServer{
 			Name:    name,
-			Enabled: !config.Disabled,
+			Enabled: !serverConfig.Disabled,
 		}
 		// Append server to list
 		servers = append(servers, server)
