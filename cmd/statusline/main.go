@@ -36,19 +36,46 @@ func main() {
 		os.Exit(1)
 	}
 
-	svc := buildService(input.WorkingDir())
-	fmt.Print(svc.Generate(input))
+	// Check for updates (returns info about available update)
+	updateInfo := checkForUpdate()
 
-	// Check for updates after output (non-blocking to user)
-	checkForUpdates()
+	// Generate and output status line with update notification
+	svc := buildService(input.WorkingDir())
+	fmt.Print(svc.GenerateWithUpdate(input, updateInfo))
+
+	// Download update if available (after output is displayed)
+	downloadUpdate(updateInfo)
 }
 
-// checkForUpdates performs update check in background.
+// checkForUpdate checks if an update is available.
+// Returns update info for display in status line.
+//
+// Returns:
+//   - model.UpdateInfo: information about available update
+func checkForUpdate() model.UpdateInfo {
+	u := updater.NewUpdater(version)
+	info := u.CheckForUpdate()
+	// Convert updater.UpdateInfo to model.UpdateInfo
+	return model.UpdateInfo{
+		Available: info.Available,
+		Version:   info.Version,
+	}
+}
+
+// downloadUpdate downloads and applies the update if available.
 // Silently ignores errors to avoid disrupting normal operation.
-func checkForUpdates() {
+//
+// Params:
+//   - info: update information from checkForUpdate
+func downloadUpdate(info model.UpdateInfo) {
+	// Skip if no update available
+	if !info.Available {
+		// No update to download
+		return
+	}
 	u := updater.NewUpdater(version)
 	// Ignore errors - update is best-effort
-	_, _ = u.CheckAndUpdate()
+	_ = u.DownloadUpdate(info.Version)
 }
 
 // readInput reads and parses JSON input from stdin.

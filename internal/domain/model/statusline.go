@@ -16,4 +16,12 @@ type StatusLineData struct {
 	Changes     CodeChanges
 	MCP         MCPServers
 	Taskwarrior TaskwarriorInfo
+	Update      UpdateInfo
+}
+
+// UpdateInfo contains information about available updates.
+// Used to display update notification in the status line.
+type UpdateInfo struct {
+	Available bool
+	Version   string
 }

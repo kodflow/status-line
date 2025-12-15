@@ -31,6 +31,8 @@ const (
 	IconModel string = "\uf2db"
 	// IconTaskwarrior is the tasks list icon for Taskwarrior.
 	IconTaskwarrior string = "\uf0ae"
+	// IconUpdate is the download/update icon.
+	IconUpdate string = "\uf019"
 )
 
 // GetOSIcon returns the appropriate icon for the OS type.
