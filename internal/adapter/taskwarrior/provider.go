@@ -81,9 +81,11 @@ func (p *Provider) getProjects() []model.TaskwarriorProject {
 
 	// Sort by name for consistent display
 	sort.Slice(projects, func(i, j int) bool {
+		// Compare names alphabetically
 		return projects[i].Name < projects[j].Name
 	})
 
+	// Return sorted project list
 	return projects
 }
 
@@ -95,14 +97,16 @@ func (p *Provider) listProjects() []string {
 	// Run task _unique project command
 	cmd := exec.Command(taskBinary, "rc.confirmation=off", "rc.verbose=nothing", "_unique", "project")
 	output, err := cmd.Output()
-	// Return empty if command fails
+	// Check if command succeeded
 	if err != nil {
-		return nil
+		// Return empty slice if command fails
+		return []string{}
 	}
 
 	// Parse project names
 	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
 	projects := make([]string, 0, len(lines))
+	// Iterate through output lines
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		// Skip empty lines
@@ -111,6 +115,7 @@ func (p *Provider) listProjects() []string {
 		}
 	}
 
+	// Return parsed project names
 	return projects
 }
 
@@ -122,11 +127,12 @@ func (p *Provider) listProjects() []string {
 // Returns:
 //   - string: short name like "Auth"
 func (p *Provider) shortProjectName(name string) string {
-	// Find last dot
+	// Find last dot separator in hierarchical name
 	if idx := strings.LastIndex(name, "."); idx >= 0 {
+		// Return substring after last dot
 		return name[idx+1:]
 	}
-	// Return full name if no dot
+	// Return full name if no hierarchy
 	return name
 }
 
@@ -156,15 +162,17 @@ func (p *Provider) countTasks(filters ...string) int {
 	// Run task count command with filters
 	cmd := exec.Command(taskBinary, args...)
 	output, err := cmd.Output()
-	// Return zero if command fails
+	// Check if command succeeded
 	if err != nil {
+		// Return zero if command fails
 		return 0
 	}
 
 	// Parse count from output
 	count, err := strconv.Atoi(strings.TrimSpace(string(output)))
-	// Return zero if parsing fails
+	// Check if parsing succeeded
 	if err != nil {
+		// Return zero if parsing fails
 		return 0
 	}
 

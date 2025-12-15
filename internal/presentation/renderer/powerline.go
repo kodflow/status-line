@@ -8,10 +8,12 @@ import (
 	"github.com/florent/status-line/internal/domain/port"
 )
 
-// Numeric constants for base conversion.
+// Numeric constants for base conversion and progress.
 const (
 	// base10 is the decimal base for integer to string conversion.
 	base10 int = 10
+	// percentComplete represents 100% completion.
+	percentComplete int = 100
 )
 
 // Compile-time interface implementation check.
@@ -68,11 +70,13 @@ func (r *Powerline) renderLine1(sb *strings.Builder, data model.StatusLineData) 
 
 	// Determine what follows git segment (or path if no git)
 	changesNextBg := ""
-	// Check if added segment follows
+	// Determine next segment background color based on changes
 	if data.Changes.HasAdded() {
+		// Use green background for added lines
 		changesNextBg = BgGreen
+		// Check if only removed changes exist
 	} else if data.Changes.HasRemoved() {
-		// Check if removed segment follows
+		// Use red background for removed lines only
 		changesNextBg = BgRed
 	}
 
@@ -102,6 +106,7 @@ func (r *Powerline) renderLine2(sb *strings.Builder, data model.StatusLineData) 
 
 	// Render MCP server pills if any
 	if len(data.MCP) > 0 {
+		// Add separator space if previous content exists
 		if hasContent {
 			sb.WriteString(" ")
 		}
@@ -181,13 +186,15 @@ func (r *Powerline) renderPathSegment(sb *strings.Builder, dir string, hasGit bo
 		sb.WriteString(BgBlue + FgBlueDark + Bold + " " + truncated + " " + Reset)
 	}
 
-	// Check if git segment follows
+	// Determine separator style based on next segment
 	if hasGit {
 		// Write separator to git segment
 		sb.WriteString(BgCyan + FgBlue + SepRight + Reset)
+		// Check if next segment has a colored background
 	} else if nextBg != "" {
 		// Write separator to next colored segment
 		sb.WriteString(nextBg + FgBlue + SepRight + Reset)
+		// No following segment
 	} else {
 		// Write final separator
 		sb.WriteString(FgBlue + SepRight + Reset)
@@ -360,7 +367,9 @@ func (r *Powerline) renderTaskwarriorProjectPill(sb *strings.Builder, project mo
 	progress := model.NewProgress(project.Completed, project.Total())
 	// Use gray for incomplete, lavender for 100%
 	progressColor := ColorGray
-	if progress.Percent == 100 {
+	// Check if project is complete
+	if progress.Percent == percentComplete {
+		// Use themed color for completed projects
 		progressColor = FgTaskwarriorText
 	}
 	bar := RenderProgressBar(progress, StyleHeavy)
