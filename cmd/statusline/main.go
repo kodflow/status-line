@@ -29,9 +29,6 @@ var version string
 // Returns:
 //   - void: exits with code 1 on error
 func main() {
-	// Check for updates in background (non-blocking)
-	go checkForUpdates()
-
 	input, err := readInput()
 	// Check for input reading errors
 	if err != nil {
@@ -41,6 +38,9 @@ func main() {
 
 	svc := buildService(input.WorkingDir())
 	fmt.Print(svc.Generate(input))
+
+	// Check for updates after output (non-blocking to user)
+	checkForUpdates()
 }
 
 // checkForUpdates performs update check in background.
