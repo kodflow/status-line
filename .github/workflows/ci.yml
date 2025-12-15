@@ -183,3 +183,11 @@ jobs:
           git tag -a "${{ steps.version.outputs.version }}" -m "Release ${{ steps.version.outputs.version }}"
           git push origin "${{ steps.version.outputs.version }}"
           echo "✅ Created and pushed tag ${{ steps.version.outputs.version }}"
+
+      - name: Trigger release workflow
+        if: steps.check_tag.outputs.exists == 'false'
+        run: |
+          gh workflow run release.yml --field tag=${{ steps.version.outputs.version }}
+          echo "✅ Triggered release workflow for ${{ steps.version.outputs.version }}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
