@@ -13,6 +13,8 @@ import (
 
 // Config file names and paths.
 const (
+	// claudeConfigDir is the Claude config directory name.
+	claudeConfigDir string = ".claude"
 	// userConfigFileName is the user-level Claude config file.
 	userConfigFileName string = ".claude.json"
 	// projectMCPFileName is the project-level MCP config file.
@@ -110,7 +112,7 @@ func (p *Provider) Servers() model.MCPServers {
 // userConfigPath returns the path to user-level Claude config.
 //
 // Returns:
-//   - string: path to ~/.claude.json
+//   - string: path to ~/.claude/.claude.json
 func (p *Provider) userConfigPath() string {
 	home, err := os.UserHomeDir()
 	// Check if home directory is accessible
@@ -118,8 +120,8 @@ func (p *Provider) userConfigPath() string {
 		// Return empty path if home not found
 		return ""
 	}
-	// Return user config path
-	return filepath.Join(home, userConfigFileName)
+	// Return user config path (~/.claude/.claude.json)
+	return filepath.Join(home, claudeConfigDir, userConfigFileName)
 }
 
 // projectConfigPath returns the path to project MCP config.
