@@ -17,6 +17,8 @@ const (
 	heavyFull rune = '\u2501'
 	// heavyEmpty is the empty light horizontal character.
 	heavyEmpty rune = '\u2500'
+	// noCursor indicates no cursor should be rendered.
+	noCursor int = -1
 )
 
 // ProgressBarStyle represents the visual style of progress bars.
@@ -55,21 +57,39 @@ var (
 func RenderProgressBar(progress model.Progress, style ProgressBarStyle) string {
 	// Handle heavy style separately
 	if style == StyleHeavy {
-		// Render heavy style progress bar
-		return renderHeavyBar(progress)
+		// Render heavy style progress bar without cursor
+		return renderHeavyBar(progress, noCursor)
 	}
 	// Render granular style
 	return renderGranularBar(progress, style)
+}
+
+// RenderProgressBarWithCursor generates a progress bar with a burn-rate cursor.
+//
+// Params:
+//   - progress: the progress value (0-100%)
+//   - cursorPos: cursor position as percentage (0-100), or -1 for no cursor
+//   - cursorColor: ANSI color code for the cursor
+//   - bgColor: background color to restore after cursor
+//
+// Returns:
+//   - string: rendered progress bar with colored cursor
+func RenderProgressBarWithCursor(progress model.Progress, cursorPos int, cursorColor, bgColor string) string {
+	// Calculate cursor character index
+	cursorIdx := cursorPos * progressBarWidth / percentMax
+	// Render bar with cursor
+	return renderHeavyBarWithCursor(progress, cursorIdx, cursorColor, bgColor)
 }
 
 // renderHeavyBar renders a progress bar using heavy horizontal characters.
 //
 // Params:
 //   - progress: the progress value
+//   - cursorIdx: index for cursor character, or -1 for none
 //
 // Returns:
 //   - string: rendered progress bar
-func renderHeavyBar(progress model.Progress) string {
+func renderHeavyBar(progress model.Progress, cursorIdx int) string {
 	// Calculate filled characters
 	filled := progress.Percent * progressBarWidth / percentMax
 	var result [progressBarWidth]rune
@@ -85,6 +105,42 @@ func renderHeavyBar(progress model.Progress) string {
 	}
 	// Return completed progress bar
 	return string(result[:])
+}
+
+// renderHeavyBarWithCursor renders a progress bar with a colored cursor.
+//
+// Params:
+//   - progress: the progress value
+//   - cursorIdx: index for cursor character (0 to progressBarWidth-1)
+//   - cursorColor: ANSI foreground color for the cursor
+//   - bgColor: background color to restore after cursor
+//
+// Returns:
+//   - string: rendered progress bar with ANSI color codes for cursor
+func renderHeavyBarWithCursor(progress model.Progress, cursorIdx int, cursorColor, bgColor string) string {
+	// Calculate filled characters
+	filled := progress.Percent * progressBarWidth / percentMax
+	// Build result with color codes
+	var result []byte
+	// Build progress bar
+	for i := range progressBarWidth {
+		// Check if this is the cursor position
+		if i == cursorIdx {
+			// Write cursor with special color
+			result = append(result, cursorColor...)
+			result = append(result, string(heavyFull)...)
+			result = append(result, Reset...)
+			result = append(result, bgColor...)
+		} else if i < filled {
+			// Write filled character
+			result = append(result, string(heavyFull)...)
+		} else {
+			// Write empty character
+			result = append(result, string(heavyEmpty)...)
+		}
+	}
+	// Return completed progress bar
+	return string(result)
 }
 
 // renderGranularBar renders a progress bar using braille or block characters.

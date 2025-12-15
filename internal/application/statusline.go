@@ -42,10 +42,14 @@ func NewStatusLineService(deps ServiceDeps, renderer port.Renderer) *StatusLineS
 // Returns:
 //   - string: formatted status line ready for output
 func (s *StatusLineService) Generate(input port.InputProvider) string {
+	// Fetch usage data (ignore error, use zero value on failure)
+	usage, _ := s.deps.Usage.Usage()
+
 	// Gather all data from various sources
 	data := model.StatusLineData{
 		Model:       input.ModelInfo(),
-		Progress:    input.Progress(),
+		Progress:    usage.Progress(),
+		Usage:       usage,
 		Icons:       model.IconConfigFromEnv(),
 		Git:         s.deps.Git.Status(),
 		System:      s.deps.System.Info(),
