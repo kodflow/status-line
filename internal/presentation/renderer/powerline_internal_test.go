@@ -267,3 +267,24 @@ func TestPowerline_renderTaskwarriorProjectPill(t *testing.T) {
 		})
 	}
 }
+
+func TestPowerline_renderUpdatePill(t *testing.T) {
+	tests := []struct {
+		name   string
+		update model.UpdateInfo
+	}{
+		{name: "with update available", update: model.UpdateInfo{Available: true, Version: "v1.0.0"}},
+		{name: "no update", update: model.UpdateInfo{Available: false}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &Powerline{}
+			var sb strings.Builder
+			r.renderUpdatePill(&sb, tt.update)
+			// Should produce output only if update available
+			if tt.update.Available && sb.Len() == 0 {
+				t.Error("renderUpdatePill() produced empty output for available update")
+			}
+		})
+	}
+}

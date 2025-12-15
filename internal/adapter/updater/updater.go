@@ -65,23 +65,22 @@ func NewUpdater(version string) *Updater {
 	}
 }
 
-// CheckAndUpdate checks for updates and applies them if available.
+// CheckForUpdate checks if an update is available without downloading.
 // Uses a cache file to limit checks to once per hour.
 //
 // Returns:
-//   - bool: true if update was applied
-//   - error: any error during update process
-func (u *Updater) CheckAndUpdate() (bool, error) {
+//   - UpdateInfo: information about available update
+func (u *Updater) CheckForUpdate() UpdateInfo {
 	// Skip update for dev builds
 	if u.version == "" {
 		// Dev build detected, skip update
-		return false, nil
+		return UpdateInfo{}
 	}
 
 	// Check if we should perform an update check
 	if !u.shouldCheck() {
 		// Cache is still fresh, skip check
-		return false, nil
+		return UpdateInfo{}
 	}
 
 	// Update cache timestamp
@@ -91,18 +90,48 @@ func (u *Updater) CheckAndUpdate() (bool, error) {
 	latest, err := u.getLatestVersion()
 	// Check for API errors
 	if err != nil {
-		// Return API error
-		return false, err
+		// Return empty info on error
+		return UpdateInfo{}
 	}
 
 	// Compare versions
 	if !u.isNewer(latest) {
 		// Already up to date
+		return UpdateInfo{}
+	}
+
+	// Return update info
+	return UpdateInfo{Available: true, Version: latest}
+}
+
+// DownloadUpdate downloads and applies the specified version.
+//
+// Params:
+//   - version: the version to download
+//
+// Returns:
+//   - error: any download or replacement error
+func (u *Updater) DownloadUpdate(version string) error {
+	// Perform update
+	return u.downloadAndReplace(version)
+}
+
+// CheckAndUpdate checks for updates and applies them if available.
+// Uses a cache file to limit checks to once per hour.
+//
+// Returns:
+//   - bool: true if update was applied
+//   - error: any error during update process
+func (u *Updater) CheckAndUpdate() (bool, error) {
+	info := u.CheckForUpdate()
+	// Check if update is available
+	if !info.Available {
+		// No update available
 		return false, nil
 	}
 
 	// Perform update
-	err = u.downloadAndReplace(latest)
+	err := u.DownloadUpdate(info.Version)
 	// Check for update errors
 	if err != nil {
 		// Return update error
