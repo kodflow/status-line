@@ -1,8 +1,0 @@
-{
-  "id": "elixir",
-  "version": "1.0.0",
-  "name": "Elixir Development Environment",
-  "description": "Installs Elixir, Erlang, and Hex package manager",
-  "options": {},
-  "installsAfter": []
-}

@@ -1,8 +1,0 @@
-{
-  "id": "php",
-  "version": "1.0.0",
-  "name": "PHP Development Environment",
-  "description": "Installs PHP, Composer, and common development tools",
-  "options": {},
-  "installsAfter": []
-}
