@@ -85,11 +85,11 @@ func RenderProgressBarWithCursor(progress model.Progress, cursorPos int, cursorC
 //
 // Params:
 //   - progress: the progress value
-//   - cursorIdx: index for cursor character, or -1 for none
+//   - _cursorIdx: index for cursor character (unused, for API compatibility)
 //
 // Returns:
 //   - string: rendered progress bar
-func renderHeavyBar(progress model.Progress, cursorIdx int) string {
+func renderHeavyBar(progress model.Progress, _cursorIdx int) string {
 	// Calculate filled characters
 	filled := progress.Percent * progressBarWidth / percentMax
 	var result [progressBarWidth]rune
@@ -120,6 +120,9 @@ func renderHeavyBar(progress model.Progress, cursorIdx int) string {
 func renderHeavyBarWithCursor(progress model.Progress, cursorIdx int, cursorColor, bgColor string) string {
 	// Calculate filled characters
 	filled := progress.Percent * progressBarWidth / percentMax
+	// Pre-convert runes to strings for efficiency
+	fullChar := string(heavyFull)
+	emptyChar := string(heavyEmpty)
 	// Build result with color codes
 	var result []byte
 	// Build progress bar
@@ -128,15 +131,19 @@ func renderHeavyBarWithCursor(progress model.Progress, cursorIdx int, cursorColo
 		if i == cursorIdx {
 			// Write cursor with special color
 			result = append(result, cursorColor...)
-			result = append(result, string(heavyFull)...)
+			result = append(result, fullChar...)
 			result = append(result, Reset...)
 			result = append(result, bgColor...)
-		} else if i < filled {
+		}
+		// Check if position is within filled portion
+		if i != cursorIdx && i < filled {
 			// Write filled character
-			result = append(result, string(heavyFull)...)
-		} else {
+			result = append(result, fullChar...)
+		}
+		// Check if position is in empty portion
+		if i != cursorIdx && i >= filled {
 			// Write empty character
-			result = append(result, string(heavyEmpty)...)
+			result = append(result, emptyChar...)
 		}
 	}
 	// Return completed progress bar

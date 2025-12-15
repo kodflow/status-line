@@ -66,7 +66,14 @@ func (r *Powerline) renderLine1(sb *strings.Builder, data model.StatusLineData) 
 	r.renderOSSegment(sb, data.System, data.Icons.OS, modelBg)
 
 	// Render Model segment (transitions to Path segment)
-	r.renderModelSegment(sb, data.Model, data.Icons.Model, data.Progress, data.Usage, BgBlue)
+	modelData := &ModelSegmentData{
+		Model:    data.Model,
+		ShowIcon: data.Icons.Model,
+		Progress: data.Progress,
+		Cursor:   data.Usage,
+		NextBg:   BgBlue,
+	}
+	r.renderModelSegment(sb, modelData)
 
 	// Determine what follows git segment (or path if no git)
 	changesNextBg := ""
@@ -141,41 +148,37 @@ func (r *Powerline) renderOSSegment(sb *strings.Builder, sys model.SystemInfo, s
 //
 // Params:
 //   - sb: string builder to write to
-//   - m: model information
-//   - showIcon: whether to show the model icon
-//   - progress: context window usage progress
-//   - usage: API usage data for burn-rate cursor
-//   - nextBg: background color of the next segment
-func (r *Powerline) renderModelSegment(sb *strings.Builder, m model.ModelInfo, showIcon bool, progress model.Progress, usage model.Usage, nextBg string) {
+//   - data: model segment rendering data
+func (r *Powerline) renderModelSegment(sb *strings.Builder, data *ModelSegmentData) {
 	// Use FullName for color detection (includes version like "Opus 4.5")
-	fullName := m.FullName()
+	fullName := data.Model.FullName()
 	bgColor, fgColor, textColor := GetModelColors(fullName)
 
 	// Render progress bar (with cursor if usage data is valid)
 	var bar string
-	// Check if we have valid usage data for cursor
-	if usage.IsValid() {
+	// Check if we have valid cursor data
+	if data.Cursor != nil && data.Cursor.IsValid() {
 		// Render with burn-rate cursor
-		bar = RenderProgressBarWithCursor(progress, usage.CursorPosition(), FgCursorOrange, bgColor+textColor+Bold)
+		bar = RenderProgressBarWithCursor(data.Progress, data.Cursor.CursorPosition(), FgCursorOrange, bgColor+textColor+Bold)
 	} else {
 		// Render without cursor (no API data available)
-		bar = RenderProgressBar(progress, StyleHeavy)
+		bar = RenderProgressBar(data.Progress, StyleHeavy)
 	}
 
 	// Check if icon should be shown
-	if showIcon {
+	if data.ShowIcon {
 		// Write model name with icon
-		sb.WriteString(bgColor + textColor + Bold + " " + IconModel + " " + m.Name + " " + Reset)
+		sb.WriteString(bgColor + textColor + Bold + " " + IconModel + " " + data.Model.Name + " " + Reset)
 	} else {
 		// Write model name without icon
-		sb.WriteString(bgColor + textColor + Bold + " " + m.Name + " " + Reset)
+		sb.WriteString(bgColor + textColor + Bold + " " + data.Model.Name + " " + Reset)
 	}
 
 	// Write progress bar and percentage (using model's text color with bold for consistency)
-	sb.WriteString(bgColor + textColor + Bold + bar + " " + itoa(progress.Percent) + "% " + Reset)
+	sb.WriteString(bgColor + textColor + Bold + bar + " " + itoa(data.Progress.Percent) + "% " + Reset)
 
 	// Write separator to next segment
-	sb.WriteString(nextBg + fgColor + SepRight + Reset)
+	sb.WriteString(data.NextBg + fgColor + SepRight + Reset)
 }
 
 // renderPathSegment renders the current directory segment.

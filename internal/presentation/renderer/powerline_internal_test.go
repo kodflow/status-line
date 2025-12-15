@@ -124,7 +124,14 @@ func TestPowerline_renderModelSegment(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &Powerline{}
 			var sb strings.Builder
-			r.renderModelSegment(&sb, model.ModelInfo{Name: "Opus"}, true, model.Progress{Percent: 50}, model.Usage{}, BgBlue)
+			data := &ModelSegmentData{
+				Model:    model.ModelInfo{Name: "Opus"},
+				ShowIcon: true,
+				Progress: model.Progress{Percent: 50},
+				Cursor:   nil,
+				NextBg:   BgBlue,
+			}
+			r.renderModelSegment(&sb, data)
 			if sb.Len() == 0 {
 				t.Error("renderModelSegment() produced empty output")
 			}
