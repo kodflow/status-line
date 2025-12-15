@@ -33,6 +33,8 @@ const (
 	IconGitBranch string = "\ue0a0"
 	// IconModel is the microchip icon for AI models.
 	IconModel string = "\uf2db"
+	// IconTaskwarrior is the tasks list icon for Taskwarrior.
+	IconTaskwarrior string = "\uf0ae"
 )
 
 // GetOSIcon returns the appropriate icon for the OS type.

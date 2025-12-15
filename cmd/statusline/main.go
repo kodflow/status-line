@@ -10,6 +10,7 @@ import (
 	"github.com/florent/status-line/internal/adapter/git"
 	"github.com/florent/status-line/internal/adapter/mcp"
 	"github.com/florent/status-line/internal/adapter/system"
+	"github.com/florent/status-line/internal/adapter/taskwarrior"
 	"github.com/florent/status-line/internal/adapter/terminal"
 	"github.com/florent/status-line/internal/application"
 	"github.com/florent/status-line/internal/domain/model"
@@ -70,6 +71,7 @@ func buildService(projectDir string) *application.StatusLineService {
 		system.NewProvider(),
 		terminal.NewProvider(),
 		mcp.NewProvider(projectDir),
+		taskwarrior.NewProvider(),
 		renderer.NewPowerline(),
 	)
 }
