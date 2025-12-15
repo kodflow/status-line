@@ -20,7 +20,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  GO_VERSION: '1.23'
+  GO_VERSION: 'stable'
 
 jobs:
   # =============================================================================
@@ -92,3 +92,90 @@ jobs:
         run: |
           go build -ldflags="-s -w" -o /dev/null ./cmd/statusline
           echo "✅ Build successful for ${{ matrix.goos }}/${{ matrix.goarch }}"
+
+  # =============================================================================
+  # Auto-release on merge to main
+  # =============================================================================
+  auto-release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    needs: [test, build]
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine next version
+        id: version
+        run: |
+          # Get latest tag, default to v0.0.0 if none exists
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          echo "Latest tag: $LATEST_TAG"
+
+          # Parse version components
+          VERSION=${LATEST_TAG#v}
+          MAJOR=$(echo $VERSION | cut -d. -f1)
+          MINOR=$(echo $VERSION | cut -d. -f2)
+          PATCH=$(echo $VERSION | cut -d. -f3)
+
+          # Analyze commits since last tag for version bump type
+          if [ "$LATEST_TAG" = "v0.0.0" ]; then
+            # First release
+            COMMITS=$(git log --oneline)
+          else
+            COMMITS=$(git log ${LATEST_TAG}..HEAD --oneline)
+          fi
+
+          # Default to patch bump
+          BUMP_TYPE="patch"
+
+          # Check for breaking changes (major bump)
+          if echo "$COMMITS" | grep -qiE "BREAKING CHANGE|!:"; then
+            BUMP_TYPE="major"
+          # Check for features (minor bump)
+          elif echo "$COMMITS" | grep -qiE "^[a-f0-9]+ feat"; then
+            BUMP_TYPE="minor"
+          fi
+
+          # Calculate new version
+          case $BUMP_TYPE in
+            major)
+              MAJOR=$((MAJOR + 1))
+              MINOR=0
+              PATCH=0
+              ;;
+            minor)
+              MINOR=$((MINOR + 1))
+              PATCH=0
+              ;;
+            patch)
+              PATCH=$((PATCH + 1))
+              ;;
+          esac
+
+          NEW_VERSION="v${MAJOR}.${MINOR}.${PATCH}"
+          echo "Bump type: $BUMP_TYPE"
+          echo "New version: $NEW_VERSION"
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Check if tag already exists
+        id: check_tag
+        run: |
+          if git rev-parse "${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create and push tag
+        if: steps.check_tag.outputs.exists == 'false'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "${{ steps.version.outputs.version }}" -m "Release ${{ steps.version.outputs.version }}"
+          git push origin "${{ steps.version.outputs.version }}"
+          echo "✅ Created and pushed tag ${{ steps.version.outputs.version }}"

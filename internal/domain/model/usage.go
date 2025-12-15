@@ -25,11 +25,14 @@ type Usage struct {
 // Returns:
 //   - Usage: configured usage value object
 func NewUsage(utilization int, resetsAt time.Time) Usage {
-	// Cap utilization to valid range
+	// Check for negative utilization
 	if utilization < 0 {
+		// Cap to minimum value
 		utilization = 0
 	}
+	// Check for utilization exceeding maximum
 	if utilization > maxPercent {
+		// Cap to maximum value
 		utilization = maxPercent
 	}
 	// Return configured usage
@@ -47,11 +50,12 @@ func NewUsage(utilization int, resetsAt time.Time) Usage {
 func (u Usage) CursorPosition() int {
 	// Calculate time remaining until reset
 	remaining := time.Until(u.ResetsAt)
-	// Handle edge cases
+	// Check if reset already passed
 	if remaining <= 0 {
 		// Reset already passed, cursor at 100%
 		return maxPercent
 	}
+	// Check if more than a week remaining
 	if remaining >= weekDuration {
 		// More than a week remaining, cursor at 0%
 		return 0
