@@ -1,50 +1,33 @@
-name: Release
+name: Rebuild All Releases
 
 on:
   workflow_dispatch:
     inputs:
-      tag:
-        description: 'Tag to release (e.g., v1.0.0)'
+      confirm:
+        description: 'Type "rebuild" to confirm deletion and rebuild of ALL releases'
         required: true
         type: string
 
-# Cancel in-progress runs when a new run is triggered
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
 
 env:
   GO_VERSION: 'stable'
   BINARY_NAME: status-line
 
 jobs:
-  # =============================================================================
-  # Build binaries for all platforms
-  # =============================================================================
-  build:
+  rebuild-releases:
+    if: inputs.confirm == 'rebuild'
     runs-on: ubuntu-latest
     permissions:
-      contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - goos: linux
-            goarch: amd64
-          - goos: linux
-            goarch: arm64
-          - goos: darwin
-            goarch: amd64
-          - goos: darwin
-            goarch: arm64
-          - goos: windows
-            goarch: amd64
-          - goos: windows
-            goarch: arm64
+      contents: write
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -52,72 +35,67 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache: true
 
-      - name: Get version
-        id: version
-        run: echo "version=${{ inputs.tag }}" >> $GITHUB_OUTPUT
-
-      - name: Build binary
-        env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-          CGO_ENABLED: 0
+      - name: Get all tags
+        id: tags
         run: |
-          mkdir -p dist
-          BINARY="${BINARY_NAME}-${{ matrix.goos }}-${{ matrix.goarch }}"
-          # Add .exe extension for Windows
-          if [ "${{ matrix.goos }}" = "windows" ]; then
-            BINARY="${BINARY}.exe"
-          fi
-          go build -ldflags="-s -w -X main.version=${{ steps.version.outputs.version }}" \
-            -o "dist/${BINARY}" \
-            ./cmd/statusline
+          TAGS=$(git tag -l 'v*' | sort -V | tr '\n' ' ')
+          echo "tags=$TAGS" >> $GITHUB_OUTPUT
+          echo "Found tags: $TAGS"
 
-          # Create checksum
-          cd dist && sha256sum "${BINARY}" > "${BINARY}.sha256"
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.BINARY_NAME }}-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: dist/*
-          if-no-files-found: error
-          retention-days: 1
-
-  # =============================================================================
-  # Create GitHub Release
-  # =============================================================================
-  release:
-    runs-on: ubuntu-latest
-    needs: build
-    permissions:
-      contents: write
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Get version
-        id: version
-        run: echo "version=${{ inputs.tag }}" >> $GITHUB_OUTPUT
-
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: dist
-          merge-multiple: true
-
-      - name: List artifacts
-        run: ls -la dist/
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ steps.version.outputs.version }}
-          name: Release ${{ steps.version.outputs.version }}
-          draft: false
-          prerelease: ${{ contains(steps.version.outputs.version, '-') }}
-          generate_release_notes: true
-          files: |
-            dist/*
+      - name: Delete all existing releases
+        run: |
+          echo "Deleting all existing releases..."
+          for tag in ${{ steps.tags.outputs.tags }}; do
+            echo "Deleting release for $tag..."
+            gh release delete "$tag" --yes 2>/dev/null || echo "No release for $tag"
+          done
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Rebuild releases for each tag
+        run: |
+          for tag in ${{ steps.tags.outputs.tags }}; do
+            echo "========================================"
+            echo "Building release for $tag"
+            echo "========================================"
+
+            # Checkout the tag
+            git checkout "$tag"
+
+            # Clean and create dist directory
+            rm -rf dist && mkdir -p dist
+
+            # Build for all platforms
+            for os in linux darwin windows; do
+              for arch in amd64 arm64; do
+                BINARY="${BINARY_NAME}-${os}-${arch}"
+                if [ "$os" = "windows" ]; then
+                  BINARY="${BINARY}.exe"
+                fi
+                echo "Building ${BINARY}..."
+                GOOS=$os GOARCH=$arch CGO_ENABLED=0 go build \
+                  -ldflags="-s -w -X main.version=${tag}" \
+                  -o "dist/${BINARY}" \
+                  ./cmd/statusline
+                cd dist && sha256sum "${BINARY}" > "${BINARY}.sha256" && cd ..
+              done
+            done
+
+            # Create the release
+            echo "Creating release for $tag..."
+            gh release create "$tag" \
+              --title "Release $tag" \
+              --generate-notes \
+              dist/*
+
+            echo "✅ Release $tag created"
+          done
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Summary
+        run: |
+          echo "## Releases Rebuilt" >> $GITHUB_STEP_SUMMARY
+          for tag in ${{ steps.tags.outputs.tags }}; do
+            echo "- $tag" >> $GITHUB_STEP_SUMMARY
+          done
