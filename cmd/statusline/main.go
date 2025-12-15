@@ -1,0 +1,77 @@
+// Package main provides the entry point for the status-line CLI tool.
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"os"
+
+	"github.com/florent/status-line/internal/adapter/git"
+	"github.com/florent/status-line/internal/adapter/mcp"
+	"github.com/florent/status-line/internal/adapter/system"
+	"github.com/florent/status-line/internal/adapter/taskwarrior"
+	"github.com/florent/status-line/internal/adapter/terminal"
+	"github.com/florent/status-line/internal/application"
+	"github.com/florent/status-line/internal/domain/model"
+	"github.com/florent/status-line/internal/presentation/renderer"
+)
+
+// main is the entry point of the application.
+// It reads JSON input from stdin, builds the service, and outputs the status line.
+//
+// Returns:
+//   - void: exits with code 1 on error
+func main() {
+	input, err := readInput()
+	// Check for input reading errors
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Error:", err)
+		os.Exit(1)
+	}
+
+	svc := buildService(input.WorkingDir())
+	fmt.Print(svc.Generate(input))
+}
+
+// readInput reads and parses JSON input from stdin.
+//
+// Returns:
+//   - *model.Input: parsed input data
+//   - error: reading or parsing error if any
+func readInput() (*model.Input, error) {
+	data, err := io.ReadAll(os.Stdin)
+	// Check for stdin read errors
+	if err != nil {
+		// Return wrapped error for context
+		return nil, fmt.Errorf("reading stdin: %w", err)
+	}
+
+	var input model.Input
+	// Check for JSON parsing errors
+	if err := json.Unmarshal(data, &input); err != nil {
+		// Return wrapped error for context
+		return nil, fmt.Errorf("parsing JSON: %w", err)
+	}
+	// Return successfully parsed input
+	return &input, nil
+}
+
+// buildService creates and wires all dependencies for the status line service.
+//
+// Params:
+//   - projectDir: the project directory for MCP config lookup
+//
+// Returns:
+//   - *application.StatusLineService: fully configured service instance
+func buildService(projectDir string) *application.StatusLineService {
+	// Return service with all adapters injected
+	return application.NewStatusLineService(
+		git.NewRepository(),
+		system.NewProvider(),
+		terminal.NewProvider(),
+		mcp.NewProvider(projectDir),
+		taskwarrior.NewProvider(),
+		renderer.NewPowerline(),
+	)
+}
