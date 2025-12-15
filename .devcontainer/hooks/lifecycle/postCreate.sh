@@ -18,6 +18,20 @@ echo -e "${CYAN}   Kodflow DevContainer Setup${NC}"
 echo -e "${CYAN}=========================================${NC}"
 echo ""
 
+# ============================================================================
+# Install/Update ktn-linter (always get latest version)
+# ============================================================================
+log_info "Installing latest ktn-linter..."
+go install github.com/kodflow/ktn-linter@latest 2>/dev/null && log_success "ktn-linter installed" || log_warning "ktn-linter installation failed"
+
+# ============================================================================
+# Build status-line
+# ============================================================================
+if [ -f /workspace/Makefile ] && grep -q "status-line" /workspace/Makefile; then
+    log_info "Building status-line..."
+    make -C /workspace build 2>/dev/null && log_success "status-line built" || log_warning "status-line build failed"
+fi
+
 # Check if already initialized
 if [ -f /home/vscode/.kodflow-initialized ]; then
     log_success "Kodflow already initialized"
@@ -105,7 +119,7 @@ export PATH="$CARBON_PATH/bin:$PATH"
 export BAZEL_USER_ROOT="/home/vscode/.cache/bazel"
 
 # Aliases
-alias super-claude="claude --dangerously-skip-permissions --mcp-config /workspace/.devcontainer/mcp.json"
+alias super-claude="claude --dangerously-skip-permissions"
 
 # Kubernetes auto-completion (if kubectl is installed)
 if command -v kubectl &> /dev/null; then
