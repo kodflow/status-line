@@ -12,11 +12,16 @@ import (
 	"github.com/florent/status-line/internal/adapter/system"
 	"github.com/florent/status-line/internal/adapter/taskwarrior"
 	"github.com/florent/status-line/internal/adapter/terminal"
+	"github.com/florent/status-line/internal/adapter/updater"
 	"github.com/florent/status-line/internal/adapter/usage"
 	"github.com/florent/status-line/internal/application"
 	"github.com/florent/status-line/internal/domain/model"
 	"github.com/florent/status-line/internal/presentation/renderer"
 )
+
+// version is set at build time via ldflags.
+// Empty value means development build (no auto-update).
+var version string
 
 // main is the entry point of the application.
 // It reads JSON input from stdin, builds the service, and outputs the status line.
@@ -24,6 +29,9 @@ import (
 // Returns:
 //   - void: exits with code 1 on error
 func main() {
+	// Check for updates in background (non-blocking)
+	go checkForUpdates()
+
 	input, err := readInput()
 	// Check for input reading errors
 	if err != nil {
@@ -33,6 +41,14 @@ func main() {
 
 	svc := buildService(input.WorkingDir())
 	fmt.Print(svc.Generate(input))
+}
+
+// checkForUpdates performs update check in background.
+// Silently ignores errors to avoid disrupting normal operation.
+func checkForUpdates() {
+	u := updater.NewUpdater(version)
+	// Ignore errors - update is best-effort
+	_, _ = u.CheckAndUpdate()
 }
 
 // readInput reads and parses JSON input from stdin.
