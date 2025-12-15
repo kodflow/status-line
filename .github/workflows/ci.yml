@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - '.devcontainer/**'
+      - '.github/instructions/**'
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - '.devcontainer/**'
+      - '.github/instructions/**'
+
+# Cancel in-progress runs when a new run is triggered
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GO_VERSION: '1.23'
+
+jobs:
+  # =============================================================================
+  # Run tests and linting
+  # =============================================================================
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run tests
+        run: go test -v -race -coverprofile=coverage.out ./...
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage.out
+          retention-days: 7
+
+  # =============================================================================
+  # Build verification (all platforms)
+  # =============================================================================
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          go build -ldflags="-s -w" -o /dev/null ./cmd/statusline
+          echo "✅ Build successful for ${{ matrix.goos }}/${{ matrix.goarch }}"
