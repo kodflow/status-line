@@ -1,8 +1,0 @@
-{
-  "id": "carbon",
-  "version": "1.0.0",
-  "name": "Carbon Language Environment",
-  "description": "Installs Carbon language compiler and tools",
-  "options": {},
-  "installsAfter": []
-}

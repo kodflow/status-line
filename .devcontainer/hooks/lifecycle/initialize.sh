@@ -53,59 +53,6 @@ else
 fi
 
 # ============================================================================
-# Validate devcontainer features
-# ============================================================================
-echo ""
-echo "Validating devcontainer features..."
-
-FEATURES_DIR="$DEVCONTAINER_DIR/features"
-ERRORS=0
-FIXED=0
-
-for category in "$FEATURES_DIR"/*; do
-    [ ! -d "$category" ] && continue
-
-    for feature in "$category"/*; do
-        [ ! -d "$feature" ] && continue
-
-        feature_name="$(basename "$category")/$(basename "$feature")"
-
-        # Check devcontainer-feature.json
-        if [ ! -f "$feature/devcontainer-feature.json" ]; then
-            echo "ERROR: $feature_name: Missing devcontainer-feature.json"
-            ERRORS=$((ERRORS + 1))
-            continue
-        fi
-
-        # Check install.sh
-        if [ ! -f "$feature/install.sh" ]; then
-            echo "ERROR: $feature_name: Missing install.sh"
-            ERRORS=$((ERRORS + 1))
-            continue
-        fi
-
-        # Fix permissions if needed
-        if [ ! -x "$feature/install.sh" ]; then
-            chmod +x "$feature/install.sh"
-            FIXED=$((FIXED + 1))
-        fi
-    done
-done
-
-if [ $ERRORS -gt 0 ]; then
-    echo ""
-    echo "ERROR: Found $ERRORS critical error(s) in features!"
-    echo "Please fix missing files before building the devcontainer."
-    exit 1
-fi
-
-if [ $FIXED -gt 0 ]; then
-    echo "Fixed permissions on $FIXED install.sh file(s)"
-fi
-
-echo "All features validated successfully"
-
-# ============================================================================
 # Clean up existing containers to prevent race conditions during rebuild
 # ============================================================================
 echo ""
