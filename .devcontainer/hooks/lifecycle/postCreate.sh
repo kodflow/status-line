@@ -19,10 +19,13 @@ echo -e "${CYAN}=========================================${NC}"
 echo ""
 
 # ============================================================================
-# Install/Update ktn-linter (always get latest version)
+# Install/Update Kodflow tools (always get latest version)
 # ============================================================================
 log_info "Installing latest ktn-linter..."
 go install github.com/kodflow/ktn-linter@latest 2>/dev/null && log_success "ktn-linter installed" || log_warning "ktn-linter installation failed"
+
+log_info "Installing latest ktnbuilder..."
+go install github.com/kodflow/ktnbuilder@latest 2>/dev/null && log_success "ktnbuilder installed" || log_warning "ktnbuilder installation failed"
 
 # ============================================================================
 # Build status-line
