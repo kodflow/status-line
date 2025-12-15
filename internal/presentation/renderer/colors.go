@@ -1,11 +1,7 @@
 // Package renderer provides status line rendering.
 package renderer
 
-import (
-	"strings"
-
-	"github.com/florent/status-line/internal/domain/model"
-)
+import "strings"
 
 // ANSI escape codes for terminal formatting.
 const (
@@ -77,18 +73,6 @@ const (
 	FgOpusDark string = "\033[38;5;172m"
 )
 
-// Progress bar color constants (darker for white background).
-const (
-	// ColorGreen is the dark green foreground for low usage.
-	ColorGreen string = "\033[38;5;28m"
-	// ColorYellow is the dark yellow/olive foreground for medium usage.
-	ColorYellow string = "\033[38;5;136m"
-	// ColorOrange is the dark orange foreground for high usage.
-	ColorOrange string = "\033[38;5;166m"
-	// ColorRed is the dark red foreground for critical usage.
-	ColorRed string = "\033[38;5;124m"
-)
-
 // Code changes segment colors (pale backgrounds, darker text).
 const (
 	// BgGreen is the pale green background for lines added.
@@ -136,35 +120,6 @@ const (
 	// ColorGray is the gray foreground for incomplete progress.
 	ColorGray string = "\033[38;5;245m"
 )
-
-// GetProgressColor returns color for a progress level.
-//
-// Params:
-//   - level: the progress severity level
-//
-// Returns:
-//   - string: ANSI color code for the level
-func GetProgressColor(level model.ProgressLevel) string {
-	// Select color based on level
-	switch level {
-	// Green for low/safe usage
-	case model.LevelLow:
-		// Return green color
-		return ColorGreen
-	// Yellow for medium usage
-	case model.LevelMedium:
-		// Return yellow color
-		return ColorYellow
-	// Orange for high usage
-	case model.LevelHigh:
-		// Return orange color
-		return ColorOrange
-	// Red for critical usage
-	default:
-		// Return red color
-		return ColorRed
-	}
-}
 
 // GetModelColors returns colors for a model pill.
 //

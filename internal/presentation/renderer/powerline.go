@@ -51,14 +51,20 @@ func (r *Powerline) Render(data model.StatusLineData) string {
 	return sb.String()
 }
 
-// renderLine1 renders the first line with OS, Path, Git, and Changes segments.
+// renderLine1 renders the first line with OS, Model, Path, Git, and Changes segments.
 //
 // Params:
 //   - sb: string builder to write to
 //   - data: status line data
 func (r *Powerline) renderLine1(sb *strings.Builder, data model.StatusLineData) {
-	// Render OS segment
-	r.renderOSSegment(sb, data.System, data.Icons.OS)
+	// Get model background color for OS segment transition (use FullName for color detection)
+	modelBg, _, _ := GetModelColors(data.Model.FullName())
+
+	// Render OS segment (transitions to Model segment)
+	r.renderOSSegment(sb, data.System, data.Icons.OS, modelBg)
+
+	// Render Model segment (transitions to Path segment)
+	r.renderModelSegment(sb, data.Model, data.Icons.Model, data.Progress, BgBlue)
 
 	// Determine what follows git segment (or path if no git)
 	changesNextBg := ""
@@ -79,18 +85,28 @@ func (r *Powerline) renderLine1(sb *strings.Builder, data model.StatusLineData) 
 	r.renderChangesSegment(sb, data.Changes)
 }
 
-// renderLine2 renders the second line with Model pill and MCP pills.
+// renderLine2 renders the second line with dynamic pills (Taskwarrior, MCP).
 //
 // Params:
 //   - sb: string builder to write to
 //   - data: status line data
 func (r *Powerline) renderLine2(sb *strings.Builder, data model.StatusLineData) {
-	// Render model pill with integrated progress bar
-	r.renderModelPill(sb, data.Model, data.Icons.Model, data.Progress)
-	// Render Taskwarrior pill if installed
-	r.renderTaskwarriorPill(sb, data.Taskwarrior)
-	// Render MCP server pills
-	r.renderMCPPills(sb, data.MCP)
+	// Track if we've rendered anything
+	hasContent := false
+
+	// Render Taskwarrior pill if installed and has projects
+	if data.Taskwarrior.Installed && data.Taskwarrior.HasProjects() {
+		r.renderTaskwarriorPill(sb, data.Taskwarrior)
+		hasContent = true
+	}
+
+	// Render MCP server pills if any
+	if len(data.MCP) > 0 {
+		if hasContent {
+			sb.WriteString(" ")
+		}
+		r.renderMCPPills(sb, data.MCP)
+	}
 }
 
 // renderOSSegment renders the operating system segment.
@@ -99,7 +115,8 @@ func (r *Powerline) renderLine2(sb *strings.Builder, data model.StatusLineData) 
 //   - sb: string builder to write to
 //   - sys: system information
 //   - showIcon: whether to show the OS icon
-func (r *Powerline) renderOSSegment(sb *strings.Builder, sys model.SystemInfo, showIcon bool) {
+//   - nextBg: background color of the next segment
+func (r *Powerline) renderOSSegment(sb *strings.Builder, sys model.SystemInfo, showIcon bool, nextBg string) {
 	// Write left rounded cap
 	sb.WriteString(FgWhite + LeftRound + Reset)
 	// Check if icon should be shown
@@ -112,7 +129,37 @@ func (r *Powerline) renderOSSegment(sb *strings.Builder, sys model.SystemInfo, s
 		sb.WriteString(BgWhite + FgBlack + Bold + "  " + Reset)
 	}
 	// Write separator to next segment
-	sb.WriteString(BgBlue + FgWhite + SepRight + Reset)
+	sb.WriteString(nextBg + FgWhite + SepRight + Reset)
+}
+
+// renderModelSegment renders the AI model segment with integrated progress bar.
+//
+// Params:
+//   - sb: string builder to write to
+//   - m: model information
+//   - showIcon: whether to show the model icon
+//   - progress: context window usage progress
+//   - nextBg: background color of the next segment
+func (r *Powerline) renderModelSegment(sb *strings.Builder, m model.ModelInfo, showIcon bool, progress model.Progress, nextBg string) {
+	// Use FullName for color detection (includes version like "Opus 4.5")
+	fullName := m.FullName()
+	bgColor, fgColor, textColor := GetModelColors(fullName)
+	bar := RenderProgressBar(progress, StyleHeavy)
+
+	// Check if icon should be shown
+	if showIcon {
+		// Write model name with icon
+		sb.WriteString(bgColor + textColor + Bold + " " + IconModel + " " + m.Name + " " + Reset)
+	} else {
+		// Write model name without icon
+		sb.WriteString(bgColor + textColor + Bold + " " + m.Name + " " + Reset)
+	}
+
+	// Write progress bar and percentage (using model's text color with bold for consistency)
+	sb.WriteString(bgColor + textColor + Bold + bar + " " + itoa(progress.Percent) + "% " + Reset)
+
+	// Write separator to next segment
+	sb.WriteString(nextBg + fgColor + SepRight + Reset)
 }
 
 // renderPathSegment renders the current directory segment.
@@ -189,76 +236,6 @@ func (r *Powerline) renderGitSegment(sb *strings.Builder, git model.GitStatus, s
 		// Write final separator
 		sb.WriteString(FgCyan + SepRight + Reset)
 	}
-}
-
-// renderModelPill renders the model name with progress bar as a nested pill.
-//
-// Params:
-//   - sb: string builder to write to
-//   - m: model information
-//   - showIcon: whether to show the model icon
-//   - progress: context window usage progress
-func (r *Powerline) renderModelPill(sb *strings.Builder, m model.ModelInfo, showIcon bool, progress model.Progress) {
-	bgColor, fgColor, textColor := GetModelColors(m.Name)
-	progressColor := GetProgressColor(progress.Level())
-	bar := RenderProgressBar(progress, StyleHeavy)
-
-	// Write left rounded cap
-	sb.WriteString(fgColor + LeftRound + Reset)
-
-	// Check if icon should be shown
-	if showIcon {
-		// Write model name with icon and dark text
-		sb.WriteString(bgColor + textColor + Bold + " " + IconModel + " " + m.Name + " " + Reset)
-	} else {
-		// Write model name without icon and dark text
-		sb.WriteString(bgColor + textColor + Bold + " " + m.Name + " " + Reset)
-	}
-
-	// Write nested progress bar pill
-	sb.WriteString(bgColor + FgWhite + LeftRound + Reset)
-	// Progress bar on white background with progress color
-	sb.WriteString(BgWhite + progressColor + " " + bar + " " + Reset)
-	// Add percentage after progress bar
-	sb.WriteString(BgWhite + FgBlack + Bold + itoa(progress.Percent) + "%" + " " + Reset)
-	// Write right cap
-	sb.WriteString(FgWhite + RightRound + Reset)
-}
-
-// renderContextPill renders the context usage as a progress bar pill.
-//
-// Params:
-//   - sb: string builder to write to
-//   - progress: context window usage progress
-func (r *Powerline) renderContextPill(sb *strings.Builder, progress model.Progress) {
-	// Add space before context pill
-	sb.WriteString(" ")
-
-	color := GetProgressColor(progress.Level())
-	// Render all three styles for comparison (test only)
-	barBlock := RenderProgressBar(progress, StyleBlock)
-	barBraille := RenderProgressBar(progress, StyleBraille)
-	barHeavy := RenderProgressBar(progress, StyleHeavy)
-
-	// Block style pill
-	sb.WriteString(color + LeftRound + Reset)
-	sb.WriteString(BgWhite + color + " " + barBlock + " " + Reset)
-	sb.WriteString(BgWhite + FgBlack + Bold + itoa(progress.Percent) + "%" + " " + Reset)
-	sb.WriteString(FgWhite + RightRound + Reset)
-
-	// Braille style pill
-	sb.WriteString(" ")
-	sb.WriteString(color + LeftRound + Reset)
-	sb.WriteString(BgWhite + color + " " + barBraille + " " + Reset)
-	sb.WriteString(BgWhite + FgBlack + Bold + itoa(progress.Percent) + "%" + " " + Reset)
-	sb.WriteString(FgWhite + RightRound + Reset)
-
-	// Heavy horizontal style pill
-	sb.WriteString(" ")
-	sb.WriteString(color + LeftRound + Reset)
-	sb.WriteString(BgWhite + color + " " + barHeavy + " " + Reset)
-	sb.WriteString(BgWhite + FgBlack + Bold + itoa(progress.Percent) + "%" + " " + Reset)
-	sb.WriteString(FgWhite + RightRound + Reset)
 }
 
 // renderChangesSegment renders the lines added/removed as powerline segments.
