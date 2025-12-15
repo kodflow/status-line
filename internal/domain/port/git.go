@@ -11,4 +11,10 @@ type GitRepository interface {
 	// Returns:
 	//   - model.GitStatus: branch and change information
 	Status() model.GitStatus
+
+	// DiffStats returns lines added and removed from git diff.
+	//
+	// Returns:
+	//   - model.CodeChanges: lines added and removed
+	DiffStats() model.CodeChanges
 }
