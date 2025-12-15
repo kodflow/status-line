@@ -40,6 +40,10 @@ jobs:
             goarch: amd64
           - goos: darwin
             goarch: arm64
+          - goos: windows
+            goarch: amd64
+          - goos: windows
+            goarch: arm64
 
     steps:
       - name: Checkout repository
@@ -68,6 +72,10 @@ jobs:
         run: |
           mkdir -p dist
           BINARY="${BINARY_NAME}-${{ matrix.goos }}-${{ matrix.goarch }}"
+          # Add .exe extension for Windows
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            BINARY="${BINARY}.exe"
+          fi
           go build -ldflags="-s -w -X main.version=${{ steps.version.outputs.version }}" \
             -o "dist/${BINARY}" \
             ./cmd/statusline
