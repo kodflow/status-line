@@ -43,9 +43,7 @@ func (r *Powerline) Render(data model.StatusLineData) string {
 	// Render first line with system info
 	r.renderLine1(&sb, data)
 	sb.WriteString("\n")
-	// Line 2 invisible spacer (uses hidden ANSI attribute)
-	sb.WriteString("\x1b[8m.\x1b[0m\n")
-	// Render third line with model pill
+	// Render second line with model pill
 	r.renderLine2(&sb, data)
 	sb.WriteString("\n")
 
