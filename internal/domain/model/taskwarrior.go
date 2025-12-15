@@ -14,38 +14,6 @@ type TaskwarriorInfo struct {
 	Projects  []TaskwarriorProject
 }
 
-// TaskwarriorProject represents a project/epic with its task stats.
-// It tracks pending and completed task counts for a single project.
-type TaskwarriorProject struct {
-	Name      string
-	Pending   int
-	Completed int
-}
-
-// Total returns total tasks in the project.
-//
-// Returns:
-//   - int: pending + completed tasks
-func (p TaskwarriorProject) Total() int {
-	// Sum pending and completed
-	return p.Pending + p.Completed
-}
-
-// Percent returns completion percentage.
-//
-// Returns:
-//   - int: percentage 0-100
-func (p TaskwarriorProject) Percent() int {
-	total := p.Total()
-	// Avoid division by zero
-	if total == 0 {
-		// Return zero for empty projects
-		return 0
-	}
-	// Calculate percentage
-	return p.Completed * percentMultiplier / total
-}
-
 // HasProjects returns true if there are any projects.
 //
 // Returns:

@@ -3,24 +3,20 @@ package renderer
 
 import "github.com/florent/status-line/internal/domain/model"
 
-// Progress bar dimension constants.
+// Progress bar constants.
 const (
 	// progressBarWidth is the number of characters in the progress bar.
 	progressBarWidth int = 10
-	// stepsPerChar is the number of granular steps per character (for smooth rendering).
+	// stepsPerChar is the number of granular steps per character.
 	stepsPerChar int = 8
-	// charSetSize is the number of characters in braille/block sets (0-8 inclusive).
+	// charSetSize is the number of characters in braille/block sets.
 	charSetSize int = 9
 	// percentMax is the maximum percentage value.
 	percentMax int = 100
-)
-
-// Heavy horizontal progress bar characters.
-const (
 	// heavyFull is the filled heavy horizontal character.
-	heavyFull rune = '\u2501' // ━
+	heavyFull rune = '\u2501'
 	// heavyEmpty is the empty light horizontal character.
-	heavyEmpty rune = '\u2500' // ─
+	heavyEmpty rune = '\u2500'
 )
 
 // ProgressBarStyle represents the visual style of progress bars.
@@ -30,7 +26,7 @@ type ProgressBarStyle int
 const (
 	// StyleBraille uses braille pattern characters.
 	StyleBraille ProgressBarStyle = iota
-	// StyleBlock uses Unicode block characters (pip/hyperfine style).
+	// StyleBlock uses Unicode block characters.
 	StyleBlock
 	// StyleHeavy uses heavy horizontal line characters.
 	StyleHeavy
@@ -38,32 +34,13 @@ const (
 
 // Progress bar character sets.
 var (
-	// brailleChars contains braille progress bar characters (empty to full).
-	// Uses vertical braille patterns for smooth progression.
+	// brailleChars contains braille progress bar characters.
 	brailleChars [charSetSize]rune = [charSetSize]rune{
-		' ',      // 0/8 - empty
-		'\u2801', // ⠁ 1/8
-		'\u2803', // ⠃ 2/8
-		'\u2807', // ⠇ 3/8
-		'\u2847', // ⡇ 4/8
-		'\u28C7', // ⣇ 5/8
-		'\u28E7', // ⣧ 6/8
-		'\u28F7', // ⣷ 7/8
-		'\u28FF', // ⣿ 8/8 - full
+		' ', '\u2801', '\u2803', '\u2807', '\u2847', '\u28C7', '\u28E7', '\u28F7', '\u28FF',
 	}
-
-	// blockChars contains block progress bar characters (empty to full).
-	// Uses horizontal block elements for pip/hyperfine style.
+	// blockChars contains block progress bar characters.
 	blockChars [charSetSize]rune = [charSetSize]rune{
-		' ',      // 0/8 - empty
-		'\u258F', // ▏ 1/8
-		'\u258E', // ▎ 2/8
-		'\u258D', // ▍ 3/8
-		'\u258C', // ▌ 4/8
-		'\u258B', // ▋ 5/8
-		'\u258A', // ▊ 6/8
-		'\u2589', // ▉ 7/8
-		'\u2588', // █ 8/8 - full
+		' ', '\u258F', '\u258E', '\u258D', '\u258C', '\u258B', '\u258A', '\u2589', '\u2588',
 	}
 )
 
@@ -76,13 +53,12 @@ var (
 // Returns:
 //   - string: rendered progress bar
 func RenderProgressBar(progress model.Progress, style ProgressBarStyle) string {
-	// Handle heavy style separately (no partial characters)
+	// Handle heavy style separately
 	if style == StyleHeavy {
 		// Render heavy style progress bar
 		return renderHeavyBar(progress)
 	}
-
-	// Render granular style (braille or block)
+	// Render granular style
 	return renderGranularBar(progress, style)
 }
 
@@ -97,13 +73,13 @@ func renderHeavyBar(progress model.Progress) string {
 	// Calculate filled characters
 	filled := progress.Percent * progressBarWidth / percentMax
 	var result [progressBarWidth]rune
-	// Build progress bar character by character
+	// Build progress bar
 	for i := range progressBarWidth {
 		// Determine if filled or empty
 		if i < filled {
 			result[i] = heavyFull
 		} else {
-			// Use empty character
+			// Use empty character for unfilled portion
 			result[i] = heavyEmpty
 		}
 	}
@@ -121,9 +97,8 @@ func renderHeavyBar(progress model.Progress) string {
 //   - string: rendered progress bar
 func renderGranularBar(progress model.Progress, style ProgressBarStyle) string {
 	chars := blockChars
-	// Select character set based on style
+	// Select character set
 	if style == StyleBraille {
-		// Use braille characters
 		chars = brailleChars
 	}
 
@@ -132,23 +107,22 @@ func renderGranularBar(progress model.Progress, style ProgressBarStyle) string {
 	filledSteps := progress.Percent * totalSteps / percentMax
 
 	var result [progressBarWidth]rune
-	// Build progress bar character by character
+	// Build progress bar
 	for i := range progressBarWidth {
 		charSteps := filledSteps - (i * stepsPerChar)
-		// Determine character based on remaining steps
+		// Determine character
 		switch {
-		// Full character
+		// Fully filled character position
 		case charSteps >= stepsPerChar:
 			result[i] = chars[stepsPerChar]
-		// Partial character
+		// Partially filled character position
 		case charSteps > 0:
 			result[i] = chars[charSteps]
-		// Empty character
+		// Empty character position
 		default:
 			result[i] = chars[0]
 		}
 	}
-
 	// Return completed progress bar
 	return string(result[:])
 }
