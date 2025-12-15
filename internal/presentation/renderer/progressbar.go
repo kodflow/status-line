@@ -117,18 +117,3 @@ func RenderProgressBar(progress model.Progress, style ProgressBarStyle) string {
 	// Return completed progress bar
 	return string(result)
 }
-
-// RenderProgressBarWithColor generates a colored progress bar.
-//
-// Params:
-//   - progress: the progress value (0-100%)
-//   - style: the visual style to use
-//
-// Returns:
-//   - string: rendered progress bar with ANSI color codes
-func RenderProgressBarWithColor(progress model.Progress, style ProgressBarStyle) string {
-	bar := RenderProgressBar(progress, style)
-	color := GetProgressColor(progress.Level())
-	// Return bar with color applied
-	return color + bar + Reset
-}
