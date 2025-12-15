@@ -17,6 +17,8 @@ const (
 	heavyFull rune = '\u2501'
 	// heavyEmpty is the empty light horizontal character.
 	heavyEmpty rune = '\u2500'
+	// cursorChar is the burn-rate cursor indicator character.
+	cursorChar rune = '\u25CF'
 	// noCursor indicates no cursor should be rendered.
 	noCursor int = -1
 )
@@ -123,6 +125,7 @@ func renderHeavyBarWithCursor(progress model.Progress, cursorIdx int, cursorColo
 	// Pre-convert runes to strings for efficiency
 	fullChar := string(heavyFull)
 	emptyChar := string(heavyEmpty)
+	cursorIndicator := string(cursorChar)
 	// Build result with color codes
 	var result []byte
 	// Build progress bar
@@ -131,7 +134,7 @@ func renderHeavyBarWithCursor(progress model.Progress, cursorIdx int, cursorColo
 		if i == cursorIdx {
 			// Write cursor with special color
 			result = append(result, cursorColor...)
-			result = append(result, fullChar...)
+			result = append(result, cursorIndicator...)
 			result = append(result, Reset...)
 			result = append(result, bgColor...)
 		}
