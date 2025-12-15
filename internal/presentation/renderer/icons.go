@@ -3,7 +3,7 @@ package renderer
 
 import "github.com/florent/status-line/internal/domain/model"
 
-// Powerline separator constants.
+// Icon and separator constants for powerline rendering.
 const (
 	// SepRight is the right-pointing arrow separator.
 	SepRight string = "\uE0B0"
@@ -13,10 +13,6 @@ const (
 	LeftRound string = "\uE0B6"
 	// RightRound is the right rounded cap.
 	RightRound string = "\uE0B4"
-)
-
-// Nerd Font icon constants.
-const (
 	// IconLinux is the Linux penguin icon.
 	IconLinux string = "\uf17c"
 	// IconDocker is the Docker whale icon.

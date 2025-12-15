@@ -44,15 +44,16 @@ func NewProvider(projectDir string) *Provider {
 // Returns:
 //   - model.MCPServers: list of MCP server configurations
 func (p *Provider) Servers() model.MCPServers {
-	servers := make(model.MCPServers, 0)
-
 	// Read global settings
 	globalServers := p.readSettingsFile(p.globalSettingsPath())
-	// Append global servers
-	servers = append(servers, globalServers...)
 
 	// Read project settings
 	projectServers := p.readSettingsFile(p.projectSettingsPath())
+
+	// Preallocate with known capacity
+	servers := make(model.MCPServers, 0, len(globalServers)+len(projectServers))
+	// Append global servers
+	servers = append(servers, globalServers...)
 	// Append project servers
 	servers = append(servers, projectServers...)
 
@@ -89,21 +90,6 @@ func (p *Provider) projectSettingsPath() string {
 	return filepath.Join(p.projectDir, globalSettingsDir, settingsFileName)
 }
 
-// settingsFile represents the Claude settings.json structure.
-// It contains MCP server configurations.
-type settingsFile struct {
-	MCPServers map[string]mcpServerConfig `json:"mcpServers"`
-}
-
-// mcpServerConfig represents a single MCP server config.
-// It contains the server type, command, and disabled status.
-type mcpServerConfig struct {
-	Type     string `json:"type"`
-	Command  string `json:"command"`
-	URL      string `json:"url"`
-	Disabled bool   `json:"disabled"`
-}
-
 // readSettingsFile reads MCP servers from a settings file.
 //
 // Params:
@@ -112,28 +98,28 @@ type mcpServerConfig struct {
 // Returns:
 //   - model.MCPServers: list of MCP servers from file
 func (p *Provider) readSettingsFile(path string) model.MCPServers {
-	servers := make(model.MCPServers, 0)
-
 	// Check if path is provided
 	if path == "" {
 		// Return empty list for empty path
-		return servers
+		return model.MCPServers{}
 	}
 
 	data, err := os.ReadFile(path)
 	// Check if file is readable
 	if err != nil {
 		// Return empty list if file not accessible
-		return servers
+		return model.MCPServers{}
 	}
 
 	var settings settingsFile
 	// Check if JSON is valid
 	if err := json.Unmarshal(data, &settings); err != nil {
 		// Return empty list if parsing fails
-		return servers
+		return model.MCPServers{}
 	}
 
+	// Preallocate with known capacity
+	servers := make(model.MCPServers, 0, len(settings.MCPServers))
 	// Convert map to slice
 	for name, config := range settings.MCPServers {
 		server := model.MCPServer{

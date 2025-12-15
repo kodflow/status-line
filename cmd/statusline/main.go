@@ -65,13 +65,13 @@ func readInput() (*model.Input, error) {
 // Returns:
 //   - *application.StatusLineService: fully configured service instance
 func buildService(projectDir string) *application.StatusLineService {
+	deps := application.ServiceDeps{
+		Git:         git.NewRepository(),
+		System:      system.NewProvider(),
+		Terminal:    terminal.NewProvider(),
+		MCP:         mcp.NewProvider(projectDir),
+		Taskwarrior: taskwarrior.NewProvider(),
+	}
 	// Return service with all adapters injected
-	return application.NewStatusLineService(
-		git.NewRepository(),
-		system.NewProvider(),
-		terminal.NewProvider(),
-		mcp.NewProvider(projectDir),
-		taskwarrior.NewProvider(),
-		renderer.NewPowerline(),
-	)
+	return application.NewStatusLineService(deps, renderer.NewPowerline())
 }

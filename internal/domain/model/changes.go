@@ -34,3 +34,16 @@ func (c CodeChanges) HasRemoved() bool {
 	// Check if removed count is positive
 	return c.Removed > 0
 }
+
+// NewCodeChanges creates a new CodeChanges instance.
+//
+// Params:
+//   - added: lines added
+//   - removed: lines removed
+//
+// Returns:
+//   - CodeChanges: new code changes value object
+func NewCodeChanges(added, removed int) CodeChanges {
+	// Return initialized struct
+	return CodeChanges{Added: added, Removed: removed}
+}
