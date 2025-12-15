@@ -66,8 +66,9 @@ func (p *Provider) Servers() model.MCPServers {
 //   - string: path to global settings file
 func (p *Provider) globalSettingsPath() string {
 	home, err := os.UserHomeDir()
-	// Return empty if home not found
+	// Check if home directory is accessible
 	if err != nil {
+		// Return empty path if home not found
 		return ""
 	}
 	// Return global settings path
@@ -79,8 +80,9 @@ func (p *Provider) globalSettingsPath() string {
 // Returns:
 //   - string: path to project settings file
 func (p *Provider) projectSettingsPath() string {
-	// Return empty if no project dir
+	// Check if project directory is set
 	if p.projectDir == "" {
+		// Return empty path if no project dir
 		return ""
 	}
 	// Return project settings path
@@ -112,20 +114,23 @@ type mcpServerConfig struct {
 func (p *Provider) readSettingsFile(path string) model.MCPServers {
 	servers := make(model.MCPServers, 0)
 
-	// Return empty if path is empty
+	// Check if path is provided
 	if path == "" {
+		// Return empty list for empty path
 		return servers
 	}
 
 	data, err := os.ReadFile(path)
-	// Return empty if file not readable
+	// Check if file is readable
 	if err != nil {
+		// Return empty list if file not accessible
 		return servers
 	}
 
 	var settings settingsFile
-	// Return empty if JSON invalid
+	// Check if JSON is valid
 	if err := json.Unmarshal(data, &settings); err != nil {
+		// Return empty list if parsing fails
 		return servers
 	}
 

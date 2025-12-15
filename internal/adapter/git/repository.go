@@ -14,6 +14,10 @@ const (
 	statusCodeUntracked string = "??"
 	// minStatusLineLength is the minimum length for a valid status line.
 	minStatusLineLength int = 2
+	// minNumstatParts is the minimum fields in a numstat line (added, removed).
+	minNumstatParts int = 2
+	// base10 is the decimal base for parsing digits.
+	base10 int = 10
 )
 
 // Compile-time interface implementation check.
@@ -125,9 +129,9 @@ func (r *Repository) DiffStats() model.CodeChanges {
 			continue
 		}
 		// Parse the line
-		a, r := parseNumstatLine(line)
-		added += a
-		removed += r
+		lineAdded, lineRemoved := parseNumstatLine(line)
+		added += lineAdded
+		removed += lineRemoved
 	}
 
 	// Return diff stats
@@ -147,25 +151,31 @@ func (r *Repository) DiffStats() model.CodeChanges {
 //   - removed: lines removed
 func parseNumstatLine(line string) (added, removed int) {
 	parts := strings.Fields(line)
-	// Need at least 2 fields (added, removed)
-	if len(parts) < 2 {
+	// Need at least added and removed fields
+	if len(parts) < minNumstatParts {
+		// Return zero if line is malformed
 		return 0, 0
 	}
 	// Parse added count (handle binary files showing "-")
 	if parts[0] != "-" {
+		// Convert string digits to integer
 		for _, ch := range parts[0] {
+			// Check if character is a digit
 			if ch >= '0' && ch <= '9' {
-				added = added*10 + int(ch-'0')
+				added = added*base10 + int(ch-'0')
 			}
 		}
 	}
 	// Parse removed count
 	if parts[1] != "-" {
+		// Convert string digits to integer
 		for _, ch := range parts[1] {
+			// Check if character is a digit
 			if ch >= '0' && ch <= '9' {
-				removed = removed*10 + int(ch-'0')
+				removed = removed*base10 + int(ch-'0')
 			}
 		}
 	}
+	// Return parsed counts
 	return added, removed
 }

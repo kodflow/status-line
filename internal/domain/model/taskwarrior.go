@@ -1,6 +1,12 @@
 // Package model contains domain entities and value objects.
 package model
 
+// Percentage calculation constant.
+const (
+	// percentMultiplier is used for percentage calculation.
+	percentMultiplier int = 100
+)
+
 // TaskwarriorInfo contains Taskwarrior task information.
 // It holds project-level statistics.
 type TaskwarriorInfo struct {
@@ -9,6 +15,7 @@ type TaskwarriorInfo struct {
 }
 
 // TaskwarriorProject represents a project/epic with its task stats.
+// It tracks pending and completed task counts for a single project.
 type TaskwarriorProject struct {
 	Name      string
 	Pending   int
@@ -32,10 +39,11 @@ func (p TaskwarriorProject) Percent() int {
 	total := p.Total()
 	// Avoid division by zero
 	if total == 0 {
+		// Return zero for empty projects
 		return 0
 	}
 	// Calculate percentage
-	return p.Completed * 100 / total
+	return p.Completed * percentMultiplier / total
 }
 
 // HasProjects returns true if there are any projects.
