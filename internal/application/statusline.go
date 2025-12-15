@@ -71,7 +71,7 @@ func (s *StatusLineService) Generate(input *model.Input) string {
 		Terminal:    s.terminalProv.Info(),
 		Dir:         input.WorkingDir(),
 		Time:        time.Now().Format(timeFormat),
-		Changes:     input.CodeChanges(),
+		Changes:     s.gitRepo.DiffStats(),
 		MCP:         s.mcpProv.Servers(),
 		Taskwarrior: s.taskwarriorProv.Info(),
 	}
