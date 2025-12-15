@@ -43,7 +43,9 @@ func (r *Powerline) Render(data model.StatusLineData) string {
 	// Render first line with system info
 	r.renderLine1(&sb, data)
 	sb.WriteString("\n")
-	// Render second line with model pill
+	// Line 2 invisible spacer (uses hidden ANSI attribute)
+	sb.WriteString("\x1b[8m.\x1b[0m\n")
+	// Render third line with model pill
 	r.renderLine2(&sb, data)
 	sb.WriteString("\n")
 
@@ -85,8 +87,10 @@ func (r *Powerline) renderLine1(sb *strings.Builder, data model.StatusLineData) 
 //   - sb: string builder to write to
 //   - data: status line data
 func (r *Powerline) renderLine2(sb *strings.Builder, data model.StatusLineData) {
-	// Render model pill
-	r.renderModelPill(sb, data.Model, data.Icons.Model)
+	// Render model pill with integrated progress bar
+	r.renderModelPill(sb, data.Model, data.Icons.Model, data.Progress)
+	// Render Taskwarrior pill if installed
+	r.renderTaskwarriorPill(sb, data.Taskwarrior)
 	// Render MCP server pills
 	r.renderMCPPills(sb, data.MCP)
 }
@@ -189,14 +193,17 @@ func (r *Powerline) renderGitSegment(sb *strings.Builder, git model.GitStatus, s
 	}
 }
 
-// renderModelPill renders the model name as a nested pill.
+// renderModelPill renders the model name with progress bar as a nested pill.
 //
 // Params:
 //   - sb: string builder to write to
 //   - m: model information
 //   - showIcon: whether to show the model icon
-func (r *Powerline) renderModelPill(sb *strings.Builder, m model.ModelInfo, showIcon bool) {
+//   - progress: context window usage progress
+func (r *Powerline) renderModelPill(sb *strings.Builder, m model.ModelInfo, showIcon bool, progress model.Progress) {
 	bgColor, fgColor, textColor := GetModelColors(m.Name)
+	progressColor := GetProgressColor(progress.Level())
+	bar := RenderProgressBar(progress, StyleHeavy)
 
 	// Write left rounded cap
 	sb.WriteString(fgColor + LeftRound + Reset)
@@ -210,17 +217,50 @@ func (r *Powerline) renderModelPill(sb *strings.Builder, m model.ModelInfo, show
 		sb.WriteString(bgColor + textColor + Bold + " " + m.Name + " " + Reset)
 	}
 
-	// Check if version exists for nested pill
-	if m.Version != "" {
-		// Write nested version pill
-		sb.WriteString(bgColor + FgWhite + LeftRound + Reset)
-		// Version on white background uses black text
-		sb.WriteString(BgWhite + FgBlack + Bold + " " + m.Version + " " + Reset)
-		sb.WriteString(FgWhite + RightRound + Reset)
-	} else {
-		// Write simple right cap
-		sb.WriteString(fgColor + RightRound + Reset)
-	}
+	// Write nested progress bar pill
+	sb.WriteString(bgColor + FgWhite + LeftRound + Reset)
+	// Progress bar on white background with progress color
+	sb.WriteString(BgWhite + progressColor + " " + bar + " " + Reset)
+	// Add percentage after progress bar
+	sb.WriteString(BgWhite + FgBlack + Bold + itoa(progress.Percent) + "%" + " " + Reset)
+	// Write right cap
+	sb.WriteString(FgWhite + RightRound + Reset)
+}
+
+// renderContextPill renders the context usage as a progress bar pill.
+//
+// Params:
+//   - sb: string builder to write to
+//   - progress: context window usage progress
+func (r *Powerline) renderContextPill(sb *strings.Builder, progress model.Progress) {
+	// Add space before context pill
+	sb.WriteString(" ")
+
+	color := GetProgressColor(progress.Level())
+	// Render all three styles for comparison (test only)
+	barBlock := RenderProgressBar(progress, StyleBlock)
+	barBraille := RenderProgressBar(progress, StyleBraille)
+	barHeavy := RenderProgressBar(progress, StyleHeavy)
+
+	// Block style pill
+	sb.WriteString(color + LeftRound + Reset)
+	sb.WriteString(BgWhite + color + " " + barBlock + " " + Reset)
+	sb.WriteString(BgWhite + FgBlack + Bold + itoa(progress.Percent) + "%" + " " + Reset)
+	sb.WriteString(FgWhite + RightRound + Reset)
+
+	// Braille style pill
+	sb.WriteString(" ")
+	sb.WriteString(color + LeftRound + Reset)
+	sb.WriteString(BgWhite + color + " " + barBraille + " " + Reset)
+	sb.WriteString(BgWhite + FgBlack + Bold + itoa(progress.Percent) + "%" + " " + Reset)
+	sb.WriteString(FgWhite + RightRound + Reset)
+
+	// Heavy horizontal style pill
+	sb.WriteString(" ")
+	sb.WriteString(color + LeftRound + Reset)
+	sb.WriteString(BgWhite + color + " " + barHeavy + " " + Reset)
+	sb.WriteString(BgWhite + FgBlack + Bold + itoa(progress.Percent) + "%" + " " + Reset)
+	sb.WriteString(FgWhite + RightRound + Reset)
 }
 
 // renderChangesSegment renders the lines added/removed as powerline segments.
@@ -312,6 +352,57 @@ func (r *Powerline) renderMCPPill(sb *strings.Builder, server model.MCPServer) {
 	sb.WriteString(bgColor + textColor + " " + server.Name + " " + Reset)
 	// Write right rounded cap
 	sb.WriteString(fgColor + RightRound + Reset)
+}
+
+// renderTaskwarriorPill renders Taskwarrior project pills.
+//
+// Params:
+//   - sb: string builder to write to
+//   - tw: Taskwarrior information
+func (r *Powerline) renderTaskwarriorPill(sb *strings.Builder, tw model.TaskwarriorInfo) {
+	// Skip if Taskwarrior is not installed or no projects
+	if !tw.Installed || !tw.HasProjects() {
+		// Return early if not installed or empty
+		return
+	}
+
+	// Render each project as a pill
+	for _, project := range tw.Projects {
+		r.renderTaskwarriorProjectPill(sb, project)
+	}
+}
+
+// renderTaskwarriorProjectPill renders a single project pill with progress.
+//
+// Params:
+//   - sb: string builder to write to
+//   - project: project information
+func (r *Powerline) renderTaskwarriorProjectPill(sb *strings.Builder, project model.TaskwarriorProject) {
+	// Add space before pill
+	sb.WriteString(" ")
+
+	// Create progress for the project
+	progress := model.NewProgress(project.Completed, project.Total())
+	// Use gray for incomplete, lavender for 100%
+	progressColor := ColorGray
+	if progress.Percent == 100 {
+		progressColor = FgTaskwarriorText
+	}
+	bar := RenderProgressBar(progress, StyleHeavy)
+
+	// Write left rounded cap
+	sb.WriteString(FgTaskwarrior + LeftRound + Reset)
+	// Write icon and project name
+	sb.WriteString(BgTaskwarrior + FgTaskwarriorText + Bold + " " + IconTaskwarrior + " " + project.Name + " " + Reset)
+
+	// Write nested progress bar pill
+	sb.WriteString(BgTaskwarrior + FgWhite + LeftRound + Reset)
+	// Progress bar on white background with progress color
+	sb.WriteString(BgWhite + progressColor + " " + bar + " " + Reset)
+	// Add task count (completed/total)
+	sb.WriteString(BgWhite + FgBlack + Bold + itoa(project.Completed) + "/" + itoa(project.Total()) + " " + Reset)
+	// Write right cap
+	sb.WriteString(FgWhite + RightRound + Reset)
 }
 
 // itoa converts an integer to string.

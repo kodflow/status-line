@@ -77,16 +77,16 @@ const (
 	FgOpusDark string = "\033[38;5;172m"
 )
 
-// Progress bar color constants.
+// Progress bar color constants (darker for white background).
 const (
-	// ColorGreen is the foreground color for low usage.
-	ColorGreen string = "\033[38;5;76m"
-	// ColorYellow is the foreground color for medium usage.
-	ColorYellow string = "\033[38;5;220m"
-	// ColorOrange is the foreground color for high usage.
-	ColorOrange string = "\033[38;5;208m"
-	// ColorRed is the foreground color for critical usage.
-	ColorRed string = "\033[38;5;196m"
+	// ColorGreen is the dark green foreground for low usage.
+	ColorGreen string = "\033[38;5;28m"
+	// ColorYellow is the dark yellow/olive foreground for medium usage.
+	ColorYellow string = "\033[38;5;136m"
+	// ColorOrange is the dark orange foreground for high usage.
+	ColorOrange string = "\033[38;5;166m"
+	// ColorRed is the dark red foreground for critical usage.
+	ColorRed string = "\033[38;5;124m"
 )
 
 // Code changes segment colors (pale backgrounds, darker text).
@@ -119,6 +119,22 @@ const (
 	FgMCPDisabled string = "\033[38;5;250m"
 	// FgMCPDisabledText is the dark gray for text on disabled MCP background.
 	FgMCPDisabledText string = "\033[38;5;240m"
+)
+
+// Taskwarrior color constants (lavender/violet theme - distinct from Sonnet).
+const (
+	// BgTaskwarrior is the pale lavender background for Taskwarrior pill.
+	BgTaskwarrior string = "\033[48;5;147m"
+	// FgTaskwarrior is the lavender foreground for Taskwarrior pill caps.
+	FgTaskwarrior string = "\033[38;5;147m"
+	// FgTaskwarriorText is the dark indigo for text on Taskwarrior background.
+	FgTaskwarriorText string = "\033[38;5;55m"
+)
+
+// Taskwarrior progress bar colors.
+const (
+	// ColorGray is the gray foreground for incomplete progress.
+	ColorGray string = "\033[38;5;245m"
 )
 
 // GetProgressColor returns color for a progress level.
