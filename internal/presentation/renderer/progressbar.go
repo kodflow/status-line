@@ -6,7 +6,7 @@ import "github.com/florent/status-line/internal/domain/model"
 // Progress bar constants.
 const (
 	// progressBarWidth is the number of characters in the progress bar.
-	progressBarWidth int = 10
+	progressBarWidth int = 20
 	// stepsPerChar is the number of granular steps per character.
 	stepsPerChar int = 8
 	// charSetSize is the number of characters in braille/block sets.
