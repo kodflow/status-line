@@ -49,3 +49,26 @@ func TestRenderGranularBar(t *testing.T) {
 		})
 	}
 }
+
+func TestRenderHeavyBarWithCursor(t *testing.T) {
+	tests := []struct {
+		name      string
+		percent   int
+		cursorIdx int
+	}{
+		{name: "cursor at start", percent: 50, cursorIdx: 0},
+		{name: "cursor in middle", percent: 50, cursorIdx: 10},
+		{name: "cursor at end", percent: 50, cursorIdx: 19},
+		{name: "empty bar with cursor", percent: 0, cursorIdx: 10},
+		{name: "full bar with cursor", percent: 100, cursorIdx: 10},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			progress := model.Progress{Percent: tt.percent}
+			result := renderHeavyBarWithCursor(progress, tt.cursorIdx, FgCursorOrange, Reset)
+			if len(result) == 0 {
+				t.Error("renderHeavyBarWithCursor() returned empty string")
+			}
+		})
+	}
+}

@@ -50,26 +50,6 @@ func NewProvider() *Provider {
 	}
 }
 
-// usageResponse represents the API response structure.
-type usageResponse struct {
-	SevenDay usagePeriod `json:"seven_day"`
-}
-
-// usagePeriod represents a usage period from API.
-type usagePeriod struct {
-	Utilization float64 `json:"utilization"`
-	ResetsAt    string  `json:"resets_at"`
-}
-
-// credentialsFile represents the credentials JSON structure.
-type credentialsFile struct {
-	ClaudeAiOauth oauthCredentials `json:"claudeAiOauth"`
-}
-
-// oauthCredentials represents the nested OAuth credentials.
-type oauthCredentials struct {
-	AccessToken string `json:"accessToken"`
-}
 
 // Usage returns the current weekly API usage.
 //
@@ -147,8 +127,9 @@ func (p *Provider) getToken() (string, error) {
 	// macOS uses keychain
 	case "darwin":
 		token, err := p.getTokenFromKeychain()
-		// Return token if found
+		// Check if token was successfully retrieved
 		if err == nil && token != "" {
+			// Return valid keychain token
 			return token, nil
 		}
 	}

@@ -30,3 +30,26 @@ func TestRenderProgressBar(t *testing.T) {
 		})
 	}
 }
+
+func TestRenderProgressBarWithCursor(t *testing.T) {
+	tests := []struct {
+		name      string
+		percent   int
+		cursorPos int
+	}{
+		{name: "cursor at start", percent: 50, cursorPos: 0},
+		{name: "cursor in middle", percent: 50, cursorPos: 50},
+		{name: "cursor at end", percent: 50, cursorPos: 100},
+		{name: "empty bar with cursor", percent: 0, cursorPos: 50},
+		{name: "full bar with cursor", percent: 100, cursorPos: 50},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			progress := model.Progress{Percent: tt.percent}
+			result := renderer.RenderProgressBarWithCursor(progress, tt.cursorPos, "\033[38;5;166m", "\033[0m")
+			if len(result) == 0 {
+				t.Error("RenderProgressBarWithCursor() returned empty string")
+			}
+		})
+	}
+}
