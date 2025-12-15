@@ -102,3 +102,70 @@ func (r *Repository) getChangeCounts() (modified, untracked int) {
 	// Return calculated counts
 	return modified, untracked
 }
+
+// DiffStats returns lines added and removed from git diff.
+//
+// Returns:
+//   - model.CodeChanges: lines added and removed
+func (r *Repository) DiffStats() model.CodeChanges {
+	// Get diff stats for all changes (staged + unstaged)
+	cmd := exec.Command("git", "diff", "--numstat", "HEAD")
+	output, err := cmd.Output()
+	// Check for git command errors
+	if err != nil {
+		// Return zero if command failed
+		return model.CodeChanges{}
+	}
+
+	var added, removed int
+	// Parse numstat output: "added removed filename"
+	for line := range strings.SplitSeq(string(output), "\n") {
+		// Skip empty lines
+		if line == "" {
+			continue
+		}
+		// Parse the line
+		a, r := parseNumstatLine(line)
+		added += a
+		removed += r
+	}
+
+	// Return diff stats
+	return model.CodeChanges{
+		Added:   added,
+		Removed: removed,
+	}
+}
+
+// parseNumstatLine parses a single git diff --numstat line.
+//
+// Params:
+//   - line: numstat line like "10 5 filename"
+//
+// Returns:
+//   - added: lines added
+//   - removed: lines removed
+func parseNumstatLine(line string) (added, removed int) {
+	parts := strings.Fields(line)
+	// Need at least 2 fields (added, removed)
+	if len(parts) < 2 {
+		return 0, 0
+	}
+	// Parse added count (handle binary files showing "-")
+	if parts[0] != "-" {
+		for _, ch := range parts[0] {
+			if ch >= '0' && ch <= '9' {
+				added = added*10 + int(ch-'0')
+			}
+		}
+	}
+	// Parse removed count
+	if parts[1] != "-" {
+		for _, ch := range parts[1] {
+			if ch >= '0' && ch <= '9' {
+				removed = removed*10 + int(ch-'0')
+			}
+		}
+	}
+	return added, removed
+}
