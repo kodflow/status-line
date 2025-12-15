@@ -12,6 +12,7 @@ import (
 	"github.com/florent/status-line/internal/adapter/system"
 	"github.com/florent/status-line/internal/adapter/taskwarrior"
 	"github.com/florent/status-line/internal/adapter/terminal"
+	"github.com/florent/status-line/internal/adapter/usage"
 	"github.com/florent/status-line/internal/application"
 	"github.com/florent/status-line/internal/domain/model"
 	"github.com/florent/status-line/internal/presentation/renderer"
@@ -71,6 +72,7 @@ func buildService(projectDir string) *application.StatusLineService {
 		Terminal:    terminal.NewProvider(),
 		MCP:         mcp.NewProvider(projectDir),
 		Taskwarrior: taskwarrior.NewProvider(),
+		Usage:       usage.NewProvider(),
 	}
 	// Return service with all adapters injected
 	return application.NewStatusLineService(deps, renderer.NewPowerline())

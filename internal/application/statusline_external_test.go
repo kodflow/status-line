@@ -30,6 +30,12 @@ func (m *mockTaskwarriorProv) Info() model.TaskwarriorInfo {
 	return model.TaskwarriorInfo{Installed: false}
 }
 
+type mockUsageProv struct{}
+
+func (m *mockUsageProv) Usage() (model.Usage, error) {
+	return model.Usage{}, nil
+}
+
 type mockRenderer struct{}
 
 func (m *mockRenderer) Render(data model.StatusLineData) string { return "mocked output" }
@@ -54,6 +60,7 @@ func TestNewStatusLineService(t *testing.T) {
 				Terminal:    &mockTerminalProv{},
 				MCP:         &mockMCPProv{},
 				Taskwarrior: &mockTaskwarriorProv{},
+				Usage:       &mockUsageProv{},
 			}
 			svc := application.NewStatusLineService(deps, &mockRenderer{})
 			if svc == nil {
@@ -78,6 +85,7 @@ func TestStatusLineService_Generate(t *testing.T) {
 				Terminal:    &mockTerminalProv{},
 				MCP:         &mockMCPProv{},
 				Taskwarrior: &mockTaskwarriorProv{},
+				Usage:       &mockUsageProv{},
 			}
 			svc := application.NewStatusLineService(deps, &mockRenderer{})
 			result := svc.Generate(&mockInputProvider{})

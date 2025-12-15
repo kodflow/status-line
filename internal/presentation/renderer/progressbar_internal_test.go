@@ -19,7 +19,7 @@ func TestRenderHeavyBar(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			progress := model.Progress{Percent: tt.percent}
-			result := renderHeavyBar(progress)
+			result := renderHeavyBar(progress, noCursor)
 			if len([]rune(result)) != tt.wantLen {
 				t.Errorf("renderHeavyBar() len = %d, want %d", len([]rune(result)), tt.wantLen)
 			}

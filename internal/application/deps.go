@@ -11,4 +11,5 @@ type ServiceDeps struct {
 	Terminal    port.TerminalProvider
 	MCP         port.MCPProvider
 	Taskwarrior port.TaskwarriorProvider
+	Usage       port.UsageProvider
 }

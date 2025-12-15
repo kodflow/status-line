@@ -6,6 +6,7 @@ package model
 type StatusLineData struct {
 	Model       ModelInfo
 	Progress    Progress
+	Usage       Usage
 	Icons       IconConfig
 	Git         GitStatus
 	System      SystemInfo

@@ -66,7 +66,7 @@ func (r *Powerline) renderLine1(sb *strings.Builder, data model.StatusLineData) 
 	r.renderOSSegment(sb, data.System, data.Icons.OS, modelBg)
 
 	// Render Model segment (transitions to Path segment)
-	r.renderModelSegment(sb, data.Model, data.Icons.Model, data.Progress, BgBlue)
+	r.renderModelSegment(sb, data.Model, data.Icons.Model, data.Progress, data.Usage, BgBlue)
 
 	// Determine what follows git segment (or path if no git)
 	changesNextBg := ""
@@ -144,12 +144,23 @@ func (r *Powerline) renderOSSegment(sb *strings.Builder, sys model.SystemInfo, s
 //   - m: model information
 //   - showIcon: whether to show the model icon
 //   - progress: context window usage progress
+//   - usage: API usage data for burn-rate cursor
 //   - nextBg: background color of the next segment
-func (r *Powerline) renderModelSegment(sb *strings.Builder, m model.ModelInfo, showIcon bool, progress model.Progress, nextBg string) {
+func (r *Powerline) renderModelSegment(sb *strings.Builder, m model.ModelInfo, showIcon bool, progress model.Progress, usage model.Usage, nextBg string) {
 	// Use FullName for color detection (includes version like "Opus 4.5")
 	fullName := m.FullName()
 	bgColor, fgColor, textColor := GetModelColors(fullName)
-	bar := RenderProgressBar(progress, StyleHeavy)
+
+	// Render progress bar (with cursor if usage data is valid)
+	var bar string
+	// Check if we have valid usage data for cursor
+	if usage.IsValid() {
+		// Render with burn-rate cursor
+		bar = RenderProgressBarWithCursor(progress, usage.CursorPosition(), FgCursorOrange, bgColor+textColor+Bold)
+	} else {
+		// Render without cursor (no API data available)
+		bar = RenderProgressBar(progress, StyleHeavy)
+	}
 
 	// Check if icon should be shown
 	if showIcon {

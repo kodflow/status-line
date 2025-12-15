@@ -79,6 +79,8 @@ const (
 	FgTaskwarriorText string = "\033[38;5;55m"
 	// ColorGray is the gray foreground for incomplete progress.
 	ColorGray string = "\033[38;5;245m"
+	// FgCursorOrange is the dark orange foreground for burn-rate cursor.
+	FgCursorOrange string = "\033[38;5;166m"
 )
 
 // GetModelColors returns colors for a model pill.
