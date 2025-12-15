@@ -25,7 +25,7 @@ const (
 	// keychainService is the macOS keychain service name.
 	keychainService string = "Claude Code-credentials"
 	// credentialsFileName is the credentials file name.
-	credentialsFileName string = "credentials.json"
+	credentialsFileName string = ".credentials.json"
 	// claudeConfigDir is the Claude configuration directory.
 	claudeConfigDir string = ".claude"
 )
@@ -63,6 +63,11 @@ type usagePeriod struct {
 
 // credentialsFile represents the credentials JSON structure.
 type credentialsFile struct {
+	ClaudeAiOauth oauthCredentials `json:"claudeAiOauth"`
+}
+
+// oauthCredentials represents the nested OAuth credentials.
+type oauthCredentials struct {
 	AccessToken string `json:"accessToken"`
 }
 
@@ -176,7 +181,7 @@ func (p *Provider) getTokenFromKeychain() (string, error) {
 	}
 
 	// Return access token
-	return creds.AccessToken, nil
+	return creds.ClaudeAiOauth.AccessToken, nil
 }
 
 // getTokenFromFile retrieves the token from credentials file.
@@ -212,5 +217,5 @@ func (p *Provider) getTokenFromFile() (string, error) {
 	}
 
 	// Return access token
-	return strings.TrimSpace(creds.AccessToken), nil
+	return strings.TrimSpace(creds.ClaudeAiOauth.AccessToken), nil
 }
