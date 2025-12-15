@@ -4,6 +4,10 @@
     "deny": [],
     "ask": []
   },
+  "enabledMcpjsonServers": [
+    "taskwarrior"
+  ],
+  "outputStyle": "Explanatory",
   "spinnerTipsEnabled": false,
-  "outputStyle": "Explanatory"
+  "enableAllProjectMcpServers": true
 }
