@@ -1,223 +1,146 @@
-# DevContainer Minimal Template
+# Status Line
 
-Template minimaliste pour démarrer rapidement vos projets avec un environnement DevContainer propre et léger.
+A customizable status line for Claude Code, displaying model info, context usage, git status, and more.
 
-## Fonctionnalités
+## Features
 
-- **Ubuntu 24.04 LTS** comme base
-- **User vscode** (UID/GID 1000:1000) avec sudo
-- **Zsh + Oh My Zsh + Powerlevel10k** pré-installé et configuré
-- **Outils essentiels** : git, curl, wget, jq, yq, build-essential
-- **MCP (Model Context Protocol)** : Configuration et scripts d'initialisation inclus
-- **Script d'initialisation** : Configuration automatique à la création du container
-- **Persistance** via volumes Docker
-- **Aucune feature externe** : tout est dans le Dockerfile
-- **GitHub Actions** : Workflow de build automatisé pour le devcontainer
+- **Model Display** - Shows current AI model (Sonnet, Opus, Haiku) with color-coded pill
+- **Context Progress Bar** - Visual progress bar with burn-rate cursor indicator
+- **Git Integration** - Branch name, modified files, untracked files
+- **Code Changes** - Lines added/removed in current session
+- **MCP Servers** - Display configured MCP server status
+- **Taskwarrior** - Project progress tracking (if installed)
+- **Auto-Update** - Automatically updates to latest release
 
-## Ce qui n'est PAS inclus
+## Installation
 
-Ce template est **volontairement minimaliste**. Il ne contient pas :
+### Download Binary
 
-- ❌ Langages de programmation (Go, Node.js, Python, etc.)
-- ❌ CLIs spécifiques (GitHub CLI, Claude CLI, etc.)
-- ❌ Docker-in-Docker
-- ❌ Bases de données
-
-**Pourquoi ?** Pour garder l'image légère et vous laisser installer uniquement ce dont vous avez besoin.
-
-## Installation rapide
-
-### Via GitHub
+Download the latest release for your platform:
 
 ```bash
-# Utiliser ce repository comme template
-gh repo create mon-projet --template .repository --public
-cd mon-projet
-code .
+# Linux (amd64)
+curl -sL https://github.com/kodflow/status-line/releases/latest/download/status-line-linux-amd64 -o status-line
+chmod +x status-line
+sudo mv status-line /usr/local/bin/
+
+# Linux (arm64)
+curl -sL https://github.com/kodflow/status-line/releases/latest/download/status-line-linux-arm64 -o status-line
+chmod +x status-line
+sudo mv status-line /usr/local/bin/
+
+# macOS (Intel)
+curl -sL https://github.com/kodflow/status-line/releases/latest/download/status-line-darwin-amd64 -o status-line
+chmod +x status-line
+sudo mv status-line /usr/local/bin/
+
+# macOS (Apple Silicon)
+curl -sL https://github.com/kodflow/status-line/releases/latest/download/status-line-darwin-arm64 -o status-line
+chmod +x status-line
+sudo mv status-line /usr/local/bin/
+
+# Windows (PowerShell)
+Invoke-WebRequest -Uri https://github.com/kodflow/status-line/releases/latest/download/status-line-windows-amd64.exe -OutFile status-line.exe
 ```
 
-### Localement
+### Build from Source
 
 ```bash
-# Copier le template
-cp -r .repository mon-projet
-cd mon-projet
-rm -rf .git
-git init
-code .
+go build -o status-line ./cmd/statusline
 ```
 
-Acceptez l'ouverture dans le DevContainer lorsque VS Code vous le propose.
+## Usage
 
-## Personnalisation
+Status-line reads JSON input from stdin and outputs a formatted status line:
 
-### Ajouter des langages/outils
-
-**Option 1 : Dans le Dockerfile** (recommandé pour les outils systèmes)
-
-Éditez `.devcontainer/Dockerfile` :
-
-```dockerfile
-# Ajouter des packages apt
-RUN apt-get update && apt-get install -y \
-    python3 \
-    python3-pip \
-    && apt-get clean
-
-# Installer Node.js
-RUN curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - \
-    && apt-get install -y nodejs
+```bash
+echo '{"model":{"display_name":"Sonnet 4"},"workspace":{"current_dir":"/path"},"context_window":{"total_input_tokens":50000,"total_output_tokens":10000,"context_window_size":200000}}' | status-line
 ```
 
-**Option 2 : Avec les DevContainer Features** (pour les langages standards)
+### Claude Code Integration
 
-Ajoutez dans `.devcontainer/devcontainer.json` :
+Configure in your Claude Code settings to use as the status line provider.
 
-```json
-"features": {
-  "ghcr.io/devcontainers/features/go:1": {
-    "version": "latest"
-  },
-  "ghcr.io/devcontainers/features/node:1": {
-    "version": "lts"
+## Visual Components
+
+```
+Line 1: [OS] [Model ━━━━━━━━●━━━━━━ 74%] [/path] [git branch !2 ?1] [+50] [-10]
+Line 2: [taskwarrior] [mcp-server] [ v0.4.0]
+```
+
+### Segments
+
+| Segment | Description |
+|---------|-------------|
+| OS Icon | Linux, macOS, Windows, or Docker |
+| Model Pill | Colored by model (pink=Haiku, purple=Sonnet, orange=Opus) |
+| Progress Bar | Context window usage with burn-rate cursor (●) |
+| Path | Current working directory |
+| Git | Branch name, modified (!), untracked (?) |
+| Changes | Lines added (+) and removed (-) |
+| Taskwarrior | Project progress (if installed) |
+| MCP | Configured MCP servers |
+| Update | Shows version when update is downloading |
+
+## Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `STATUSLINE_ICON_OS` | Show OS icon | `true` |
+| `STATUSLINE_ICON_MODEL` | Show model icon | `true` |
+| `STATUSLINE_ICON_PATH` | Show folder icon | `true` |
+| `STATUSLINE_ICON_GIT` | Show git branch icon | `true` |
+
+## Auto-Update
+
+Status-line automatically checks for updates once per hour and downloads newer versions in the background. The update notification appears on line 2 while downloading.
+
+To disable auto-update, build without version:
+```bash
+go build -o status-line ./cmd/statusline  # No -ldflags
+```
+
+Release builds include version via ldflags:
+```bash
+go build -ldflags "-X main.version=v0.4.0" -o status-line ./cmd/statusline
+```
+
+## API Usage Integration
+
+For burn-rate cursor display, configure Anthropic API credentials:
+
+```bash
+# ~/.config/anthropic/credentials.json
+{
+  "default": {
+    "api_key": "your-api-key",
+    "organization_id": "your-org-id"
   }
 }
 ```
 
-Voir : <https://containers.dev/features>
-
-**Option 3 : Installation manuelle** (pour les outils utilisateur)
-
-Installez après l'ouverture du container :
+## Development
 
 ```bash
-# Exemple
-curl -sSL https://example.com/install.sh | sh
+# Run tests
+make test
+
+# Run linter
+make lint
+
+# Build
+make build
 ```
 
-### Ajouter des extensions VS Code
+## Releases
 
-Éditez `.devcontainer/devcontainer.json` dans `customizations.vscode.extensions`.
-
-### Variables d'environnement
-
-Créez un fichier `.env` à la racine pour vos variables d'environnement.
-
-### Personnaliser Powerlevel10k
-
-Pour configurer le prompt Powerlevel10k :
-
-```bash
-# Lancer l'assistant de configuration interactif
-p10k configure
-```
-
-Cela créera un fichier `~/.p10k.zsh` avec votre configuration personnalisée. Ce fichier sera automatiquement chargé au démarrage du shell.
-
-## Structure des volumes
-
-Les volumes Docker persistent entre les rebuilds :
-
-### Volumes spécifiques au projet
-
-- `{nom-du-projet}-local-bin` : Binaires locaux installés
-
-### Volumes partagés
-
-- `vscode-extensions` : Extensions VS Code
-- `vscode-insiders-extensions` : Extensions VS Code Insiders
-- `zsh-history` : Historique Zsh
-
-Vous pouvez ajouter vos propres volumes dans `.devcontainer/devcontainer.json`.
-
-## Commandes utiles
-
-### Rebuild du container
-
-```bash
-# Depuis VS Code
-Cmd+Shift+P > "Dev Containers: Rebuild Container"
-
-# Ou depuis le terminal
-docker compose -f .devcontainer/docker-compose.yml down
-docker compose -f .devcontainer/docker-compose.yml build --no-cache
-docker compose -f .devcontainer/docker-compose.yml up -d
-```
-
-### Nettoyer les volumes
-
-```bash
-# Supprimer tous les volumes (⚠️ perte de données)
-docker compose -f .devcontainer/docker-compose.yml down -v
-```
-
-### Voir les logs
-
-```bash
-docker compose -f .devcontainer/docker-compose.yml logs -f devcontainer
-```
-
-## Configuration MCP (Model Context Protocol)
-
-Le template inclut une configuration MCP pour faciliter l'intégration avec des outils d'IA.
-
-### Script de configuration
-
-Le script `.devcontainer/setup-mcp.sh` est exécuté automatiquement au démarrage du container et permet de :
-
-- Configurer les serveurs MCP
-- Initialiser les variables d'environnement nécessaires
-- Préparer l'environnement pour l'utilisation des outils MCP
-
-### Variables d'environnement
-
-Copiez `.devcontainer/.env.example` vers `.devcontainer/.env` et configurez vos variables :
-
-```bash
-cp .devcontainer/.env.example .devcontainer/.env
-```
-
-Éditez `.devcontainer/.env` selon vos besoins pour ajouter vos clés API et configurations.
-
-### Script d'initialisation
-
-Le script `.devcontainer/init.sh` s'exécute automatiquement à la création du container via le `postCreateCommand` et permet de :
-
-- Effectuer des configurations post-création
-- Installer des dépendances supplémentaires
-- Personnaliser l'environnement de développement
-
-## Dépannage
-
-### Problèmes de permissions
-
-```bash
-# Depuis le container
-sudo chown -R vscode:vscode $HOME
-```
-
-### Rebuild complet
-
-```bash
-# Supprimer le container et les volumes
-docker compose -f .devcontainer/docker-compose.yml down -v
-docker system prune -a
-
-# Rouvrir dans VS Code
-code .
-```
-
-## Philosophie
-
-Ce template suit le principe **"moins c'est plus"** :
-
-- ✅ Démarrage rapide
-- ✅ Faible consommation de ressources
-- ✅ Facile à personnaliser
-- ✅ Pas de dépendances inutiles
-
-Ajoutez seulement ce dont vous avez besoin, quand vous en avez besoin.
+| Version | Features |
+|---------|----------|
+| v0.4.0 | Update notification pill |
+| v0.3.x | Auto-updater, cursor style |
+| v0.2.0 | Windows builds |
+| v0.1.0 | Initial release |
 
 ## License
 
-Libre d'utilisation pour vos projets personnels et professionnels.
+MIT License - See [LICENSE](LICENSE) for details.
