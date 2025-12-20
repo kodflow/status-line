@@ -29,6 +29,15 @@ var version string
 // Returns:
 //   - void: exits with code 1 on error
 func main() {
+	// Handle version flag before anything else
+	if len(os.Args) > 1 {
+		arg := os.Args[1]
+		if arg == "-v" || arg == "--version" {
+			printVersion()
+			return
+		}
+	}
+
 	input, err := readInput()
 	// Check for input reading errors
 	if err != nil {
@@ -76,6 +85,16 @@ func downloadUpdate(info model.UpdateInfo) {
 	u := updater.NewUpdater(version)
 	// Ignore errors - update is best-effort
 	_ = u.DownloadUpdate(info.Version)
+}
+
+// printVersion prints the version information and exits.
+// If version is empty (development build), it prints "dev".
+func printVersion() {
+	v := version
+	if v == "" {
+		v = "dev"
+	}
+	fmt.Println("status-line", v)
 }
 
 // readInput reads and parses JSON input from stdin.
