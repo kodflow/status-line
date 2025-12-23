@@ -1,0 +1,8 @@
+{
+  "id": "dart-flutter",
+  "version": "1.0.0",
+  "name": "Dart/Flutter Development Environment",
+  "description": "Installs Dart SDK and Flutter framework",
+  "options": {},
+  "installsAfter": []
+}
