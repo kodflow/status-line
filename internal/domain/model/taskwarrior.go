@@ -8,10 +8,11 @@ const (
 )
 
 // TaskwarriorInfo contains Taskwarrior task information.
-// It holds project-level statistics.
+// It holds project-level statistics and active session data.
 type TaskwarriorInfo struct {
-	Installed bool
-	Projects  []TaskwarriorProject
+	Installed     bool
+	ActiveProject *TaskwarriorProject  // Project with active session (Epic/Task workflow)
+	Projects      []TaskwarriorProject // Legacy projects (simple pending/completed)
 }
 
 // HasProjects returns true if there are any projects.
@@ -19,6 +20,15 @@ type TaskwarriorInfo struct {
 // Returns:
 //   - bool: true if projects exist
 func (t TaskwarriorInfo) HasProjects() bool {
-	// Check if any projects
-	return len(t.Projects) > 0
+	// Check if active project or legacy projects exist
+	return t.ActiveProject != nil || len(t.Projects) > 0
+}
+
+// HasActiveSession returns true if there is an active session.
+//
+// Returns:
+//   - bool: true if active session exists
+func (t TaskwarriorInfo) HasActiveSession() bool {
+	// Check for active project with session
+	return t.ActiveProject != nil && t.ActiveProject.HasSession()
 }
