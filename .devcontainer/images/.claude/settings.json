@@ -1,0 +1,175 @@
+{
+  "model": "opus",
+  "alwaysThinkingEnabled": true,
+  "cleanupPeriodDays": 30,
+  "statusLine": {
+    "type": "command",
+    "command": "status-line"
+  },
+  "env": {
+    "BASH_DEFAULT_TIMEOUT_MS": "60000",
+    "MAX_THINKING_TOKENS": "10000",
+    "MCP_TIMEOUT": "30000",
+    "MAX_MCP_OUTPUT_TOKENS": "25000"
+  },
+  "permissions": {
+    "allow": [
+      "Bash(npm:*)",
+      "Bash(pnpm:*)",
+      "Bash(yarn:*)",
+      "Bash(bun:*)",
+      "Bash(npx:*)",
+      "Bash(node:*)",
+      "Bash(git status:*)",
+      "Bash(git log:*)",
+      "Bash(git diff:*)",
+      "Bash(git branch:*)",
+      "Bash(git show:*)",
+      "Bash(git ls-files:*)",
+      "Bash(git rev-parse:*)",
+      "Bash(docker ps:*)",
+      "Bash(docker logs:*)",
+      "Bash(docker images:*)",
+      "Bash(docker compose ps:*)",
+      "Bash(docker compose logs:*)",
+      "Bash(ls:*)",
+      "Bash(pwd:*)",
+      "Bash(which:*)",
+      "Bash(echo:*)",
+      "Bash(cat:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(wc:*)",
+      "Bash(sort:*)",
+      "Bash(uniq:*)",
+      "Bash(grep:*)",
+      "Bash(find:*)",
+      "Bash(tree:*)",
+      "Bash(make:*)",
+      "Bash(cargo:*)",
+      "Bash(go:*)",
+      "Bash(python:*)",
+      "Bash(pip:*)",
+      "Bash(pytest:*)",
+      "Bash(terraform validate:*)",
+      "Bash(terraform fmt:*)",
+      "Bash(terraform plan:*)",
+      "Bash(hadolint:*)",
+      "Bash(shellcheck:*)",
+      "Bash(prettier:*)",
+      "Bash(eslint:*)",
+      "Bash(tsc:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh pr list:*)",
+      "Bash(gh pr checks:*)",
+      "Bash(gh issue:*)",
+      "Bash(gh repo:*)",
+      "Bash(jq:*)",
+      "Bash(yq:*)",
+      "Bash(date:*)",
+      "Bash(env:*)",
+      "Bash(printenv:*)",
+      "Bash(task:*)",
+      "Bash(task-init.sh:*)",
+      "Bash(task-epic.sh:*)",
+      "Bash(task-add.sh:*)",
+      "Bash(task-start.sh:*)",
+      "Bash(task-done.sh:*)",
+      "Bash(/home/vscode/.claude/scripts/*:*)",
+      "Read(**/*)",
+      "Glob(**/*)",
+      "Grep(**/*)"
+    ],
+    "deny": [],
+    "additionalDirectories": []
+  },
+  "enableAllProjectMcpServers": true,
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/vscode/.claude/scripts/commit-validate.sh",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/vscode/.claude/scripts/task-validate.sh",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/vscode/.claude/scripts/pre-validate.sh \"$CLAUDE_FILE_PATH\"",
+            "timeout": 60
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/vscode/.claude/scripts/task-log.sh",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/vscode/.claude/scripts/post-edit.sh \"$CLAUDE_FILE_PATH\"",
+            "timeout": 60
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/vscode/.claude/scripts/security.sh \"$CLAUDE_FILE_PATH\"",
+            "timeout": 60
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/vscode/.claude/scripts/test.sh \"$CLAUDE_FILE_PATH\"",
+            "timeout": 60
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v notify-send >/dev/null 2>&1 && notify-send 'Claude Code' 'Task completed' 2>/dev/null || true",
+            "timeout": 60
+          }
+        ]
+      }
+    ]
+  }
+}
