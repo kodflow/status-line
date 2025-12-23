@@ -24,6 +24,8 @@ mcp.json
 # Claude Code
 # ============================================
 .claude/
+# Allow .claude in devcontainer images (required for Docker build)
+!.devcontainer/images/.claude/
 
 # ============================================
 # Language-specific modules & dependencies
