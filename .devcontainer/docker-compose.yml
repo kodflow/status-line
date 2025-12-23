@@ -1,37 +1,33 @@
 services:
   devcontainer:
+    # Build from Dockerfile (uses GHCR base image)
     build:
       context: .
       dockerfile: Dockerfile
-      # Build arguments for optimization
-      args:
-        BUILDKIT_INLINE_CACHE: 1
+      # Always pull latest base image on rebuild
+      pull: true
 
     env_file:
       - .env
     volumes:
       # Mount workspace
       - ..:/workspace:cached
+
       # Named volumes for persistence (survive rebuilds)
+      # Only persist USER DATA, not tools/binaries (those come from image)
       - zsh-history:/home/vscode/.zsh_history_dir
       - package-cache:/home/vscode/.cache
-      - config-dir:/home/vscode/.config
-      - local-bin:/home/vscode/.local/bin
-
-      # npm global packages persistence (survives rebuilds)
       - npm-global:/home/vscode/.local/share/npm-global
 
-      # Claude CLI session persistence (survives rebuilds)
+      # Claude config persistence (credentials, settings, sessions)
+      # Commands/scripts are restored from image on each start
       - claude-config:/home/vscode/.claude
-      - anthropic-config:/home/vscode/.config/@anthropic
-      - anthropic-cache:/home/vscode/.cache/@anthropic
-      - anthropic-data:/home/vscode/.local/share/@anthropic
 
-      # 1Password CLI session persistence (survives rebuilds)
+      # 1Password CLI session persistence
       - op-config:/home/vscode/.config/op
       - op-cache:/home/vscode/.op
 
-      # Docker socket for Docker-from-Docker (use host Docker daemon)
+      # Docker socket for Docker-from-Docker
       - /var/run/docker.sock:/var/run/docker.sock
 
     # Network configuration
@@ -43,6 +39,9 @@ services:
 
     # Environment variables for package managers cache
     environment:
+      # Home directory (required for many tools including Claude CLI)
+      - HOME=/home/vscode
+
       # Claude CLI configuration
       - CLAUDE_CONFIG_DIR=/home/vscode/.claude
 
@@ -130,16 +129,8 @@ services:
 volumes:
   zsh-history:
   package-cache:
-  config-dir:
-  local-bin:
-  # npm global packages volume
   npm-global:
-  # Claude CLI volumes (persist sessions across rebuilds)
   claude-config:
-  anthropic-config:
-  anthropic-cache:
-  anthropic-data:
-  # 1Password CLI volumes (persist sessions across rebuilds)
   op-config:
   op-cache:
 

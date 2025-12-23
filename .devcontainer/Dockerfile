@@ -3,4 +3,4 @@
 # Languages are added via devcontainer features as needed
 
 # hadolint ignore=DL3007
-FROM ghcr.io/kodflow/devcontainer:latest
+FROM ghcr.io/kodflow/devcontainer-template:latest

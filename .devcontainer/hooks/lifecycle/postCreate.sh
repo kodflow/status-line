@@ -18,22 +18,8 @@ echo -e "${CYAN}   Kodflow DevContainer Setup${NC}"
 echo -e "${CYAN}=========================================${NC}"
 echo ""
 
-# ============================================================================
-# Install/Update Kodflow tools (always get latest version)
-# ============================================================================
-log_info "Installing latest ktn-linter..."
-go install github.com/kodflow/ktn-linter@latest 2>/dev/null && log_success "ktn-linter installed" || log_warning "ktn-linter installation failed"
-
-log_info "Installing latest ktnbuilder..."
-go install github.com/kodflow/ktnbuilder@latest 2>/dev/null && log_success "ktnbuilder installed" || log_warning "ktnbuilder installation failed"
-
-# ============================================================================
-# Build status-line
-# ============================================================================
-if [ -f /workspace/Makefile ] && grep -q "status-line" /workspace/Makefile; then
-    log_info "Building status-line..."
-    make -C /workspace build 2>/dev/null && log_success "status-line built" || log_warning "status-line build failed"
-fi
+# Note: Tools (status-line, ktn-linter) are now baked into the Docker image
+# No longer need to update on each rebuild
 
 # Check if already initialized
 if [ -f /home/vscode/.kodflow-initialized ]; then
@@ -122,7 +108,16 @@ export PATH="$CARBON_PATH/bin:$PATH"
 export BAZEL_USER_ROOT="/home/vscode/.cache/bazel"
 
 # Aliases
-alias super-claude="claude --dangerously-skip-permissions"
+# super-claude: runs claude with MCP config if available, otherwise without
+super-claude() {
+    local mcp_config="/workspace/.mcp.json"
+    if [ -f "$mcp_config" ] && jq empty "$mcp_config" 2>/dev/null; then
+        claude --dangerously-skip-permissions --mcp-config "$mcp_config" "$@"
+    else
+        echo "⚠️  MCP config not found or invalid, starting without MCP..."
+        claude --dangerously-skip-permissions "$@"
+    fi
+}
 
 # Kubernetes auto-completion (if kubectl is installed)
 if command -v kubectl &> /dev/null; then
