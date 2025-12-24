@@ -372,7 +372,13 @@ func (r *Powerline) renderTaskwarriorPill(sb *strings.Builder, tw model.Taskwarr
 		return
 	}
 
-	// Render each project as a pill
+	// Render active project with session (segmented bar)
+	if tw.ActiveProject != nil && tw.ActiveProject.HasSession() {
+		r.renderTaskwarriorSessionPill(sb, tw.ActiveProject)
+		return
+	}
+
+	// Render each legacy project as a pill
 	for _, project := range tw.Projects {
 		r.renderTaskwarriorProjectPill(sb, project)
 	}
@@ -411,6 +417,151 @@ func (r *Powerline) renderTaskwarriorProjectPill(sb *strings.Builder, project mo
 	sb.WriteString(BgWhite + FgBlack + Bold + itoa(project.Completed) + "/" + itoa(project.Total()) + " " + Reset)
 	// Write right cap
 	sb.WriteString(FgWhite + RightRound + Reset)
+}
+
+// renderTaskwarriorSessionPill renders a project with Epic/Task session data.
+// Format: 📋 feat-auth ▐━━━━│━━●─│────▌ 41% │ ▶ E2:T2 "AuthService"
+//
+// Params:
+//   - sb: string builder to write to
+//   - project: project with session data
+func (r *Powerline) renderTaskwarriorSessionPill(sb *strings.Builder, project *model.TaskwarriorProject) {
+	// Add space before pill
+	sb.WriteString(" ")
+
+	// Write left rounded cap
+	sb.WriteString(FgTaskwarrior + LeftRound + Reset)
+
+	// Write icon and project name
+	sb.WriteString(BgTaskwarrior + FgTaskwarriorText + Bold + " " + IconTaskwarrior + " " + project.Name + " " + Reset)
+
+	// Render segmented progress bar
+	bar := r.renderSegmentedProgressBar(project.Epics)
+	sb.WriteString(BgTaskwarrior + bar + Reset)
+
+	// Write percentage
+	sb.WriteString(BgTaskwarrior + FgTaskwarriorText + Bold + " " + itoa(project.Percent()) + "% " + Reset)
+
+	// Render mode/task indicator
+	if project.IsPlanMode() {
+		// Show PLAN MODE indicator
+		sb.WriteString(BgTaskwarrior + FgGraySep + "│ " + Reset)
+		sb.WriteString(BgTaskwarrior + ColorGray + "🔍 PLAN" + Reset)
+	} else if project.CurrentTask != "" {
+		// Show current task indicator
+		sb.WriteString(BgTaskwarrior + FgGraySep + "│ " + Reset)
+		sb.WriteString(BgTaskwarrior + FgCyanTask + Bold + "▶ E" + itoa(project.CurrentEpic) + ":" + project.CurrentTask + Reset)
+		// Show task name if available
+		if taskName := project.CurrentTaskName(); taskName != "" {
+			sb.WriteString(BgTaskwarrior + ColorGray + " \"" + taskName + "\"" + Reset)
+		}
+	}
+
+	// Write right rounded cap
+	sb.WriteString(BgTaskwarrior + " " + Reset)
+	sb.WriteString(FgTaskwarrior + RightRound + Reset)
+}
+
+// renderSegmentedProgressBar renders a progress bar segmented by epics.
+// Format: ▐━━━━│━━●─│────▌
+//
+// Params:
+//   - epics: list of epics with task data
+//
+// Returns:
+//   - string: rendered segmented progress bar with ANSI codes
+func (r *Powerline) renderSegmentedProgressBar(epics []model.TaskwarriorEpic) string {
+	var sb strings.Builder
+
+	// Left border
+	sb.WriteString(FgGraySep + "▐" + Reset)
+
+	// Render each epic segment
+	for i, epic := range epics {
+		// Add separator between epics
+		if i > 0 {
+			sb.WriteString(FgGraySep + "│" + Reset)
+		}
+		// Render epic bar
+		sb.WriteString(r.renderEpicBar(&epic))
+	}
+
+	// Right border
+	sb.WriteString(FgGraySep + "▌" + Reset)
+
+	return sb.String()
+}
+
+// epicBarMinWidth is the minimum width for an epic bar segment.
+const epicBarMinWidth = 2
+
+// epicBarMaxWidth is the maximum width for an epic bar segment.
+const epicBarMaxWidth = 8
+
+// renderEpicBar renders a single epic's progress bar segment.
+//
+// Params:
+//   - epic: epic with task data
+//
+// Returns:
+//   - string: rendered epic bar segment
+func (r *Powerline) renderEpicBar(epic *model.TaskwarriorEpic) string {
+	// Calculate width (min 2, max 8)
+	width := epic.TotalCount
+	if width < epicBarMinWidth {
+		width = epicBarMinWidth
+	}
+	if width > epicBarMaxWidth {
+		width = epicBarMaxWidth
+	}
+
+	// Calculate proportions
+	doneWidth := 0
+	wipWidth := 0
+	todoWidth := width
+
+	if epic.TotalCount > 0 {
+		doneWidth = epic.DoneCount * width / epic.TotalCount
+		// Check for WIP task
+		for _, task := range epic.Tasks {
+			if task.Status == model.StatusWip {
+				wipWidth = 1
+				break
+			}
+		}
+		// Adjust done width if WIP present
+		if wipWidth > 0 && doneWidth > 0 {
+			doneWidth--
+		}
+		todoWidth = width - doneWidth - wipWidth
+	}
+
+	var sb strings.Builder
+
+	// Done characters (heavy line, green)
+	if doneWidth > 0 {
+		sb.WriteString(FgGreenDone)
+		for range doneWidth {
+			sb.WriteRune('━')
+		}
+		sb.WriteString(Reset)
+	}
+
+	// WIP character (cursor, yellow)
+	if wipWidth > 0 {
+		sb.WriteString(FgYellowWip + "●" + Reset)
+	}
+
+	// Todo characters (light line, gray)
+	if todoWidth > 0 {
+		sb.WriteString(FgGrayTodo)
+		for range todoWidth {
+			sb.WriteRune('─')
+		}
+		sb.WriteString(Reset)
+	}
+
+	return sb.String()
 }
 
 // renderUpdatePill renders the update notification pill.

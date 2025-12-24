@@ -81,6 +81,16 @@ const (
 	ColorGray string = "\033[38;5;245m"
 	// FgCursorOrange is the dark orange foreground for burn-rate cursor.
 	FgCursorOrange string = "\033[38;5;166m"
+	// FgGreenDone is the green foreground for done tasks in segmented bar.
+	FgGreenDone string = "\033[38;5;34m"
+	// FgYellowWip is the yellow/orange foreground for WIP indicator.
+	FgYellowWip string = "\033[38;5;214m"
+	// FgGrayTodo is the dark gray foreground for todo tasks.
+	FgGrayTodo string = "\033[38;5;240m"
+	// FgGraySep is the separator color between epics.
+	FgGraySep string = "\033[38;5;245m"
+	// FgCyan is the cyan foreground for current task indicator.
+	FgCyanTask string = "\033[38;5;44m"
 )
 
 // GetModelColors returns colors for a model pill.

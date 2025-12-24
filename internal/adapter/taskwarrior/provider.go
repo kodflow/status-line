@@ -2,7 +2,10 @@
 package taskwarrior
 
 import (
+	"encoding/json"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -15,6 +18,10 @@ import (
 const (
 	// taskBinary is the Taskwarrior binary name.
 	taskBinary string = "task"
+	// sessionDir is the directory containing session files.
+	sessionDir string = "/workspace/.claude/sessions"
+	// maxTaskNameLen is the maximum length for task name display.
+	maxTaskNameLen int = 15
 )
 
 // Compile-time interface implementation check.
@@ -44,13 +51,17 @@ func (p *Provider) Info() model.TaskwarriorInfo {
 		return model.TaskwarriorInfo{Installed: false}
 	}
 
-	// Get all projects with stats
+	// Try to find active session first
+	activeProject := p.findActiveSession()
+
+	// Get all legacy projects with stats
 	projects := p.getProjects()
 
 	// Return task information
 	return model.TaskwarriorInfo{
-		Installed: true,
-		Projects:  projects,
+		Installed:     true,
+		ActiveProject: activeProject,
+		Projects:      projects,
 	}
 }
 
@@ -178,4 +189,199 @@ func (p *Provider) countTasks(filters ...string) int {
 
 	// Return task count
 	return count
+}
+
+// sessionJSON represents the JSON structure of a session file.
+type sessionJSON struct {
+	Project     string          `json:"project"`
+	Mode        string          `json:"mode"`
+	CurrentEpic int             `json:"current_epic"`
+	CurrentTask string          `json:"current_task"`
+	Epics       []sessionEpic   `json:"epics"`
+}
+
+// sessionEpic represents an epic in the session JSON.
+type sessionEpic struct {
+	ID     int           `json:"id"`
+	Name   string        `json:"name"`
+	Status string        `json:"status"`
+	Tasks  []sessionTask `json:"tasks"`
+}
+
+// sessionTask represents a task in the session JSON.
+type sessionTask struct {
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Status   string `json:"status"`
+	Parallel bool   `json:"parallel"`
+}
+
+// findActiveSession finds and parses the most recent session file.
+//
+// Returns:
+//   - *model.TaskwarriorProject: active project or nil
+func (p *Provider) findActiveSession() *model.TaskwarriorProject {
+	// Check if session directory exists
+	entries, err := os.ReadDir(sessionDir)
+	if err != nil {
+		// Return nil if directory not found
+		return nil
+	}
+
+	// Find the most recent .json file
+	var newestFile string
+	var newestTime int64
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		if info.ModTime().Unix() > newestTime {
+			newestTime = info.ModTime().Unix()
+			newestFile = entry.Name()
+		}
+	}
+
+	// Return nil if no session file found
+	if newestFile == "" {
+		return nil
+	}
+
+	// Read and parse session file
+	return p.parseSessionFile(filepath.Join(sessionDir, newestFile))
+}
+
+// parseSessionFile reads and parses a session JSON file.
+//
+// Params:
+//   - path: path to the session file
+//
+// Returns:
+//   - *model.TaskwarriorProject: parsed project or nil
+func (p *Provider) parseSessionFile(path string) *model.TaskwarriorProject {
+	// Read file content
+	data, err := os.ReadFile(path)
+	if err != nil {
+		// Return nil if file read fails
+		return nil
+	}
+
+	// Parse JSON
+	var session sessionJSON
+	if err := json.Unmarshal(data, &session); err != nil {
+		// Return nil if JSON parsing fails
+		return nil
+	}
+
+	// Convert to domain model
+	return p.convertSession(&session)
+}
+
+// convertSession converts a sessionJSON to a TaskwarriorProject.
+//
+// Params:
+//   - session: parsed session JSON
+//
+// Returns:
+//   - *model.TaskwarriorProject: converted project
+func (p *Provider) convertSession(session *sessionJSON) *model.TaskwarriorProject {
+	// Convert mode
+	mode := model.ModeBypass
+	if session.Mode == "plan" {
+		mode = model.ModePlan
+	}
+
+	// Convert epics
+	epics := make([]model.TaskwarriorEpic, 0, len(session.Epics))
+	for _, e := range session.Epics {
+		epic := p.convertEpic(&e)
+		epics = append(epics, epic)
+	}
+
+	// Build project
+	return &model.TaskwarriorProject{
+		Name:        session.Project,
+		Mode:        mode,
+		Epics:       epics,
+		CurrentEpic: session.CurrentEpic,
+		CurrentTask: session.CurrentTask,
+	}
+}
+
+// convertEpic converts a sessionEpic to a TaskwarriorEpic.
+//
+// Params:
+//   - epic: session epic data
+//
+// Returns:
+//   - model.TaskwarriorEpic: converted epic
+func (p *Provider) convertEpic(epic *sessionEpic) model.TaskwarriorEpic {
+	// Convert status
+	status := p.convertStatus(epic.Status)
+
+	// Convert tasks and count done
+	tasks := make([]model.TaskwarriorTask, 0, len(epic.Tasks))
+	doneCount := 0
+	for _, t := range epic.Tasks {
+		task := p.convertTask(&t)
+		tasks = append(tasks, task)
+		if task.Status == model.StatusDone {
+			doneCount++
+		}
+	}
+
+	// Build epic
+	return model.TaskwarriorEpic{
+		ID:         epic.ID,
+		Name:       epic.Name,
+		Status:     status,
+		Tasks:      tasks,
+		DoneCount:  doneCount,
+		TotalCount: len(tasks),
+	}
+}
+
+// convertTask converts a sessionTask to a TaskwarriorTask.
+//
+// Params:
+//   - task: session task data
+//
+// Returns:
+//   - model.TaskwarriorTask: converted task
+func (p *Provider) convertTask(task *sessionTask) model.TaskwarriorTask {
+	// Truncate name if too long
+	name := task.Name
+	if len(name) > maxTaskNameLen {
+		name = name[:maxTaskNameLen-1] + "…"
+	}
+
+	// Build task
+	return model.TaskwarriorTask{
+		ID:       task.ID,
+		Name:     name,
+		Status:   p.convertStatus(task.Status),
+		Parallel: task.Parallel,
+	}
+}
+
+// convertStatus converts a string status to TaskwarriorStatus.
+//
+// Params:
+//   - status: status string
+//
+// Returns:
+//   - model.TaskwarriorStatus: converted status
+func (p *Provider) convertStatus(status string) model.TaskwarriorStatus {
+	// Map string to status enum
+	switch strings.ToUpper(status) {
+	case "DONE":
+		return model.StatusDone
+	case "WIP":
+		return model.StatusWip
+	default:
+		return model.StatusTodo
+	}
 }
