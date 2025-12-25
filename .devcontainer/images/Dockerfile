@@ -35,7 +35,8 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
         libffi-dev libbz2-dev libreadline-dev libsqlite3-dev \
         libncurses5-dev libncursesw5-dev liblzma-dev zlib1g-dev \
         libgdbm-dev libyaml-dev \
-        taskwarrior && \
+        libsecret-1-0 libsecret-1-dev dbus-x11 gnome-keyring \
+        taskwarrior shellcheck && \
     apt-get clean
 
 # =============================================================================
@@ -147,9 +148,7 @@ RUN curl -fsSL https://claude.ai/install.sh | bash
 # =============================================================================
 # CodeRabbit CLI (AI Code Reviews)
 # =============================================================================
-RUN curl -fsSL https://cli.coderabbit.ai/install.sh | sh && \
-    ln -sf /home/vscode/.coderabbit/bin/coderabbit ~/.local/bin/coderabbit && \
-    ln -sf /home/vscode/.coderabbit/bin/coderabbit ~/.local/bin/cr
+RUN curl -fsSL https://cli.coderabbit.ai/install.sh | sh
 
 # =============================================================================
 # Claude Configuration (backup to /etc/claude-defaults/ for volume restoration)

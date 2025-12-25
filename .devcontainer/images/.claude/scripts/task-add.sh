@@ -42,21 +42,53 @@ if [[ -z "$TASK_UUID" ]]; then
     exit 1
 fi
 
+# === Trouver la session active (déterministe) ===
+SESSION_FILE=""
+
+# Priorité 1: Pointeur explicite
+if [[ -f "/workspace/.claude/active-session" ]]; then
+    SESSION_FILE=$(cat /workspace/.claude/active-session 2>/dev/null || true)
+fi
+
+# Priorité 2: Symlink state.json
+if [[ -z "$SESSION_FILE" || ! -f "$SESSION_FILE" ]]; then
+    if [[ -f "/workspace/.claude/state.json" ]]; then
+        SESSION_FILE=$(readlink -f /workspace/.claude/state.json 2>/dev/null || echo "/workspace/.claude/state.json")
+    fi
+fi
+
+# Priorité 3: Dernière session (fallback)
+if [[ -z "$SESSION_FILE" || ! -f "$SESSION_FILE" ]]; then
+    SESSION_DIR="$HOME/.claude/sessions"
+    SESSION_FILE=$(ls -t "$SESSION_DIR"/*.json 2>/dev/null | head -1 || true)
+fi
+
+TASK_NUM=1
+if [[ -f "$SESSION_FILE" ]]; then
+    # Compter les tasks existantes dans cet epic
+    EXISTING_TASKS=$(jq --arg epic "$EPIC_NUM" '
+        (.epics[] | select(.id == ($epic | tonumber))).tasks // [] | length
+    ' "$SESSION_FILE" 2>/dev/null || echo "0")
+    TASK_NUM=$((EXISTING_TASKS + 1))
+fi
+EXTERNAL_ID="T${EPIC_NUM}.${TASK_NUM}"
+
+# Ajouter l'external_id comme annotation
+task rc.confirmation=off uuid:"$TASK_UUID" annotate "external_id:$EXTERNAL_ID" >/dev/null 2>&1 || true
+
 # Ajouter le contexte JSON si fourni
 if [[ -n "$CTX_JSON" ]]; then
     task rc.confirmation=off uuid:"$TASK_UUID" annotate "ctx:$CTX_JSON" >/dev/null 2>&1 || true
 fi
 
 # Mettre à jour la session JSON avec la task créée
-SESSION_DIR="$HOME/.claude/sessions"
-SESSION_FILE=$(ls -t "$SESSION_DIR"/*.json 2>/dev/null | head -1)
-
 if [[ -f "$SESSION_FILE" ]]; then
     TMP_FILE=$(mktemp)
-    jq --arg epic_num "$EPIC_NUM" --arg name "$TASK_NAME" --arg uuid "$TASK_UUID" --arg parallel "$PARALLEL" '
+    jq --arg epic_num "$EPIC_NUM" --arg name "$TASK_NAME" --arg uuid "$TASK_UUID" --arg parallel "$PARALLEL" --arg ext_id "$EXTERNAL_ID" '
         (.epics[] | select(.id == ($epic_num | tonumber))).tasks += [{
             "name": $name,
             "uuid": $uuid,
+            "externalId": $ext_id,
             "status": "TODO",
             "parallel": $parallel
         }]
