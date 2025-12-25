@@ -95,19 +95,96 @@ project:"feat-xxx"              # Conteneur global
 
 ---
 
-## FORMAT CONTEXTE JSON (ctx)
+## FORMAT CONTEXTE JSON (ctx) - v2
 
-Chaque task a un contexte JSON annoté :
+Chaque task a un contexte JSON annoté (schéma v2) :
 
 ```json
 {
+  "schemaVersion": 2,
   "files": ["src/auth.ts", "src/types.ts"],
-  "action": "create|modify|delete|refactor",
+  "action": "create|modify|delete|refactor|test|document",
+  "locks": ["src/auth.ts", "src/types/*.ts"],
   "deps": ["bcrypt", "jsonwebtoken"],
   "description": "Description détaillée de la task",
-  "tests": ["src/__tests__/auth.test.ts"]
+  "tests": ["src/__tests__/auth.test.ts"],
+  "acceptance_criteria": [
+    "tests passent",
+    "lint ok",
+    "no breaking change"
+  ],
+  "commands": ["go test ./...", "npm run lint"],
+  "risk": "low|medium|high",
+  "rollback": "git revert HEAD"
 }
 ```
+
+**Champs obligatoires:** `schemaVersion`, `files`, `action`
+
+**Nouveaux champs v2:**
+
+- `locks`: Chemins verrouillés (empêche parallel tasks sur mêmes fichiers)
+- `acceptance_criteria`: Critères mesurables de succès
+- `commands`: Commandes de validation
+- `risk`: Niveau de risque (low/medium/high)
+- `rollback`: Instructions de rollback
+
+**External ID:** Chaque task a un ID lisible (ex: T1.2) stocké dans les annotations.
+
+---
+
+## SESSION JSON - Schéma v2
+
+### Convention de nommage
+
+| Élément | Convention |
+|---------|------------|
+| Dossier | `~/.claude/sessions/` |
+| Fichier | `<project>.json` où `project` = slug de la branche sans préfixe |
+| Exemple | Branche `feat/auth-system` → `auth-system.json` |
+
+### Structure session (schemaVersion: 2)
+
+```json
+{
+  "schemaVersion": 2,
+  "state": "planning|planned|applying|applied",
+  "type": "feature|fix",
+  "project": "<slug>",
+  "branch": "feat/<slug>|fix/<slug>",
+  "currentTask": null,
+  "currentEpic": null,
+  "lockedPaths": [],
+  "epics": [...],
+  "createdAt": "<ISO8601>"
+}
+```
+
+### Machine d'états
+
+```
+planning ──→ planned ──→ applying ──→ applied
+    │            │
+    └────────────┘ (itératif via /plan)
+```
+
+| State | Description | Transitions autorisées |
+|-------|-------------|------------------------|
+| `planning` | Analyse en cours | → `planned` |
+| `planned` | Plan validé, prêt pour /apply | → `applying`, → `planning` |
+| `applying` | Exécution en cours | → `applied` |
+| `applied` | Terminé (PR créée) | FIN |
+
+### Invariants obligatoires
+
+- `schemaVersion` = 2 (obligatoire)
+- `state` ∈ {planning, planned, applying, applied}
+- `type` ∈ {feature, fix}
+- `branch` cohérente avec `type` (préfixe `feat/` ou `fix/`)
+- `project` non vide, slug-safe (a-z, 0-9, -)
+- `epics[].id` monotone croissant
+- `tasks[].externalId` unique, format `T<epic>.<num>`
+- `tasks[].parallel` obligatoire (yes|no)
 
 ---
 
@@ -163,4 +240,52 @@ Chaque task a un contexte JSON annoté :
          │
          ▼
       PR créée
+```
+
+---
+
+## SERVEURS MCP (Model Context Protocol)
+
+### Vérification obligatoire au démarrage
+
+**TOUJOURS** vérifier `/workspace/.mcp.json` au début de chaque session :
+
+```bash
+# Lire la config MCP
+cat /workspace/.mcp.json 2>/dev/null | jq -r '.mcpServers | keys[]'
+```
+
+### Priorité d'utilisation
+
+| Action | Priorité 1 (MCP) | Fallback (CLI) |
+|--------|------------------|----------------|
+| GitHub PR | `mcp__github__create_pull_request` | `gh pr create` |
+| GitHub Issues | `mcp__github__create_issue` | `gh issue create` |
+| Merge PR | `mcp__github__merge_pull_request` | `gh pr merge` |
+
+**RÈGLE ABSOLUE :** Si un outil MCP est disponible, l'utiliser EN PRIORITÉ.
+
+### Ne JAMAIS demander ce qui est déjà configuré
+
+Si `.mcp.json` contient un serveur (ex: `github`), **NE PAS** :
+- ❌ Demander un token GitHub à l'utilisateur
+- ❌ Suggérer `gh auth login`
+- ❌ Utiliser le CLI en fallback si MCP disponible
+
+**TOUJOURS** :
+- ✅ Utiliser directement les outils `mcp__<server>__*`
+- ✅ En cas d'échec MCP, informer l'utilisateur du problème
+- ✅ Extraire le token de `.mcp.json` si CLI fallback nécessaire
+
+### Diagnostic des erreurs MCP
+
+Si les outils MCP ne sont pas disponibles alors que `.mcp.json` existe :
+
+1. **Vérifier le démarrage** : `super-claude` affiche les serveurs actifs
+2. **Vérifier Node.js** : Les serveurs MCP utilisent `npx`, Node.js doit être installé
+3. **Logs d'erreur** : Les échecs de démarrage sont affichés au lancement
+
+```bash
+# Tester un serveur manuellement
+GITHUB_PERSONAL_ACCESS_TOKEN="..." npx -y @modelcontextprotocol/server-github
 ```

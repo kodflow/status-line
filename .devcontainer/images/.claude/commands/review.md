@@ -1,4 +1,4 @@
-# Review - AI Code Review avec CodeRabbit
+# Review - Multi-Agent Code Review
 
 $ARGUMENTS
 
@@ -6,7 +6,10 @@ $ARGUMENTS
 
 ## Description
 
-Effectue une revue de code automatisee avec CodeRabbit CLI. Detecte les bugs, vulnerabilites, problemes de performance et suggere des corrections.
+Review de code multi-agents :
+- **(vide)** : Review locale avec nos agents (branche/PR courante)
+- **--coderabbit** : Déclenche une full review CodeRabbit sur la PR
+- **--copilot** : Déclenche une full review GitHub Copilot sur la PR
 
 ---
 
@@ -14,244 +17,265 @@ Effectue une revue de code automatisee avec CodeRabbit CLI. Detecte les bugs, vu
 
 | Pattern | Action |
 |---------|--------|
-| (vide) | Review des changements non commites |
-| `--staged` | Review uniquement des changements stages |
-| `--committed` | Review des changements commites (vs base branch) |
-| `--all` | Review complete du projet |
-| `--fix` | Applique les corrections suggerees |
-| `--help` | Affiche l'aide de la commande |
+| (vide) | Review locale avec nos agents |
+| `--coderabbit` | Full review CodeRabbit sur la PR GitHub |
+| `--copilot` | Full review GitHub Copilot sur la PR GitHub |
+| `--help` | Affiche l'aide |
 
 ---
 
 ## --help
 
-Quand `--help` est passe, afficher :
+Quand `--help` est passé, afficher :
 
 ```
 ═══════════════════════════════════════════════
-  /review - AI Code Review avec CodeRabbit
+  /review - Multi-Agent Code Review
 ═══════════════════════════════════════════════
 
-Usage: /review [options]
+Usage: /review [agent]
 
-Options:
-  (vide)          Review des changements non commites
-  --staged        Review uniquement des changements stages
-  --committed     Review des changements commites (vs base)
-  --all           Review complete du projet
-  --fix           Applique les corrections suggerees
-  --help          Affiche cette aide
+Agents:
+  (vide)          Review locale avec nos agents
+  --coderabbit    Full review CodeRabbit sur la PR
+  --copilot       Full review GitHub Copilot sur la PR
 
 Exemples:
-  /review                 Review des modifications locales
-  /review --staged        Review avant commit
-  /review --committed     Review de la branche actuelle
-  /review --fix           Review et applique les corrections
+  /review                 Review locale de la branche
+  /review --coderabbit    Demande review CodeRabbit
+  /review --copilot       Demande review Copilot
 ═══════════════════════════════════════════════
 ```
 
 ---
 
-## Prerequis
+## Action: (vide) - Review locale
 
-### Verification de l'installation
+Review de code avec nos agents sur la branche/PR courante.
 
-```bash
-command -v coderabbit || command -v cr
-```
+### Workflow
 
-Si non installe :
-```
-## Erreur
+1. **Détecter le contexte** :
+   - Branche courante
+   - Fichiers modifiés vs main
+   - PR associée (si existe)
 
-CodeRabbit CLI n'est pas installe.
-→ Rebuilder le container ou executer: curl -fsSL https://cli.coderabbit.ai/install.sh | sh
-```
+2. **Analyser les changements** :
+   ```bash
+   # Fichiers modifiés
+   git diff --name-only origin/main...HEAD
 
-### Verification de l'authentification
+   # Diff complet
+   git diff origin/main...HEAD
+   ```
 
-```bash
-coderabbit auth status 2>/dev/null || cr auth status 2>/dev/null
-```
+3. **Review par catégorie** :
 
-Si non authentifie :
-```
-## Authentification requise
+| Catégorie | Vérifications |
+|-----------|---------------|
+| **Sécurité** | Secrets, injections, XSS, auth |
+| **Qualité** | Complexité, duplication, naming |
+| **Performance** | N+1, memory leaks, caching |
+| **Tests** | Couverture, edge cases |
+| **Style** | Conventions, formatting |
 
-CodeRabbit necessite une authentification.
-→ Executer: coderabbit auth login (ou cr auth login)
-→ Suivre les instructions dans le navigateur
-```
-
----
-
-## Workflow principal
-
-### 1. Detection du contexte
-
-```bash
-# Verifier les changements
-git status --porcelain
-git diff --stat
-git diff --cached --stat
-```
-
-Si aucun changement et pas `--all` :
-```
-## Aucun changement
-
-Aucun fichier modifie a analyser.
-→ Utilisez --all pour analyser tout le projet
-```
-
-### 2. Construction de la commande
-
-**Base** : `coderabbit --plain`
-
-**Options additionnelles** :
-
-| Argument | Options ajoutees |
-|----------|------------------|
-| (vide) | `--type uncommitted` |
-| `--staged` | `--type uncommitted` (analyse le cache git) |
-| `--committed` | `--type committed` |
-| `--all` | `--type all` |
-
-**Configuration auto** :
-```bash
-# Si CLAUDE.md existe, l'utiliser comme contexte
-if [[ -f "/workspace/CLAUDE.md" ]]; then
-    CONFIG_OPT="--config /workspace/CLAUDE.md"
-fi
-```
-
-### 3. Execution de la review
-
-```bash
-# Commande complete
-coderabbit --plain $TYPE_OPT $CONFIG_OPT 2>&1
-```
-
-### 4. Traitement des resultats
-
-Afficher les resultats avec mise en forme :
+4. **Générer le rapport** :
 
 ```
 ═══════════════════════════════════════════════
-  Review CodeRabbit
+  Review locale
 ═══════════════════════════════════════════════
 
-[Resultats de la review]
+Branche : feat/add-auth
+Fichiers : 5 modifiés
+Base : origin/main
 
-═══════════════════════════════════════════════
-  Resume
-═══════════════════════════════════════════════
+─────────────────────────────────────────────
+  Sécurité
+─────────────────────────────────────────────
 
-Fichiers analyses : X
-Problemes trouves : Y
-  - Critiques : Z
-  - Warnings : W
-  - Info : I
+⚠ src/auth.ts:42
+  Token stocké en localStorage (risque XSS)
+  → Préférer httpOnly cookie
+
+─────────────────────────────────────────────
+  Qualité
+─────────────────────────────────────────────
+
+✓ Pas de problème détecté
+
+─────────────────────────────────────────────
+  Performance
+─────────────────────────────────────────────
+
+⚠ src/api/users.ts:28
+  Requête N+1 potentielle dans la boucle
+  → Utiliser un batch query
+
+─────────────────────────────────────────────
+  Résumé
+─────────────────────────────────────────────
+
+| Catégorie   | Status |
+|-------------|--------|
+| Sécurité    | ⚠ 1 warning |
+| Qualité     | ✓ OK |
+| Performance | ⚠ 1 warning |
+| Tests       | ✓ OK |
+| Style       | ✓ OK |
+
+Total : 2 warnings, 0 erreurs
 
 ═══════════════════════════════════════════════
 ```
 
 ---
 
-## --fix : Application des corrections
+## Action: --coderabbit
 
-Quand `--fix` est passe :
+Déclenche une full review CodeRabbit sur la PR GitHub.
 
-1. Executer la review normale
-2. Parser les suggestions de correction
-3. Pour chaque correction suggeree :
-   - Afficher le fichier et la ligne
-   - Afficher le code actuel vs suggere
-   - Appliquer la correction automatiquement
-4. Afficher un resume des corrections appliquees
+### Prérequis
 
-```bash
-# Note: CodeRabbit --fix n'existe pas nativement
-# Le mode --fix analyse les suggestions et les applique via Edit
-```
+- PR ouverte sur GitHub
+- CodeRabbit configuré sur le repo (`.coderabbit.yaml`)
 
-**Workflow --fix** :
+### Workflow
 
-1. Capturer la sortie de `coderabbit --plain`
-2. Parser les blocs de code suggeres
-3. Appliquer les modifications avec l'outil Edit
-4. Afficher le resume
+1. **Détecter la PR** :
+   ```bash
+   gh pr view --json number,url,title
+   ```
 
-```
-═══════════════════════════════════════════════
-  Corrections appliquees
-═══════════════════════════════════════════════
+   Si pas de PR :
+   ```
+   ❌ Aucune PR trouvée pour cette branche
+   → Créez une PR avec /git --commit
+   ```
 
-| Fichier | Ligne | Type | Status |
-|---------|-------|------|--------|
-| src/api.ts | 42 | Bug fix | ✓ Applique |
-| src/auth.ts | 15 | Security | ✓ Applique |
+2. **Poster le commentaire** :
 
-Total : 2 corrections appliquees
-═══════════════════════════════════════════════
-```
+   **Via MCP (prioritaire)** :
+   ```
+   mcp__github__add_issue_comment({
+     owner: "<org>",
+     repo: "<repo>",
+     issue_number: <pr_number>,
+     body: "@coderabbitai full review"
+   })
+   ```
 
----
+   **Via gh CLI (fallback)** :
+   ```bash
+   gh pr comment <pr_number> --body "@coderabbitai full review"
+   ```
 
-## Outputs
-
-### Succes
+3. **Confirmation** :
 
 ```
 ═══════════════════════════════════════════════
-  ✓ Review terminee
+  ✓ CodeRabbit review demandée
 ═══════════════════════════════════════════════
 
-Fichiers analyses : 5
-Problemes trouves : 3
-  - Critiques : 1
-  - Warnings : 2
-  - Info : 0
+PR : #<number> - <title>
+URL : <pr_url>
 
-→ Voir les details ci-dessus
-═══════════════════════════════════════════════
-```
+→ CodeRabbit va analyser tous les fichiers
+→ Les commentaires apparaîtront sur la PR
+→ Utilisez /fix --pr pour corriger les retours
 
-### Aucun probleme
-
-```
-═══════════════════════════════════════════════
-  ✓ Aucun probleme detecte
-═══════════════════════════════════════════════
-
-Fichiers analyses : 5
-Code quality : Excellent
-
-→ Pret pour commit/PR
-═══════════════════════════════════════════════
-```
-
-### Erreur
-
-```
-═══════════════════════════════════════════════
-  ✗ Erreur lors de la review
-═══════════════════════════════════════════════
-
-Message : [erreur de coderabbit]
-
-→ Verifier l'authentification : cr auth status
-→ Verifier la connexion internet
 ═══════════════════════════════════════════════
 ```
 
 ---
 
-## Integration avec autres commandes
+## Action: --copilot
 
-| Workflow | Commandes |
-|----------|-----------|
-| Avant commit | `/review --staged` puis `/commit` |
-| Apres dev | `/review` puis `/review --fix` puis `/commit` |
-| PR review | `/review --committed` |
-| Audit complet | `/review --all` |
+Déclenche une full review GitHub Copilot sur la PR.
+
+### Prérequis
+
+- PR ouverte sur GitHub
+- GitHub Copilot activé sur le repo
+
+### Workflow
+
+1. **Détecter la PR** :
+   ```bash
+   gh pr view --json number,url,title
+   ```
+
+   Si pas de PR :
+   ```
+   ❌ Aucune PR trouvée pour cette branche
+   → Créez une PR avec /git --commit
+   ```
+
+2. **Poster le commentaire** :
+
+   **Via MCP (prioritaire)** :
+   ```
+   mcp__github__add_issue_comment({
+     owner: "<org>",
+     repo: "<repo>",
+     issue_number: <pr_number>,
+     body: "@copilot review"
+   })
+   ```
+
+   **Via gh CLI (fallback)** :
+   ```bash
+   gh pr comment <pr_number> --body "@copilot review"
+   ```
+
+3. **Confirmation** :
+
+```
+═══════════════════════════════════════════════
+  ✓ Copilot review demandée
+═══════════════════════════════════════════════
+
+PR : #<number> - <title>
+URL : <pr_url>
+
+→ Copilot va analyser la PR
+→ Les suggestions apparaîtront sur la PR
+
+═══════════════════════════════════════════════
+```
+
+---
+
+## Comparaison des agents
+
+| Agent | Type | Quand utiliser |
+|-------|------|----------------|
+| Local | Instantané | Avant commit, feedback rapide |
+| CodeRabbit | PR GitHub | Review détaillée, suggestions de fix |
+| Copilot | PR GitHub | Review rapide, intégration GitHub |
+
+---
+
+## Workflow recommandé
+
+```
+1. Développer sur la branche
+           ↓
+2. /review              ← Review locale rapide
+           ↓
+3. /git --commit        ← Créer la PR
+           ↓
+4. /review --coderabbit ← Review détaillée
+           ↓
+5. /fix --pr            ← Corriger les retours
+           ↓
+6. /git --merge         ← Merger quand OK
+```
+
+---
+
+## Voir aussi
+
+- `/fix --pr` - Corriger les retours CodeRabbit un par un
+- `/git --commit` - Créer une PR
+- `/git --merge` - Merger la PR
