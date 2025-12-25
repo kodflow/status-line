@@ -46,7 +46,8 @@
       "extensions": [
         "vscode-icons-team.vscode-icons",
         "redhat.vscode-yaml",
-        "tamasfe.even-better-toml"
+        "tamasfe.even-better-toml",
+        "bierner.markdown-mermaid"
       ]
     }
   },

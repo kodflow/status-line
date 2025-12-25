@@ -74,8 +74,8 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | d
 # =============================================================================
 # Kubernetes Tools (kubectl, Helm)
 # =============================================================================
-ARG KUBECTL_VERSION=1.32.0
-ARG HELM_VERSION=3.16.3
+ARG KUBECTL_VERSION=1.35.0
+ARG HELM_VERSION=4.0.4
 
 RUN ARCH_K8S=$([ "$TARGETARCH" = "arm64" ] && echo "arm64" || echo "amd64") && \
     curl -fsSL "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/${ARCH_K8S}/kubectl" -o /usr/local/bin/kubectl && \
