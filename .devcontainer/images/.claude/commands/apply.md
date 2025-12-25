@@ -1,0 +1,573 @@
+# Apply - Infrastructure as Code Execution
+
+$ARGUMENTS
+
+---
+
+## Description
+
+Exécute le plan créé par `/plan`. Comme `terraform apply` :
+- Lit l'état depuis la session
+- Exécute les tasks dans l'ordre
+- Gère les dépendances et le parallélisme
+- Crée la PR à la fin
+
+**Prérequis** : Un plan avec état `planned` (via `/plan`)
+
+---
+
+## Arguments
+
+| Pattern | Action |
+|---------|--------|
+| (vide) | Exécuter le plan complet |
+| `--task <id>` | Exécuter une task spécifique (ex: T1.2) |
+| `--pr` | Corriger les retours CodeRabbit de la PR |
+| `--dry-run` | Afficher ce qui serait exécuté |
+| `--help` | Affiche l'aide |
+
+---
+
+## --help
+
+Quand `--help` est passé, afficher :
+
+```
+═══════════════════════════════════════════════
+  /apply - Infrastructure as Code Execution
+═══════════════════════════════════════════════
+
+Usage: /apply [options]
+
+Options:
+  (vide)            Exécuter le plan complet
+  --task <id>       Exécuter une task spécifique
+  --pr              Corriger les retours CodeRabbit
+  --dry-run         Prévisualiser l'exécution
+  --help            Affiche cette aide
+
+Exemples:
+  /apply                 Exécuter tout le plan
+  /apply --task T2.1     Exécuter task T2.1
+  /apply --pr            Corriger retours CodeRabbit
+  /apply --dry-run       Prévisualiser
+
+Prérequis:
+  Plan avec état "planned" via /plan
+
+Workflow:
+  /plan <desc>  →  Validation  →  /apply
+═══════════════════════════════════════════════
+```
+
+---
+
+## Workflow principal
+
+### Étape 0 : Vérification de l'état
+
+```bash
+SESSION_FILE=$(ls -t $HOME/.claude/sessions/*.json | head -1)
+
+if [[ ! -f "$SESSION_FILE" ]]; then
+    echo "❌ Aucun plan trouvé"
+    echo "→ Créez un plan avec: /plan <description>"
+    exit 1
+fi
+
+STATE=$(jq -r '.state' "$SESSION_FILE")
+if [[ "$STATE" != "planned" && "$STATE" != "applying" ]]; then
+    echo "❌ État invalide: $STATE"
+    echo "→ Le plan doit être en état 'planned' pour être exécuté"
+    exit 1
+fi
+
+# Passer en état "applying"
+jq '.state = "applying"' "$SESSION_FILE" > tmp && mv tmp "$SESSION_FILE"
+```
+
+**Output :**
+```
+═══════════════════════════════════════════════
+  /apply
+═══════════════════════════════════════════════
+
+  Project : <name>
+  State   : applying
+  Branch  : <branch>
+
+─────────────────────────────────────────────
+  Plan à exécuter
+─────────────────────────────────────────────
+
+  Epic 1: Setup infrastructure
+    ├─ T1.1 [TODO] Create folder structure
+    └─ T1.2 [TODO] Configure dependencies
+
+  Epic 2: Implementation
+    ├─ T2.1 [TODO] Implement AuthService
+    └─ T2.2 [TODO] Write tests
+
+  Total : 4 tasks
+
+═══════════════════════════════════════════════
+```
+
+---
+
+### Étape 1 : Exécution des tasks
+
+**Mode actif** : BYPASS (édition autorisée SI task WIP)
+
+#### Workflow par task
+
+```bash
+# 1. Lire le contexte de la task
+TASK=$(jq -r '.epics[].tasks[] | select(.id == "T1.1")' "$SESSION_FILE")
+FILES=$(echo "$TASK" | jq -r '.ctx.files[]')
+ACTION=$(echo "$TASK" | jq -r '.ctx.action')
+UUID=$(echo "$TASK" | jq -r '.uuid')
+
+# 2. Démarrer la task (TODO → WIP)
+/home/vscode/.claude/scripts/task-start.sh "$UUID"
+
+# 3. Exécuter selon l'action
+# - create: créer les fichiers
+# - modify: modifier les fichiers existants
+# - delete: supprimer les fichiers
+# - refactor: réorganiser le code
+# - test: écrire/modifier les tests
+
+# 4. Terminer la task (WIP → DONE)
+/home/vscode/.claude/scripts/task-done.sh "$UUID"
+```
+
+**Output par task :**
+```
+─────────────────────────────────────────────
+  Task T1.1: Create folder structure
+─────────────────────────────────────────────
+
+  Status  : WIP
+  Action  : create
+  Files   : src/auth/, src/types/
+
+  Exécution...
+
+  ✓ src/auth/index.ts créé
+  ✓ src/types/auth.ts créé
+
+  → Task terminée
+
+─────────────────────────────────────────────
+```
+
+#### Exécution parallèle
+
+Si plusieurs tasks consécutives ont `parallel:yes` :
+
+```
+Task 2.1 [parallel:no]  → exécuter seul
+Task 2.2 [parallel:yes] ┐
+Task 2.3 [parallel:yes] ├→ exécuter en parallèle
+Task 2.4 [parallel:yes] ┘
+Task 2.5 [parallel:no]  → attendre 2.2-2.4, puis exécuter
+```
+
+**Implémentation :**
+```bash
+# Démarrer toutes les tasks parallèles en WIP
+for uuid in $PARALLEL_UUIDS; do
+    /home/vscode/.claude/scripts/task-start.sh "$uuid"
+done
+
+# Exécuter en parallèle (multiples Tool calls)
+# ...
+
+# Terminer toutes les tasks
+for uuid in $PARALLEL_UUIDS; do
+    /home/vscode/.claude/scripts/task-done.sh "$uuid"
+done
+```
+
+---
+
+### Étape 2 : Commits conventionnels
+
+Après chaque epic ou groupe de tasks :
+
+```bash
+TYPE=$(jq -r '.type' "$SESSION_FILE")  # feature ou fix
+PREFIX="${TYPE:0:4}"  # feat ou fix
+
+git add -A
+git commit -m "$PREFIX(<scope>): <description>"
+git push -u origin "$BRANCH"
+```
+
+**Règles :**
+- Un commit par epic (ou par task si atomicité requise)
+- Message en anglais
+- **INTERDIT** : mentions IA, "Generated by", "Co-authored-by AI"
+
+---
+
+### Étape 3 : Sync avec main (si nécessaire)
+
+```bash
+MAIN_BRANCH=$(git symbolic-ref refs/remotes/origin/HEAD | sed 's@^refs/remotes/origin/@@')
+
+git fetch origin "$MAIN_BRANCH"
+BEHIND=$(git rev-list --count HEAD.."origin/$MAIN_BRANCH")
+
+if [[ "$BEHIND" -gt 0 ]]; then
+    git rebase "origin/$MAIN_BRANCH"
+    git push --force-with-lease
+fi
+```
+
+---
+
+### Étape 4 : Vérification CI
+
+```bash
+# Attendre que la CI termine
+MAX_ATTEMPTS=3
+ATTEMPT=0
+
+while [[ $ATTEMPT -lt $MAX_ATTEMPTS ]]; do
+    STATUS=$(mcp__github__get_pull_request_status || gh pr checks)
+
+    case "$STATUS" in
+        *success*) break ;;
+        *pending*) sleep 30; continue ;;
+        *failure*)
+            ATTEMPT=$((ATTEMPT + 1))
+            # Analyser et corriger
+            # ...
+            git commit -m "fix: CI issues"
+            git push
+            ;;
+    esac
+done
+
+if [[ $ATTEMPT -ge $MAX_ATTEMPTS ]]; then
+    echo "❌ CI échoue après $MAX_ATTEMPTS tentatives"
+    exit 1
+fi
+```
+
+---
+
+### Étape 5 : Création PR
+
+**Via MCP (priorité)** :
+```
+mcp__github__create_pull_request({
+  owner: "<owner>",
+  repo: "<repo>",
+  title: "<prefix>(<scope>): <description>",
+  head: "<branch>",
+  base: "main",
+  body: "<body>"
+})
+```
+
+**Format du body :**
+
+Pour une **feature** :
+```markdown
+## Summary
+- <Point 1>
+- <Point 2>
+
+## Changes
+- `path/to/file1.ts` : description
+- `path/to/file2.ts` : description
+
+## Test plan
+- [ ] Test 1
+- [ ] Test 2
+```
+
+Pour un **fix** :
+```markdown
+## Bug
+<Description du bug corrigé>
+
+## Root cause
+<Explication de la cause>
+
+## Fix
+- `path/to/file.ts` : description de la correction
+
+## Test plan
+- [ ] Vérifier que le bug est corrigé
+- [ ] Vérifier les non-régressions
+```
+
+---
+
+### Étape 6 : Finalisation
+
+```bash
+# Mettre à jour l'état
+jq '.state = "applied"' "$SESSION_FILE" > tmp && mv tmp "$SESSION_FILE"
+```
+
+**Output final :**
+```
+═══════════════════════════════════════════════
+  ✓ Apply terminé
+═══════════════════════════════════════════════
+
+  Branch  : feat/<name>
+  Commits : 3
+  PR      : https://github.com/<owner>/<repo>/pull/<number>
+  CI      : ✓ Passed
+
+  ⚠️  MERGE MANUEL REQUIS
+  → Le merge automatique est désactivé
+  → Revue de code recommandée
+
+  Pour demander une review :
+    /review --coderabbit
+
+═══════════════════════════════════════════════
+```
+
+---
+
+## --task <id>
+
+Exécuter une task spécifique :
+
+```bash
+TASK_ID="$1"  # ex: T2.1
+
+# Trouver la task
+TASK=$(jq -r ".epics[].tasks[] | select(.id == \"$TASK_ID\")" "$SESSION_FILE")
+
+if [[ -z "$TASK" ]]; then
+    echo "❌ Task $TASK_ID non trouvée"
+    exit 1
+fi
+
+UUID=$(echo "$TASK" | jq -r '.uuid')
+STATUS=$(echo "$TASK" | jq -r '.status')
+
+if [[ "$STATUS" == "DONE" ]]; then
+    echo "⚠ Task $TASK_ID déjà terminée"
+    exit 0
+fi
+
+# Exécuter la task
+/home/vscode/.claude/scripts/task-start.sh "$UUID"
+# ... exécution ...
+/home/vscode/.claude/scripts/task-done.sh "$UUID"
+```
+
+---
+
+## --pr : Correction des retours CodeRabbit
+
+Workflow pour corriger les commentaires CodeRabbit, **un par un**.
+
+### Principe
+
+```
+1 commentaire = 1 fix = 1 commit = 1 résolution
+```
+
+### Workflow
+
+#### 1. Détecter la PR
+
+```bash
+PR_INFO=$(gh pr view --json number,url,title,headRefName)
+PR_NUMBER=$(echo "$PR_INFO" | jq -r '.number')
+```
+
+Si pas de PR :
+```
+❌ Aucune PR trouvée
+→ Créez une PR avec: /apply (termine par créer la PR)
+```
+
+#### 2. Récupérer les commentaires CodeRabbit
+
+**Via MCP** :
+```
+mcp__github__get_pull_request_comments({
+  owner: "<org>",
+  repo: "<repo>",
+  pull_number: <number>
+})
+```
+
+**Filtrer** :
+- `user.login` contient "coderabbit"
+- Exclure les résolus (outdated)
+- Exclure les "summary" ou "praise"
+
+#### 3. Afficher les retours
+
+```
+═══════════════════════════════════════════════
+  CodeRabbit - Retours à corriger
+═══════════════════════════════════════════════
+
+PR : #<number> - <title>
+Commentaires : <total>
+
+  1. [warning] src/auth.ts:42
+     → Token stocké en localStorage (risque XSS)
+
+  2. [suggestion] src/api.ts:15
+     → Utiliser async/await au lieu de .then()
+
+═══════════════════════════════════════════════
+```
+
+#### 4. Correction itérative
+
+Pour chaque commentaire :
+
+```
+═══════════════════════════════════════════════
+  Commentaire 1/<total>
+═══════════════════════════════════════════════
+
+Fichier   : src/auth.ts
+Ligne     : 42
+Sévérité  : warning
+
+Commentaire :
+<contenu complet>
+
+Code actuel :
+```typescript
+localStorage.setItem('token', token);
+```
+
+Suggestion :
+```typescript
+// Use httpOnly cookie instead
+document.cookie = `token=${token}; HttpOnly; Secure`;
+```
+═══════════════════════════════════════════════
+```
+
+**4.1 Appliquer la correction**
+
+**4.2 Commit atomique :**
+```bash
+git add <file>
+git commit -m "fix(<scope>): apply CodeRabbit suggestion
+
+<description>
+
+Resolves CodeRabbit comment: <id>"
+```
+
+**4.3 Résoudre sur GitHub :**
+```
+mcp__github__add_issue_comment({
+  issue_number: <pr_number>,
+  body: "@coderabbitai resolve"
+})
+```
+
+**4.4 Confirmation :**
+```
+✓ Commentaire 1/<total> corrigé
+  Commit : abc1234
+  Status : Résolu
+
+→ Passage au suivant...
+```
+
+#### 5. Push et résumé
+
+```bash
+git push origin "$BRANCH"
+```
+
+```
+═══════════════════════════════════════════════
+  ✓ Corrections terminées
+═══════════════════════════════════════════════
+
+Commentaires traités : 2/2
+Commits créés : 2
+
+  ✓ src/auth.ts:42 - httpOnly cookie
+  ✓ src/api.ts:15 - async/await
+
+→ CodeRabbit refera une review
+═══════════════════════════════════════════════
+```
+
+---
+
+## --dry-run
+
+Afficher ce qui serait exécuté sans rien modifier :
+
+```
+═══════════════════════════════════════════════
+  /apply --dry-run
+═══════════════════════════════════════════════
+
+  Mode : Prévisualisation (aucune modification)
+
+─────────────────────────────────────────────
+  Actions prévues
+─────────────────────────────────────────────
+
+  Epic 1: Setup infrastructure
+    ├─ T1.1: Create folder structure
+    │        → créer src/auth/
+    │        → créer src/types/
+    └─ T1.2: Configure dependencies
+             → modifier package.json
+
+  Epic 2: Implementation
+    ├─ T2.1: Implement AuthService
+    │        → créer src/auth/service.ts
+    └─ T2.2: Write tests
+             → créer tests/auth.test.ts
+
+─────────────────────────────────────────────
+  Résumé
+─────────────────────────────────────────────
+
+  Tasks        : 4
+  Fichiers     : 5 (3 créés, 1 modifié, 0 supprimé)
+  Commits      : ~2 (1 par epic)
+  PR           : sera créée à la fin
+
+═══════════════════════════════════════════════
+```
+
+---
+
+## GARDE-FOUS (ABSOLUS)
+
+| Action | Status |
+|--------|--------|
+| Merge automatique | ❌ **INTERDIT** |
+| Push sur main/master | ❌ **INTERDIT** |
+| Write/Edit sans task WIP | ❌ **BLOQUÉ** |
+| Force push sans --force-with-lease | ❌ **INTERDIT** |
+| Mentions IA dans commits | ❌ **INTERDIT** |
+| /apply sans plan "planned" | ❌ **BLOQUÉ** |
+
+---
+
+## Voir aussi
+
+- `/plan` - Créer un plan
+- `/review` - Demander une code review
+- `/git --merge` - Merger la PR
+

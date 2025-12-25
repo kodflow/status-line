@@ -9,7 +9,7 @@ set -e
 
 REPO="kodflow/devcontainer-template"
 BRANCH="main"
-BASE="https://raw.githubusercontent.com/${REPO}/${BRANCH}/.devcontainer/features/claude"
+BASE="https://raw.githubusercontent.com/${REPO}/${BRANCH}/.devcontainer/images"
 TARGET="${KODFLOW_TARGET:-$(pwd)}"
 
 echo "═══════════════════════════════════════════"
@@ -58,7 +58,7 @@ mkdir -p "$TARGET/.claude/sessions"
 # 4. Télécharger les commandes
 # ─────────────────────────────────────────────────────────────────────────────
 echo "→ Downloading commands..."
-for cmd in build commit secret install update feature fix; do
+for cmd in apply git plan review update; do
     curl -sL "$BASE/.claude/commands/$cmd.md" -o "$TARGET/.claude/commands/$cmd.md" 2>/dev/null && echo "  ✓ /$cmd"
 done
 
@@ -66,7 +66,7 @@ done
 # 5. Télécharger les scripts (hooks + Taskwarrior)
 # ─────────────────────────────────────────────────────────────────────────────
 echo "→ Downloading scripts..."
-for script in format imports lint post-edit pre-validate security test typecheck task-validate task-log task-init task-subtasks; do
+for script in format imports lint post-edit pre-validate security test bash-validate commit-validate task-validate task-log task-init task-epic task-add task-start task-done task-check-locks; do
     curl -sL "$BASE/.claude/scripts/$script.sh" -o "$TARGET/.claude/scripts/$script.sh" 2>/dev/null && \
     chmod +x "$TARGET/.claude/scripts/$script.sh"
 done
@@ -157,10 +157,10 @@ echo "════════════════════════�
 echo "  ✓ Installation complete!"
 echo ""
 echo "  Commandes disponibles:"
-echo "    /feature - Développer une fonctionnalité"
-echo "    /fix     - Corriger un bug"
-echo "    /build   - Générer le contexte"
-echo "    /commit  - Workflow git"
+echo "    /plan    - Planifier une feature ou fix"
+echo "    /apply   - Exécuter le plan"
+echo "    /git     - Workflow git (commit, branch, PR)"
+echo "    /review  - Demander une code review"
 echo "    /update  - Mettre à jour depuis GitHub"
 echo ""
 echo "  Taskwarrior: $(command -v task &>/dev/null && echo '✓ Installé' || echo '⚠ Non installé')"

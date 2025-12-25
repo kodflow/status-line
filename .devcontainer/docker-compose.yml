@@ -49,7 +49,7 @@ services:
       - OP_CONFIG_DIR=/home/vscode/.config/op
 
       # Node.js / npm / yarn / pnpm / nvm
-      - NVM_DIR=/home/vscode/.cache/nvm
+      - NVM_DIR=/usr/local/share/nvm
       - npm_config_cache=/home/vscode/.cache/npm
       - YARN_CACHE_FOLDER=/home/vscode/.cache/yarn
       - PNPM_HOME=/home/vscode/.cache/pnpm
@@ -121,7 +121,7 @@ services:
       - HELM_CACHE_HOME=/home/vscode/.cache/helm
 
       # PATH - Add all bin directories (user packages first, then system)
-      - PATH=/home/vscode/.local/share/npm-global/bin:/home/vscode/.local/bin:/home/vscode/.cache/nvm/bin:/home/vscode/.cache/pyenv/bin:/home/vscode/.cache/rbenv/bin:/home/vscode/.cache/sdkman/bin:/home/vscode/.cache/composer/vendor/bin:/home/vscode/.cache/pub-cache/bin:/home/vscode/.cache/flutter/bin:/home/vscode/.cache/mix/escripts:/home/vscode/.cache/vcpkg:/home/vscode/.cache/carbon/bin:/home/vscode/.cache/go/bin:/home/vscode/.cache/cargo/bin:/home/vscode/.cache/gems/bin:/home/vscode/.cache/pnpm:/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin
+      - PATH=/home/vscode/.local/share/npm-global/bin:/home/vscode/.local/bin:/usr/local/share/nvm/current/bin:/home/vscode/.cache/pyenv/bin:/home/vscode/.cache/rbenv/bin:/home/vscode/.cache/sdkman/bin:/home/vscode/.cache/composer/vendor/bin:/home/vscode/.cache/pub-cache/bin:/home/vscode/.cache/flutter/bin:/home/vscode/.cache/mix/escripts:/home/vscode/.cache/vcpkg:/home/vscode/.cache/carbon/bin:/home/vscode/.cache/go/bin:/home/vscode/.cache/cargo/bin:/home/vscode/.cache/gems/bin:/home/vscode/.cache/pnpm:/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin
 
     # User
     user: vscode

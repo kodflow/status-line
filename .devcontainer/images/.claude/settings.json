@@ -1,6 +1,10 @@
 {
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "model": "opus",
   "alwaysThinkingEnabled": true,
+  "spinnerTipsEnabled": false,
+  "promptSuggestionEnabled": true,
+  "outputStyle": "default",
   "cleanupPeriodDays": 30,
   "statusLine": {
     "type": "command",
@@ -13,6 +17,7 @@
     "MAX_MCP_OUTPUT_TOKENS": "25000"
   },
   "permissions": {
+    "defaultMode": "acceptEdits",
     "allow": [
       "Bash(npm:*)",
       "Bash(pnpm:*)",
@@ -91,7 +96,17 @@
         "hooks": [
           {
             "type": "command",
+            "command": "/home/vscode/.claude/scripts/bash-validate.sh",
+            "timeout": 10
+          },
+          {
+            "type": "command",
             "command": "/home/vscode/.claude/scripts/commit-validate.sh",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "/home/vscode/.claude/scripts/phase-validate.sh",
             "timeout": 10
           }
         ]
@@ -102,6 +117,11 @@
           {
             "type": "command",
             "command": "/home/vscode/.claude/scripts/task-validate.sh",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "/home/vscode/.claude/scripts/phase-validate.sh",
             "timeout": 10
           }
         ]

@@ -22,29 +22,33 @@ CLAUDE_DEFAULTS="/etc/claude-defaults"
 
 if [ -d "$CLAUDE_DEFAULTS" ]; then
     log_info "Restoring Claude configuration from image defaults..."
-    
+
     # Ensure base directory exists
     mkdir -p "$HOME/.claude"
-    
-    # Restore commands (always overwrite with latest from image)
+
+    # CLEAN commands and scripts to avoid legacy pollution
+    # Only these directories are managed by the image - sessions/plans are user data
+    rm -rf "$HOME/.claude/commands" "$HOME/.claude/scripts"
+
+    # Restore commands (fresh copy from image)
     if [ -d "$CLAUDE_DEFAULTS/commands" ]; then
         mkdir -p "$HOME/.claude/commands"
         cp -r "$CLAUDE_DEFAULTS/commands/"* "$HOME/.claude/commands/" 2>/dev/null || true
     fi
-    
-    # Restore scripts (always overwrite with latest from image)
+
+    # Restore scripts (fresh copy from image)
     if [ -d "$CLAUDE_DEFAULTS/scripts" ]; then
         mkdir -p "$HOME/.claude/scripts"
         cp -r "$CLAUDE_DEFAULTS/scripts/"* "$HOME/.claude/scripts/" 2>/dev/null || true
         chmod -R 755 "$HOME/.claude/scripts/"
     fi
-    
-    # Restore settings.json only if it does not exist
-    if [ -f "$CLAUDE_DEFAULTS/settings.json" ] && [ \! -f "$HOME/.claude/settings.json" ]; then
+
+    # Restore settings.json only if it does not exist (user customizations preserved)
+    if [ -f "$CLAUDE_DEFAULTS/settings.json" ] && [ ! -f "$HOME/.claude/settings.json" ]; then
         cp "$CLAUDE_DEFAULTS/settings.json" "$HOME/.claude/settings.json"
     fi
-    
-    log_success "Claude configuration restored"
+
+    log_success "Claude configuration restored (clean)"
 fi
 
 # ============================================================================
@@ -54,37 +58,70 @@ mkdir -p "$HOME/.claude/sessions" "$HOME/.claude/plans"
 log_success "Claude directories initialized"
 
 # ============================================================================
-# Restore NVM symlinks (node, npm, npx, claude)
+# GNOME Keyring Setup (for credential storage - libsecret/Secret Service API)
 # ============================================================================
-# NVM is in package-cache volume, so we need to recreate symlinks to ~/.local/bin
-NVM_DIR="${NVM_DIR:-$HOME/.cache/nvm}"
-if [ -d "$NVM_DIR/versions/node" ]; then
-    NODE_VERSION=$(ls "$NVM_DIR/versions/node" 2>/dev/null | head -1)
-    if [ -n "$NODE_VERSION" ]; then
-        log_info "Setting up Node.js symlinks for $NODE_VERSION..."
-        mkdir -p "$HOME/.local/bin"
-        NODE_BIN="$NVM_DIR/versions/node/$NODE_VERSION/bin"
-
-        for cmd in node npm npx claude; do
-            if [ -f "$NODE_BIN/$cmd" ]; then
-                ln -sf "$NODE_BIN/$cmd" "$HOME/.local/bin/$cmd"
-            fi
-        done
-        log_success "Node.js symlinks configured"
+# Required by: CodeRabbit CLI, GitHub CLI, VS Code, Claude Code
+# Works on all platforms: Mac, Windows, Linux, WSL (container is always Linux)
+setup_gnome_keyring() {
+    # Check if gnome-keyring-daemon is available
+    if ! command -v gnome-keyring-daemon &> /dev/null; then
+        log_warning "gnome-keyring-daemon not found - credential storage may fail"
+        return 1
     fi
-fi
 
-# ============================================================================
-# 1Password CLI Setup
-# ============================================================================
-# Fix op config directory permissions (created by Docker as root)
-OP_CONFIG_DIR="/home/vscode/.config/op"
-if [ -d "$OP_CONFIG_DIR" ]; then
-    if [ "$(stat -c '%U' "$OP_CONFIG_DIR" 2>/dev/null)" != "vscode" ]; then
-        log_info "Fixing 1Password config directory permissions..."
-        sudo chown -R vscode:vscode "$OP_CONFIG_DIR" 2>/dev/null || true
+    # Check if already running
+    if pgrep -u "$(id -u)" gnome-keyring-daemon &> /dev/null; then
+        log_info "gnome-keyring-daemon already running"
+        return 0
     fi
-    chmod 700 "$OP_CONFIG_DIR" 2>/dev/null || true
+
+    # Start D-Bus session if not available
+    if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]; then
+        log_info "Starting D-Bus session bus..."
+        if command -v dbus-launch &> /dev/null; then
+            eval "$(dbus-launch --sh-syntax)"
+            export DBUS_SESSION_BUS_ADDRESS
+        else
+            log_warning "dbus-launch not found - using fallback"
+            export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$(id -u)/bus"
+        fi
+    fi
+
+    # Start gnome-keyring-daemon with secrets component
+    log_info "Starting gnome-keyring-daemon..."
+    # Use --unlock with empty password for headless operation
+    eval "$(echo '' | gnome-keyring-daemon --unlock --components=secrets 2>/dev/null)" || {
+        log_warning "gnome-keyring-daemon failed to start with unlock, trying without..."
+        eval "$(gnome-keyring-daemon --start --components=secrets 2>/dev/null)" || {
+            log_warning "gnome-keyring-daemon failed to start"
+            return 1
+        }
+    }
+
+    log_success "gnome-keyring-daemon started successfully"
+    return 0
+}
+
+# Run keyring setup and export env vars for shell sessions
+if setup_gnome_keyring; then
+    KODFLOW_ENV="$HOME/.kodflow-env.sh"
+    if [ -f "$KODFLOW_ENV" ]; then
+        # Remove existing entries to avoid duplicates
+        sed -i '/^export DBUS_SESSION_BUS_ADDRESS=/d' "$KODFLOW_ENV"
+        sed -i '/^export GNOME_KEYRING_CONTROL=/d' "$KODFLOW_ENV"
+        sed -i '/^export SSH_AUTH_SOCK=/d' "$KODFLOW_ENV"
+    fi
+    # Export D-Bus and keyring variables for all shells
+    if [ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ]; then
+        echo "export DBUS_SESSION_BUS_ADDRESS=\"$DBUS_SESSION_BUS_ADDRESS\"" >> "$KODFLOW_ENV"
+    fi
+    if [ -n "${GNOME_KEYRING_CONTROL:-}" ]; then
+        echo "export GNOME_KEYRING_CONTROL=\"$GNOME_KEYRING_CONTROL\"" >> "$KODFLOW_ENV"
+    fi
+    if [ -n "${SSH_AUTH_SOCK:-}" ]; then
+        echo "export SSH_AUTH_SOCK=\"$SSH_AUTH_SOCK\"" >> "$KODFLOW_ENV"
+    fi
+    log_success "Keyring environment variables exported to $KODFLOW_ENV"
 fi
 
 # Reload .env file to get updated tokens
@@ -124,6 +161,7 @@ get_1password_field() {
 # Initialize tokens from environment variables (fallback)
 CODACY_TOKEN="${CODACY_API_TOKEN:-}"
 GITHUB_TOKEN="${GITHUB_API_TOKEN:-}"
+CODERABBIT_TOKEN="${CODERABBIT_API_KEY:-}"
 
 # Try 1Password if OP_SERVICE_ACCOUNT_TOKEN is defined
 if [ -n "$OP_SERVICE_ACCOUNT_TOKEN" ] && command -v op &> /dev/null; then
@@ -131,14 +169,17 @@ if [ -n "$OP_SERVICE_ACCOUNT_TOKEN" ] && command -v op &> /dev/null; then
 
     OP_CODACY=$(get_1password_field "mcp-codacy" "$VAULT_ID")
     OP_GITHUB=$(get_1password_field "mcp-github" "$VAULT_ID")
+    OP_CODERABBIT=$(get_1password_field "coderabbit" "$VAULT_ID")
 
     [ -n "$OP_CODACY" ] && CODACY_TOKEN="$OP_CODACY"
     [ -n "$OP_GITHUB" ] && GITHUB_TOKEN="$OP_GITHUB"
+    [ -n "$OP_CODERABBIT" ] && CODERABBIT_TOKEN="$OP_CODERABBIT"
 fi
 
 # Show warnings if tokens are missing
 [ -z "$CODACY_TOKEN" ] && log_warning "Codacy token not available"
 [ -z "$GITHUB_TOKEN" ] && log_warning "GitHub token not available"
+[ -z "$CODERABBIT_TOKEN" ] && log_warning "CodeRabbit token not available"
 
 # Generate mcp.json from template (baked in Docker image)
 if [ -f "$MCP_TPL" ]; then
@@ -184,6 +225,23 @@ log_info "Cleaning git credential helpers..."
 git config --global --unset-all credential.https://github.com.helper 2>/dev/null || true
 git config --global --unset-all credential.https://gist.github.com.helper 2>/dev/null || true
 log_success "Git credential helpers cleaned"
+
+# ============================================================================
+# Export dynamic environment variables (appended to ~/.kodflow-env.sh)
+# ============================================================================
+# Note: ~/.kodflow-env.sh is created by postCreate.sh with static content
+# We only append dynamic variables here (secrets from 1Password)
+KODFLOW_ENV="$HOME/.kodflow-env.sh"
+
+# Export CodeRabbit API key if available (append to existing file)
+if [ -n "$CODERABBIT_TOKEN" ]; then
+    # Remove any existing CODERABBIT_API_KEY line to avoid duplicates
+    if [ -f "$KODFLOW_ENV" ]; then
+        sed -i '/^export CODERABBIT_API_KEY=/d' "$KODFLOW_ENV"
+    fi
+    echo "export CODERABBIT_API_KEY=\"$CODERABBIT_TOKEN\"" >> "$KODFLOW_ENV"
+    log_success "CODERABBIT_API_KEY exported to $KODFLOW_ENV"
+fi
 
 # ============================================================================
 # Final message

@@ -5,8 +5,10 @@
   "workspaceFolder": "/workspace",
   // Features - additional languages (tools are already in base image)
   "features": {
-    // ========== LANGUAGES (optional) ==========
-    // Uncomment languages you need - base image already has Node.js
+    // ========== LANGUAGES ==========
+    // Node.js enabled by default (required for MCP servers)
+    "./features/languages/nodejs": {},
+    // Uncomment other languages as needed
     // "./features/languages/carbon": {},
     // "./features/languages/cpp": {},
     // "./features/languages/dart-flutter": {},
@@ -17,6 +19,7 @@
     // "./features/languages/python": {},
     // "./features/languages/ruby": {},
     // "./features/languages/rust": {},
+    // "./features/languages/scala": {},
     // ========== EXTERNAL ==========
     // Docker support
     "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
@@ -41,11 +44,9 @@
         "files.trimTrailingWhitespace": true
       },
       "extensions": [
-        "usernamehw.errorlens",
         "vscode-icons-team.vscode-icons",
         "redhat.vscode-yaml",
-        "tamasfe.even-better-toml",
-        "editorconfig.editorconfig"
+        "tamasfe.even-better-toml"
       ]
     }
   },

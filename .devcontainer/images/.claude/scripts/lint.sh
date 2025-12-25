@@ -30,7 +30,6 @@ case "$EXT" in
         elif command -v pylint &>/dev/null; then
             pylint --errors-only "$FILE" 2>/dev/null || true
         fi
-        # Type checking is separate (in typecheck.sh)
         ;;
 
     # Go - golangci-lint is comprehensive, go vet is basic

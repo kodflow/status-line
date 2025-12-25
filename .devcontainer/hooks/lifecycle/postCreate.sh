@@ -18,6 +18,18 @@ echo -e "${CYAN}   Kodflow DevContainer Setup${NC}"
 echo -e "${CYAN}=========================================${NC}"
 echo ""
 
+# ============================================================================
+# Git Safe Directory Configuration (ALWAYS run, even if already initialized)
+# ============================================================================
+# Prevents "dubious ownership" errors when container user differs from
+# directory owner (common in Docker where /workspace may be owned by root)
+if ! git config --global --get-all safe.directory | grep -q "^/workspace$"; then
+    git config --global --add safe.directory /workspace
+    log_success "Git safe.directory configured for /workspace"
+else
+    log_info "Git safe.directory already configured"
+fi
+
 # Note: Tools (status-line, ktn-linter) are now baked into the Docker image
 # No longer need to update on each rebuild
 
@@ -36,7 +48,8 @@ cat > /home/vscode/.kodflow-env.sh << 'ENVEOF'
 # This file is sourced by ~/.zshrc and ~/.bashrc
 
 # NVM (Node.js Version Manager)
-export NVM_DIR="/home/vscode/.cache/nvm"
+# NVM installed in system location (not volume) - Microsoft best practice
+export NVM_DIR="/usr/local/share/nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
 [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"
 
@@ -111,10 +124,10 @@ export BAZEL_USER_ROOT="/home/vscode/.cache/bazel"
 # super-claude: runs claude with MCP config if available, otherwise without
 super-claude() {
     local mcp_config="/workspace/.mcp.json"
+
     if [ -f "$mcp_config" ] && jq empty "$mcp_config" 2>/dev/null; then
         claude --dangerously-skip-permissions --mcp-config "$mcp_config" "$@"
     else
-        echo "⚠️  MCP config not found or invalid, starting without MCP..."
         claude --dangerously-skip-permissions "$@"
     fi
 }
@@ -194,6 +207,35 @@ fi
 if command -v gh &> /dev/null; then
     source <(gh completion -s zsh) 2>/dev/null || true
 fi
+
+# ============================================================================
+# D-Bus Session Detection (for credential storage)
+# ============================================================================
+# Dynamically detect D-Bus session for gnome-keyring support
+# Required by: CodeRabbit CLI, GitHub CLI, VS Code credential storage
+_kodflow_init_dbus() {
+    # Skip if D-Bus already configured and socket exists
+    if [ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ]; then
+        local socket_path="${DBUS_SESSION_BUS_ADDRESS#unix:path=}"
+        socket_path="${socket_path%%,*}"
+        [ -S "$socket_path" ] && return 0
+    fi
+
+    # Find existing D-Bus socket in /tmp
+    local dbus_socket
+    dbus_socket=$(find /tmp -maxdepth 1 -name 'dbus-*' -type s -user "$(id -u)" 2>/dev/null | head -1)
+    if [ -n "$dbus_socket" ] && [ -S "$dbus_socket" ]; then
+        export DBUS_SESSION_BUS_ADDRESS="unix:path=$dbus_socket"
+    fi
+
+    # Find existing keyring control socket
+    if [ -z "${GNOME_KEYRING_CONTROL:-}" ]; then
+        local keyring_dir
+        keyring_dir=$(find "$HOME/.cache" -maxdepth 1 -name 'keyring-*' -type d 2>/dev/null | head -1)
+        [ -n "$keyring_dir" ] && [ -S "$keyring_dir/control" ] && export GNOME_KEYRING_CONTROL="$keyring_dir"
+    fi
+}
+_kodflow_init_dbus
 ENVEOF
 
 log_success "Environment script created at ~/.kodflow-env.sh"

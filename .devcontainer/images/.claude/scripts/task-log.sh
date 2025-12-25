@@ -18,16 +18,34 @@ INPUT=$(cat)
 TOOL=$(echo "$INPUT" | jq -r '.tool_name // empty')
 EXIT_CODE=$(echo "$INPUT" | jq -r '.tool_response.exit_code // 0')
 
-# Trouver la session active
-SESSION_DIR="$HOME/.claude/sessions"
-SESSION_FILE=$(ls -t "$SESSION_DIR"/*.json 2>/dev/null | head -1)
+# === Trouver la session active (déterministe) ===
+SESSION_FILE=""
+
+# Priorité 1: Pointeur explicite
+if [[ -f "/workspace/.claude/active-session" ]]; then
+    SESSION_FILE=$(cat /workspace/.claude/active-session 2>/dev/null || true)
+fi
+
+# Priorité 2: Symlink state.json
+if [[ -z "$SESSION_FILE" || ! -f "$SESSION_FILE" ]]; then
+    if [[ -f "/workspace/.claude/state.json" ]]; then
+        SESSION_FILE=$(readlink -f /workspace/.claude/state.json 2>/dev/null || echo "/workspace/.claude/state.json")
+    fi
+fi
+
+# Priorité 3: Dernière session (fallback)
+if [[ -z "$SESSION_FILE" || ! -f "$SESSION_FILE" ]]; then
+    SESSION_DIR="$HOME/.claude/sessions"
+    SESSION_FILE=$(ls -t "$SESSION_DIR"/*.json 2>/dev/null | head -1 || true)
+fi
 
 # Si pas de session, log quand même pour Bash (autorisé sans tâche)
-if [[ ! -f "$SESSION_FILE" ]]; then
+if [[ -z "$SESSION_FILE" || ! -f "$SESSION_FILE" ]]; then
     exit 0
 fi
 
-TASK_UUID=$(jq -r '.current_task_uuid // empty' "$SESSION_FILE")
+# Schéma v3: currentTask (avec fallback sur current_task_uuid pour compatibilité)
+TASK_UUID=$(jq -r '.currentTask // .current_task_uuid // empty' "$SESSION_FILE")
 [[ -z "$TASK_UUID" ]] && exit 0
 
 TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -61,14 +79,11 @@ esac
 # Logger l'événement dans Taskwarrior
 task uuid:"$TASK_UUID" annotate "post:$EVENT" 2>/dev/null || true
 
-# Mettre à jour la session
-ACTIONS=$(jq -r '.actions // 0' "$SESSION_FILE")
-ACTIONS=$((ACTIONS + 1))
-LAST_ACTION="$TIMESTAMP"
-
-# Mise à jour atomique du fichier session
+# Mettre à jour la session (avec fallback pour .actions)
 TMP_FILE=$(mktemp)
-jq ".actions = $ACTIONS | .last_action = \"$LAST_ACTION\"" "$SESSION_FILE" > "$TMP_FILE"
-mv "$TMP_FILE" "$SESSION_FILE"
+jq --arg ts "$TIMESTAMP" '
+    .actions = ((.actions // 0) + 1) |
+    .lastAction = $ts
+' "$SESSION_FILE" > "$TMP_FILE" 2>/dev/null && mv "$TMP_FILE" "$SESSION_FILE"
 
 exit 0
