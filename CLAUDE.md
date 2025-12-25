@@ -38,4 +38,4 @@ make lint           # Vérifie le code
 
 - Tests: `*_test.go` dans le même package
 - Pas de `/src`, utiliser `cmd/` et `internal/`
-- Go 1.23+ (voir .devcontainer/features/languages/go/RULES.md)
+- Go 1.25+ (voir .devcontainer/features/languages/go/RULES.md)

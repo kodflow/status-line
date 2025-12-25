@@ -206,12 +206,27 @@ Go (go.mod):
 
 Remplace .devcontainer depuis le template Kodflow.
 
+### ⚠️ IMPORTANT : Scope du téléchargement
+
+**UNIQUEMENT `.devcontainer/` est téléchargé et remplacé.**
+
+Le template `kodflow/devcontainer-template` contient d'autres fichiers à la racine qui sont **EXCLUS** :
+
+| Fichier/Dossier | Action |
+|-----------------|--------|
+| `.devcontainer/` | ✅ **Téléchargé et remplacé** |
+| `.github/` | ❌ **JAMAIS téléchargé** (workflows du projet) |
+| `.gitignore` | ❌ **JAMAIS téléchargé** (config du projet) |
+| `.coderabbit.yaml` | ❌ **JAMAIS téléchargé** (config du projet) |
+| `CLAUDE.md` | ❌ **JAMAIS téléchargé** (doc du projet) |
+| `README.md` | ❌ **JAMAIS téléchargé** (doc du projet) |
+
 ### Workflow
 
 1. Identifier les fichiers protégés (gitignored, .env)
 2. Sauvegarder les fichiers protégés
-3. Télécharger le template depuis GitHub
-4. Remplacer .devcontainer/
+3. Télécharger **UNIQUEMENT** `.devcontainer/` depuis le template GitHub
+4. Remplacer `.devcontainer/` (et rien d'autre)
 5. Restaurer les fichiers protégés
 6. Valider la configuration
 
@@ -236,11 +251,15 @@ Fichiers protégés (préservés):
   ✓ .devcontainer/.env
   ✓ .devcontainer/hooks/shared/.env
 
+Fichiers EXCLUS (jamais téléchargés):
+  ○ .github/ (workflows du projet préservés)
+  ○ .gitignore, CLAUDE.md, README.md
+
 Sauvegarde des fichiers protégés...
   ✓ .devcontainer/.env sauvegardé
 
 Téléchargement de kodflow/devcontainer-template...
-  ✓ Template téléchargé
+  ✓ .devcontainer/ téléchargé (scope limité)
 
 Remplacement de .devcontainer/...
   ✓ .devcontainer/ remplacé
@@ -253,6 +272,9 @@ Validation de la configuration...
 
 ═══════════════════════════════════════════════
   ✓ DevContainer mis à jour
+
+  Note: .github/ et autres fichiers racine
+        n'ont PAS été modifiés.
 
   Prochaine étape:
     Ctrl+Shift+P → 'Rebuild Container'
