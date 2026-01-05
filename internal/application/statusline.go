@@ -58,10 +58,20 @@ func (s *StatusLineService) GenerateWithUpdate(input port.InputProvider, update 
 	// Fetch usage data (ignore error, use zero value on failure)
 	usage, _ := s.deps.Usage.Usage()
 
+	// Determine progress source: API quota if valid, otherwise session context
+	var progress model.Progress
+	if usage.IsValid() {
+		// Use API quota utilization for paid plans
+		progress = usage.Progress()
+	} else {
+		// Fallback to session context progress for free plans
+		progress = input.Progress()
+	}
+
 	// Gather all data from various sources
 	data := model.StatusLineData{
 		Model:       input.ModelInfo(),
-		Progress:    usage.Progress(),
+		Progress:    progress,
 		Usage:       usage,
 		Icons:       model.IconConfigFromEnv(),
 		Git:         s.deps.Git.Status(),
