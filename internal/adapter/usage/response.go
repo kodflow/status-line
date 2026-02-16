@@ -2,8 +2,9 @@
 package usage
 
 // usageResponse represents the API response structure.
-// It contains the seven-day usage period from Anthropic API.
+// It contains both five-hour session and seven-day weekly usage periods.
 type usageResponse struct {
+	FiveHour usagePeriod `json:"five_hour"`
 	SevenDay usagePeriod `json:"seven_day"`
 }
 

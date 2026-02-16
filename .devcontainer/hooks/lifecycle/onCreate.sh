@@ -1,44 +1,26 @@
 #!/bin/bash
 # ============================================================================
-# onCreate.sh - Runs INSIDE container immediately after first start
+# onCreate.sh - Delegation stub (DO NOT add logic here)
 # ============================================================================
-# This script runs inside the container after it starts for the first time.
-# Use it for: Initial container setup that doesn't need user-specific config.
+# Real logic: /etc/devcontainer-hooks/lifecycle/onCreate.sh (image-embedded)
+# This stub auto-updates behavior when the Docker image is rebuilt.
 # ============================================================================
 
-set -e
+HOOK="onCreate"
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/../shared/utils.sh"
+# Priority 1: Template dev source (only exists in template repo)
+DEV="/workspace/.devcontainer/images/hooks/lifecycle/${HOOK}.sh"
+# Priority 2: Image-embedded (exists in all downstream containers)
+IMG="/etc/devcontainer-hooks/lifecycle/${HOOK}.sh"
 
-log_info "onCreate: Container created, performing initial setup..."
-
-# Ensure cache directories exist with proper permissions
-CACHE_DIRS=(
-    "/home/vscode/.cache"
-    "/home/vscode/.config"
-    "/home/vscode/.local/bin"
-    "/home/vscode/.local/share"
-)
-
-for dir in "${CACHE_DIRS[@]}"; do
-    mkdir_safe "$dir"
-done
-
-# Note: .claude/ is now baked into the Docker image at /home/vscode/.claude/
-# No longer needs injection from devcontainer feature
-
-# Inject CLAUDE.md from devcontainer if not present in project
-CLAUDE_FEATURE_DIR="/workspace/.devcontainer/features/claude"
-
-if [ -f "$CLAUDE_FEATURE_DIR/CLAUDE.md" ]; then
-    if [ ! -f "/workspace/CLAUDE.md" ]; then
-        log_info "Injecting CLAUDE.md from devcontainer..."
-        cp "$CLAUDE_FEATURE_DIR/CLAUDE.md" /workspace/CLAUDE.md
-        log_success "CLAUDE.md injected to /workspace/"
-    else
-        log_info "Project has its own CLAUDE.md, skipping injection"
-    fi
+if [ -x "$DEV" ]; then
+    "$DEV" "$@"
+elif [ -x "$IMG" ]; then
+    "$IMG" "$@"
+else
+    echo "[WARNING] No ${HOOK} hook implementation found"
 fi
 
-log_success "onCreate: Initial container setup complete"
+# Project-specific extension (optional)
+EXT="/workspace/.devcontainer/hooks/project/${HOOK}.sh"
+if [ -x "$EXT" ]; then "$EXT" "$@"; fi

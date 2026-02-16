@@ -37,13 +37,18 @@ func TestProvider_Usage(t *testing.T) {
 			// Verify both success and error paths work correctly
 			if err != nil {
 				// Error path: verify result is zero value
-				if result.Utilization != 0 {
+				if result.Session.Utilization != 0 || result.Weekly.Utilization != 0 {
 					t.Error("Usage() should return zero utilization on error")
 				}
 			}
 			// Success path: verify valid percentage range
-			if err == nil && (result.Utilization < 0 || result.Utilization > 100) {
-				t.Error("Usage() returned invalid utilization percentage")
+			if err == nil {
+				if result.Session.Utilization < 0 || result.Session.Utilization > 100 {
+					t.Error("Usage() returned invalid session utilization percentage")
+				}
+				if result.Weekly.Utilization < 0 || result.Weekly.Utilization > 100 {
+					t.Error("Usage() returned invalid weekly utilization percentage")
+				}
 			}
 		})
 	}

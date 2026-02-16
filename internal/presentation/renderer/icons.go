@@ -33,6 +33,8 @@ const (
 	IconTaskwarrior string = "\uf0ae"
 	// IconUpdate is the download/update icon.
 	IconUpdate string = "\uf019"
+	// IconWeekly is the calendar/clock icon for weekly usage.
+	IconWeekly string = "\uf073"
 )
 
 // GetOSIcon returns the appropriate icon for the OS type.

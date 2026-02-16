@@ -45,9 +45,11 @@ type InputWorkspace struct {
 // InputContext contains context window information from JSON.
 // It tracks input/output tokens and the maximum context size.
 type InputContext struct {
-	TotalInputTokens  int `json:"total_input_tokens"`
-	TotalOutputTokens int `json:"total_output_tokens"`
-	ContextWindowSize int `json:"context_window_size"`
+	TotalInputTokens    int      `json:"total_input_tokens"`
+	TotalOutputTokens   int      `json:"total_output_tokens"`
+	ContextWindowSize   int      `json:"context_window_size"`
+	UsedPercentage      *float64 `json:"used_percentage"`
+	RemainingPercentage *float64 `json:"remaining_percentage"`
 }
 
 // ModelInfo returns parsed model information.
@@ -103,11 +105,18 @@ func (i *Input) TotalTokens() int {
 }
 
 // Progress returns the context usage progress.
+// Prefers the pre-calculated used_percentage from Claude Code when available,
+// as cumulative token totals exceed the context window after compaction.
 //
 // Returns:
-//   - Progress: calculated progress based on token usage
+//   - Progress: calculated progress based on context usage
 func (i *Input) Progress() Progress {
-	// Create progress from token counts
+	// Prefer pre-calculated percentage (reflects actual context window state)
+	if i.ContextWindow.UsedPercentage != nil {
+		percent := int(*i.ContextWindow.UsedPercentage)
+		return Progress{Percent: min(percent, maxPercent)}
+	}
+	// Fallback to token-based calculation
 	return NewProgress(i.TotalTokens(), i.ContextWindowSize())
 }
 

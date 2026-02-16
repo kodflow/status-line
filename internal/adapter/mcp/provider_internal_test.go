@@ -23,24 +23,25 @@ func TestProvider_userConfigPath(t *testing.T) {
 	}
 }
 
-func TestProvider_projectConfigPath(t *testing.T) {
+func TestProvider_projectConfigPaths(t *testing.T) {
 	tests := []struct {
 		name       string
 		projectDir string
-		wantEmpty  bool
+		wantNil    bool
+		wantLen    int
 	}{
-		{name: "with project dir", projectDir: "/workspace", wantEmpty: false},
-		{name: "empty project dir", projectDir: "", wantEmpty: true},
+		{name: "with project dir", projectDir: "/workspace", wantNil: false, wantLen: 2},
+		{name: "empty project dir", projectDir: "", wantNil: true, wantLen: 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			p := &Provider{projectDir: tt.projectDir}
-			path := p.projectConfigPath()
-			if tt.wantEmpty && path != "" {
-				t.Errorf("projectConfigPath() = %q, want empty", path)
+			paths := p.projectConfigPaths()
+			if tt.wantNil && paths != nil {
+				t.Errorf("projectConfigPaths() = %v, want nil", paths)
 			}
-			if !tt.wantEmpty && path == "" {
-				t.Error("projectConfigPath() = empty, want non-empty")
+			if !tt.wantNil && len(paths) != tt.wantLen {
+				t.Errorf("projectConfigPaths() len = %d, want %d", len(paths), tt.wantLen)
 			}
 		})
 	}
@@ -151,6 +152,32 @@ func TestProvider_readProjectConfig_ValidJSON(t *testing.T) {
 			tmpDir := t.TempDir()
 			mcpPath := filepath.Join(tmpDir, ".mcp.json")
 			if err := os.WriteFile(mcpPath, []byte(tt.content), 0644); err != nil {
+				t.Fatalf("Failed to write temp file: %v", err)
+			}
+			p := &Provider{projectDir: tmpDir}
+			servers := p.readProjectConfig()
+			if len(servers) != tt.wantLen {
+				t.Errorf("readProjectConfig() len = %d, want %d", len(servers), tt.wantLen)
+			}
+		})
+	}
+}
+
+func TestProvider_readProjectConfig_FallbackUndotted(t *testing.T) {
+	tests := []struct {
+		name     string
+		fileName string
+		wantLen  int
+	}{
+		{name: "dotted .mcp.json", fileName: ".mcp.json", wantLen: 1},
+		{name: "undotted mcp.json", fileName: "mcp.json", wantLen: 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+			content := `{"mcpServers": {"test-server": {"disabled": false}}}`
+			mcpPath := filepath.Join(tmpDir, tt.fileName)
+			if err := os.WriteFile(mcpPath, []byte(content), 0644); err != nil {
 				t.Fatalf("Failed to write temp file: %v", err)
 			}
 			p := &Provider{projectDir: tmpDir}

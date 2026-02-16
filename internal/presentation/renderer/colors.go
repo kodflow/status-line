@@ -89,8 +89,14 @@ const (
 	FgGrayTodo string = "\033[38;5;240m"
 	// FgGraySep is the separator color between epics.
 	FgGraySep string = "\033[38;5;245m"
-	// FgCyan is the cyan foreground for current task indicator.
+	// FgCyanTask is the cyan foreground for current task indicator.
 	FgCyanTask string = "\033[38;5;44m"
+	// BgWeekly is the pale gray background for weekly usage segment.
+	BgWeekly string = "\033[48;5;252m"
+	// FgWeekly is the pale gray foreground for weekly usage separator.
+	FgWeekly string = "\033[38;5;252m"
+	// FgWeeklyText is the dark gray text on weekly usage background.
+	FgWeeklyText string = "\033[38;5;240m"
 )
 
 // GetModelColors returns colors for a model pill.

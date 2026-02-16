@@ -21,7 +21,7 @@ func TestNewUsage(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			u := model.NewUsage(tt.utilization, time.Now())
+			u := model.NewWeeklyUsage(tt.utilization, time.Now())
 			if u.Utilization != tt.wantUtilization {
 				t.Errorf("NewUsage() Utilization = %d, want %d", u.Utilization, tt.wantUtilization)
 			}
@@ -29,7 +29,27 @@ func TestNewUsage(t *testing.T) {
 	}
 }
 
-func TestUsage_CursorPosition(t *testing.T) {
+func TestNewSessionUsage(t *testing.T) {
+	tests := []struct {
+		name            string
+		utilization     int
+		wantUtilization int
+	}{
+		{name: "normal value", utilization: 40, wantUtilization: 40},
+		{name: "over max capped", utilization: 120, wantUtilization: 100},
+		{name: "negative capped", utilization: -5, wantUtilization: 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			u := model.NewSessionUsage(tt.utilization, time.Now())
+			if u.Utilization != tt.wantUtilization {
+				t.Errorf("NewSessionUsage() Utilization = %d, want %d", u.Utilization, tt.wantUtilization)
+			}
+		})
+	}
+}
+
+func TestUsage_CursorPosition_Weekly(t *testing.T) {
 	now := time.Now()
 	tests := []struct {
 		name     string
@@ -44,12 +64,43 @@ func TestUsage_CursorPosition(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			u := model.NewUsage(50, tt.resetsAt)
+			u := model.NewWeeklyUsage(50, tt.resetsAt)
 			pos := u.CursorPosition()
 			if pos < tt.wantMin || pos > tt.wantMax {
 				t.Errorf("CursorPosition() = %d, want between %d and %d", pos, tt.wantMin, tt.wantMax)
 			}
 		})
+	}
+}
+
+func TestUsage_CursorPosition_Session(t *testing.T) {
+	now := time.Now()
+	tests := []struct {
+		name     string
+		resetsAt time.Time
+		wantMin  int
+		wantMax  int
+	}{
+		{name: "reset passed", resetsAt: now.Add(-time.Hour), wantMin: 100, wantMax: 100},
+		{name: "reset far future", resetsAt: now.Add(6 * time.Hour), wantMin: 0, wantMax: 0},
+		{name: "half session remaining", resetsAt: now.Add(150 * time.Minute), wantMin: 45, wantMax: 55},
+		{name: "one hour remaining", resetsAt: now.Add(time.Hour), wantMin: 78, wantMax: 82},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			u := model.NewSessionUsage(40, tt.resetsAt)
+			pos := u.CursorPosition()
+			if pos < tt.wantMin || pos > tt.wantMax {
+				t.Errorf("CursorPosition() = %d, want between %d and %d", pos, tt.wantMin, tt.wantMax)
+			}
+		})
+	}
+}
+
+func TestUsage_CursorPosition_ZeroWindow(t *testing.T) {
+	u := model.Usage{Utilization: 50, ResetsAt: time.Now().Add(time.Hour)}
+	if pos := u.CursorPosition(); pos != 0 {
+		t.Errorf("CursorPosition() with zero WindowDuration = %d, want 0", pos)
 	}
 }
 
@@ -66,7 +117,7 @@ func TestUsage_IsOnTrack(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			u := model.NewUsage(tt.utilization, tt.resetsAt)
+			u := model.NewWeeklyUsage(tt.utilization, tt.resetsAt)
 			if got := u.IsOnTrack(); got != tt.want {
 				t.Errorf("IsOnTrack() = %v, want %v", got, tt.want)
 			}
@@ -85,7 +136,7 @@ func TestUsage_Progress(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			u := model.NewUsage(tt.utilization, time.Now())
+			u := model.NewWeeklyUsage(tt.utilization, time.Now())
 			p := u.Progress()
 			if p.Percent != tt.wantPercent {
 				t.Errorf("Progress() Percent = %d, want %d", p.Percent, tt.wantPercent)
