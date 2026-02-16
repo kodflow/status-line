@@ -53,7 +53,7 @@ func (r *Powerline) Render(data model.StatusLineData) string {
 	return sb.String()
 }
 
-// renderLine1 renders the first line with OS, Model, Path, Git, and Changes segments.
+// renderLine1 renders the first line with OS, Model, Weekly, Path, Git, and Changes segments.
 //
 // Params:
 //   - sb: string builder to write to
@@ -65,15 +65,27 @@ func (r *Powerline) renderLine1(sb *strings.Builder, data model.StatusLineData) 
 	// Render OS segment (transitions to Model segment)
 	r.renderOSSegment(sb, data.System, data.Icons.OS, modelBg)
 
-	// Render Model segment (transitions to Path segment)
+	// Determine what follows the model segment
+	hasWeekly := data.Usage.IsValid()
+	modelNextBg := BgBlue
+	if hasWeekly {
+		modelNextBg = BgWeekly
+	}
+
+	// Render Model segment with session context progress (no cursor)
 	modelData := &ModelSegmentData{
 		Model:    data.Model,
 		ShowIcon: data.Icons.Model,
 		Progress: data.Progress,
-		Cursor:   data.Usage,
-		NextBg:   BgBlue,
+		Cursor:   nil,
+		NextBg:   modelNextBg,
 	}
 	r.renderModelSegment(sb, modelData)
+
+	// Render weekly usage segment if API data is available (auto-hide)
+	if hasWeekly {
+		r.renderWeeklySegment(sb, data.Usage)
+	}
 
 	// Determine what follows git segment (or path if no git)
 	changesNextBg := ""
@@ -303,6 +315,23 @@ func (r *Powerline) renderChangesSegment(sb *strings.Builder, changes model.Code
 		// Final separator
 		sb.WriteString(FgRedSep + SepRight + Reset)
 	}
+}
+
+// renderWeeklySegment renders the weekly API usage segment with burn-rate cursor.
+// Auto-hidden when Usage.IsValid() is false (no API credentials).
+//
+// Params:
+//   - sb: string builder to write to
+//   - usage: weekly usage data
+func (r *Powerline) renderWeeklySegment(sb *strings.Builder, usage model.Usage) {
+	progress := usage.Progress()
+	bar := RenderProgressBarWithCursor(progress, usage.CursorPosition(), FgCursorOrange, BgWeekly+FgWeeklyText+Bold)
+
+	// Write segment content
+	sb.WriteString(BgWeekly + FgWeeklyText + Bold + " " + IconWeekly + " " + bar + " " + itoa(progress.Percent) + "% " + Reset)
+
+	// Write separator to path segment
+	sb.WriteString(BgBlue + FgWeekly + SepRight + Reset)
 }
 
 // renderMCPPills renders MCP server pills.

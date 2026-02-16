@@ -61,7 +61,7 @@ func (s *StatusLineService) GenerateWithUpdate(input port.InputProvider, update 
 	// Gather all data from various sources
 	data := model.StatusLineData{
 		Model:       input.ModelInfo(),
-		Progress:    usage.Progress(),
+		Progress:    input.Progress(),
 		Usage:       usage,
 		Icons:       model.IconConfigFromEnv(),
 		Git:         s.deps.Git.Status(),
