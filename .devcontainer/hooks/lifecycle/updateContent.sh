@@ -1,28 +1,26 @@
 #!/bin/bash
 # ============================================================================
-# updateContent.sh - Runs INSIDE container for cache/content refresh
+# updateContent.sh - Delegation stub (DO NOT add logic here)
 # ============================================================================
-# This script runs inside the container to refresh cached or prebuilt content.
-# Cloud services may run this periodically to keep prebuilds fresh.
-# Use it for: Updating package caches, refreshing prebuilt dependencies.
+# Real logic: /etc/devcontainer-hooks/lifecycle/updateContent.sh (image-embedded)
+# This stub auto-updates behavior when the Docker image is rebuilt.
 # ============================================================================
 
-set -e
+HOOK="updateContent"
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/../shared/utils.sh"
+# Priority 1: Template dev source (only exists in template repo)
+DEV="/workspace/.devcontainer/images/hooks/lifecycle/${HOOK}.sh"
+# Priority 2: Image-embedded (exists in all downstream containers)
+IMG="/etc/devcontainer-hooks/lifecycle/${HOOK}.sh"
 
-log_info "updateContent: Refreshing cached content..."
-
-# Refresh package manager caches if needed
-if command_exists npm; then
-    log_info "Checking npm cache..."
-    npm cache verify 2>/dev/null || true
+if [ -x "$DEV" ]; then
+    "$DEV" "$@"
+elif [ -x "$IMG" ]; then
+    "$IMG" "$@"
+else
+    echo "[WARNING] No ${HOOK} hook implementation found"
 fi
 
-if command_exists pip; then
-    log_info "Checking pip cache..."
-    pip cache info 2>/dev/null || true
-fi
-
-log_success "updateContent: Content refresh complete"
+# Project-specific extension (optional)
+EXT="/workspace/.devcontainer/hooks/project/${HOOK}.sh"
+if [ -x "$EXT" ]; then "$EXT" "$@"; fi

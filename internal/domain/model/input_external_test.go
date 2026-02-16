@@ -97,13 +97,17 @@ func TestInput_TotalTokens(t *testing.T) {
 }
 
 func TestInput_Progress(t *testing.T) {
+	pct := func(v float64) *float64 { return &v }
 	tests := []struct {
 		name        string
 		input       model.Input
 		wantPercent int
 	}{
-		{name: "zero tokens", input: model.Input{ContextWindow: model.InputContext{ContextWindowSize: 200000}}, wantPercent: 0},
-		{name: "50 percent", input: model.Input{ContextWindow: model.InputContext{TotalInputTokens: 100000, ContextWindowSize: 200000}}, wantPercent: 50},
+		{name: "zero tokens fallback", input: model.Input{ContextWindow: model.InputContext{ContextWindowSize: 200000}}, wantPercent: 0},
+		{name: "token fallback 50 percent", input: model.Input{ContextWindow: model.InputContext{TotalInputTokens: 100000, ContextWindowSize: 200000}}, wantPercent: 50},
+		{name: "used_percentage preferred", input: model.Input{ContextWindow: model.InputContext{UsedPercentage: pct(39), TotalInputTokens: 500000, ContextWindowSize: 200000}}, wantPercent: 39},
+		{name: "used_percentage zero", input: model.Input{ContextWindow: model.InputContext{UsedPercentage: pct(0)}}, wantPercent: 0},
+		{name: "used_percentage capped at 100", input: model.Input{ContextWindow: model.InputContext{UsedPercentage: pct(150)}}, wantPercent: 100},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -18,8 +18,10 @@ const (
 	claudeConfigDir string = ".claude"
 	// userConfigFileName is the user-level Claude config file.
 	userConfigFileName string = ".claude.json"
-	// projectMCPFileName is the project-level MCP config file.
+	// projectMCPFileName is the project-level MCP config file (dotted).
 	projectMCPFileName string = ".mcp.json"
+	// projectMCPFallbackFileName is the fallback MCP config file (undotted).
+	projectMCPFallbackFileName string = "mcp.json"
 	// managedMCPFileName is the enterprise managed MCP config file.
 	managedMCPFileName string = "managed-mcp.json"
 	// managedPathLinux is the Linux enterprise config directory.
@@ -125,18 +127,19 @@ func (p *Provider) userConfigPath() string {
 	return filepath.Join(home, claudeConfigDir, userConfigFileName)
 }
 
-// projectConfigPath returns the path to project MCP config.
+// projectConfigPaths returns paths to project MCP config files.
+// Returns dotted (.mcp.json) first, then undotted (mcp.json) as fallback.
 //
 // Returns:
-//   - string: path to {project}/.mcp.json
-func (p *Provider) projectConfigPath() string {
-	// Check if project directory is set
+//   - []string: paths to check in order
+func (p *Provider) projectConfigPaths() []string {
 	if p.projectDir == "" {
-		// Return empty path if no project dir
-		return ""
+		return nil
 	}
-	// Return project MCP config path
-	return filepath.Join(p.projectDir, projectMCPFileName)
+	return []string{
+		filepath.Join(p.projectDir, projectMCPFileName),
+		filepath.Join(p.projectDir, projectMCPFallbackFileName),
+	}
 }
 
 // managedConfigPath returns the path to enterprise managed MCP config.
@@ -232,34 +235,32 @@ func (p *Provider) readLocalConfig() model.MCPServers {
 	return p.convertServers(projCfg.MCPServers)
 }
 
-// readProjectConfig reads MCP servers from project .mcp.json file.
+// readProjectConfig reads MCP servers from project MCP config file.
+// Tries .mcp.json first, then falls back to mcp.json (undotted).
 //
 // Returns:
-//   - model.MCPServers: list of MCP servers from .mcp.json
+//   - model.MCPServers: list of MCP servers from project config
 func (p *Provider) readProjectConfig() model.MCPServers {
-	path := p.projectConfigPath()
-	// Check if path is provided
-	if path == "" {
-		// Return empty list for empty path
+	paths := p.projectConfigPaths()
+	if len(paths) == 0 {
 		return model.MCPServers{}
 	}
 
-	data, err := os.ReadFile(path)
-	// Check if file is readable
-	if err != nil {
-		// Return empty list if file not accessible
-		return model.MCPServers{}
+	for _, path := range paths {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+
+		var config mcpConfigFile
+		if err := json.Unmarshal(data, &config); err != nil {
+			continue
+		}
+
+		return p.convertServers(config.MCPServers)
 	}
 
-	var config mcpConfigFile
-	// Check if JSON is valid
-	if err := json.Unmarshal(data, &config); err != nil {
-		// Return empty list if parsing fails
-		return model.MCPServers{}
-	}
-
-	// Return servers from mcpServers
-	return p.convertServers(config.MCPServers)
+	return model.MCPServers{}
 }
 
 // readManagedConfig reads MCP servers from enterprise managed config.

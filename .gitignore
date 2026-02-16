@@ -56,6 +56,7 @@ vendor/
 *.out
 /bin/
 /status-line
+/statusline
 
 # Rust
 target/
@@ -112,3 +113,4 @@ out/
 # ============================================
 CLAUDE.md
 !./CLAUDE.md
+.grepai/

@@ -1,20 +1,21 @@
 #!/bin/bash
-# pre-validate.sh - Valide les modifications de fichiers protégés
+# pre-validate.sh - Validate modifications to protected files
 # Usage: pre-validate.sh <file_path>
 # Exit 0 = allow, Exit 2 = block
 
-set -euo pipefail
+set -uo pipefail
+# Note: Removed -e (errexit) to fail-open on unexpected errors
 
-FILE="$1"
+FILE="${1:-}"
 if [ -z "$FILE" ]; then
     exit 0
 fi
 
-# Chemins des fichiers de configuration
+# Configuration file paths
 PROTECTED_PATHS_FILE="/workspace/.claude/protected-paths.yml"
 PROTECTED_PATHS_DEFAULT="$HOME/.claude/protected-paths.yml"
 
-# Utiliser yq si disponible, sinon fallback sur patterns hardcodés
+# Use yq if available, otherwise fall back to hardcoded patterns
 USE_YQ=false
 if command -v yq &>/dev/null; then
     if [[ -f "$PROTECTED_PATHS_FILE" ]]; then
@@ -26,7 +27,7 @@ if command -v yq &>/dev/null; then
     fi
 fi
 
-# Patterns protégés par défaut (fallback)
+# Default protected patterns (fallback)
 PROTECTED_PATTERNS=(
     "node_modules/"
     ".git/"
@@ -47,7 +48,7 @@ PROTECTED_PATTERNS=(
     ".devcontainer/"
 )
 
-# Exceptions (toujours autorisées)
+# Exceptions (always allowed)
 EXCEPTIONS=(
     "*.md"
     "README*"
@@ -56,11 +57,11 @@ EXCEPTIONS=(
     ".claude/sessions/"
 )
 
-# Fonction pour vérifier si le fichier match une exception
+# Function to check if the file matches an exception
 is_exception() {
     local file="$1"
     for pattern in "${EXCEPTIONS[@]}"; do
-        # Utiliser le pattern matching bash
+        # Use bash pattern matching
         if [[ "$file" == *"$pattern"* ]] || [[ "$file" == $pattern ]]; then
             return 0
         fi
@@ -68,7 +69,7 @@ is_exception() {
     return 1
 }
 
-# Vérifier les exceptions d'abord
+# Check exceptions first
 if is_exception "$FILE"; then
     exit 0
 fi
@@ -76,59 +77,60 @@ fi
 # === Break Glass Check ===
 BREAK_GLASS_VAR="${ALLOW_PROTECTED_EDIT:-0}"
 if [[ "$BREAK_GLASS_VAR" == "1" ]]; then
-    echo "⚠️  BREAK-GLASS activé pour: $FILE"
+    echo "⚠️  BREAK-GLASS enabled for: $FILE"
     echo "   Variable: ALLOW_PROTECTED_EDIT=1"
-    # Log l'utilisation du break-glass
+    # Log break-glass usage
     logger -t "claude-protected" "BREAK-GLASS used for: $FILE by $(whoami)" 2>/dev/null || true
     exit 0
 fi
 
-# === Vérification avec yq si disponible ===
+# === Verification with yq if available ===
 if [[ "$USE_YQ" == "true" ]]; then
-    # Lire les patterns protégés depuis le fichier YAML
-    YAML_PATTERNS=$(yq -r '.protected[]' "$CONFIG_FILE" 2>/dev/null || echo "")
+    # Read protected patterns from the YAML file
+    # mikefarah/yq syntax (no -r flag needed, raw output is default)
+    YAML_PATTERNS=$(yq '.protected[]' "$CONFIG_FILE" 2>/dev/null || echo "")
 
     for pattern in $YAML_PATTERNS; do
         [[ -z "$pattern" ]] && continue
 
-        # Vérifier si le fichier match le pattern
+        # Check if the file matches the pattern
         if [[ "$FILE" == *"$pattern"* ]] || [[ "$FILE" == $pattern ]]; then
             echo "═══════════════════════════════════════════════"
-            echo "  🚫 FICHIER PROTÉGÉ"
+            echo "  🚫 PROTECTED FILE"
             echo "═══════════════════════════════════════════════"
             echo ""
-            echo "  Fichier: $FILE"
+            echo "  File: $FILE"
             echo "  Pattern: $pattern"
             echo ""
-            echo "  Ce fichier est protégé contre les modifications"
-            echo "  accidentelles par .claude/protected-paths.yml"
+            echo "  This file is protected against accidental"
+            echo "  modifications by .claude/protected-paths.yml"
             echo ""
-            echo "  Pour modifier ce fichier:"
-            echo "    1. Utilisez une task avec risk=high"
-            echo "    2. Activez: export ALLOW_PROTECTED_EDIT=1"
-            echo "    3. Fournissez une justification"
+            echo "  To modify this file:"
+            echo "    1. Request explicit user approval"
+            echo "    2. Enable: export ALLOW_PROTECTED_EDIT=1"
+            echo "    3. Provide a justification"
             echo ""
             echo "═══════════════════════════════════════════════"
             exit 2
         fi
     done
 else
-    # Fallback: utiliser les patterns hardcodés
+    # Fallback: use hardcoded patterns
     for pattern in "${PROTECTED_PATTERNS[@]}"; do
         if [[ "$FILE" == *"$pattern"* ]]; then
-            echo "🚫 Fichier protégé: $FILE"
+            echo "🚫 Protected file: $FILE"
             echo "   Pattern: $pattern"
-            echo "   Pour forcer: export ALLOW_PROTECTED_EDIT=1"
+            echo "   To force: export ALLOW_PROTECTED_EDIT=1"
             exit 2
         fi
     done
 fi
 
-# Vérification spéciale pour les commits sur main/master
+# Special check for commits on main/master
 if [[ "$FILE" == *"git commit"* ]] || [[ "$FILE" == *"git push"* ]]; then
     BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
     if [[ "$BRANCH" == "main" ]] || [[ "$BRANCH" == "master" ]]; then
-        echo "⚠️  Attention: opération sur branche $BRANCH"
+        echo "⚠️  Warning: operation on branch $BRANCH"
     fi
 fi
 
