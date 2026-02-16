@@ -56,13 +56,20 @@ func (s *StatusLineService) Generate(input port.InputProvider) string {
 //   - string: formatted status line ready for output
 func (s *StatusLineService) GenerateWithUpdate(input port.InputProvider, update model.UpdateInfo) string {
 	// Fetch usage data (ignore error, use zero value on failure)
-	usage, _ := s.deps.Usage.Usage()
+	usageData, _ := s.deps.Usage.Usage()
+
+	// Determine progress: prefer session API (real rate limit), fallback to context window
+	progress := input.Progress()
+	if usageData.Session.IsValid() {
+		progress = usageData.Session.Progress()
+	}
 
 	// Gather all data from various sources
 	data := model.StatusLineData{
 		Model:       input.ModelInfo(),
-		Progress:    input.Progress(),
-		Usage:       usage,
+		Progress:    progress,
+		Session:     usageData.Session,
+		Usage:       usageData.Weekly,
 		Icons:       model.IconConfigFromEnv(),
 		Git:         s.deps.Git.Status(),
 		System:      s.deps.System.Info(),

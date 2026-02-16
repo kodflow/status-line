@@ -10,6 +10,6 @@ type InputProvider interface {
 	ModelInfo() model.ModelInfo
 	// WorkingDir returns the current working directory.
 	WorkingDir() string
-	// Progress returns context usage progress.
+	// Progress returns context usage progress (fallback when API unavailable).
 	Progress() model.Progress
 }

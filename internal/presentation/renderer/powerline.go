@@ -72,12 +72,19 @@ func (r *Powerline) renderLine1(sb *strings.Builder, data model.StatusLineData) 
 		modelNextBg = BgWeekly
 	}
 
-	// Render Model segment with session context progress (no cursor)
+	// Build session cursor provider from API data (nil if no API data)
+	var sessionCursor CursorProvider
+	if data.Session.IsValid() {
+		s := data.Session
+		sessionCursor = &s
+	}
+
+	// Render Model segment with session progress and burn-rate cursor
 	modelData := &ModelSegmentData{
 		Model:    data.Model,
 		ShowIcon: data.Icons.Model,
 		Progress: data.Progress,
-		Cursor:   nil,
+		Cursor:   sessionCursor,
 		NextBg:   modelNextBg,
 	}
 	r.renderModelSegment(sb, modelData)

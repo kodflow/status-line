@@ -106,6 +106,161 @@ fi
 echo "All features validated successfully"
 
 # ============================================================================
+# Ollama Installation (Host GPU Acceleration for grepai)
+# ============================================================================
+# Ollama runs on the HOST to leverage GPU (Metal on Mac, CUDA on Linux)
+# The DevContainer connects via host.docker.internal:11434
+# ============================================================================
+# Extract Ollama model from grepai config (single source of truth)
+GREPAI_CONFIG="$DEVCONTAINER_DIR/images/grepai.config.yaml"
+OLLAMA_MODEL=$(grep -E '^\s+model:' "$GREPAI_CONFIG" 2>/dev/null | awk '{print $2}' | head -1)
+OLLAMA_MODEL="${OLLAMA_MODEL:-bge-m3}"
+
+echo ""
+echo "Setting up Ollama for GPU-accelerated semantic search..."
+
+# Detect OS
+detect_os() {
+    case "$OSTYPE" in
+        darwin*)  echo "macos" ;;
+        linux*)   echo "linux" ;;
+        msys*|cygwin*|mingw*) echo "windows" ;;
+        *)        echo "unknown" ;;
+    esac
+}
+
+# Check if Ollama is installed
+check_ollama_installed() {
+    command -v ollama &>/dev/null
+}
+
+# Check if Ollama is running
+check_ollama_running() {
+    curl -sf --connect-timeout 2 http://localhost:11434/api/tags &>/dev/null
+}
+
+# Install Ollama based on OS
+install_ollama() {
+    local os="$1"
+    echo "Installing Ollama..."
+
+    case "$os" in
+        macos)
+            if command -v brew &>/dev/null; then
+                brew install ollama
+            else
+                curl -fsSL https://ollama.ai/install.sh | sh
+            fi
+            ;;
+        linux)
+            curl -fsSL https://ollama.ai/install.sh | sh
+            ;;
+        windows)
+            echo "Windows detected. Please install Ollama manually:"
+            echo "  Download from: https://ollama.ai/download/windows"
+            echo "  Or via winget: winget install Ollama.Ollama"
+            return 1
+            ;;
+        *)
+            echo "Unknown OS. Please install Ollama manually from https://ollama.ai"
+            return 1
+            ;;
+    esac
+}
+
+# Start Ollama daemon
+start_ollama() {
+    local os="$1"
+    echo "Starting Ollama daemon..."
+
+    case "$os" in
+        macos)
+            # On macOS, ollama serve runs as a background service
+            # Check if launchd service exists
+            if launchctl list 2>/dev/null | grep -q "com.ollama"; then
+                launchctl start com.ollama.ollama 2>/dev/null || true
+            else
+                # Start manually in background
+                nohup ollama serve >/dev/null 2>&1 &
+            fi
+            ;;
+        linux)
+            # Check if systemd service exists
+            if systemctl list-unit-files 2>/dev/null | grep -q "ollama"; then
+                sudo systemctl start ollama 2>/dev/null || nohup ollama serve >/dev/null 2>&1 &
+            else
+                nohup ollama serve >/dev/null 2>&1 &
+            fi
+            ;;
+        windows)
+            # On Windows, Ollama typically runs as a service after installation
+            echo "Please ensure Ollama is running (check system tray)"
+            ;;
+    esac
+
+    # Wait for Ollama to be ready (max 30 seconds)
+    local retries=15
+    while [ $retries -gt 0 ]; do
+        if check_ollama_running; then
+            echo "Ollama is ready"
+            return 0
+        fi
+        retries=$((retries - 1))
+        sleep 2
+    done
+
+    echo "Warning: Ollama did not start in time"
+    return 1
+}
+
+# Pull embedding model if not present
+pull_model() {
+    local model="$1"
+    echo "Checking for embedding model: $model..."
+
+    if curl -sf http://localhost:11434/api/tags 2>/dev/null | grep -q "$model"; then
+        echo "Model $model already available"
+    else
+        echo "Pulling model $model (this may take a few minutes)..."
+        ollama pull "$model"
+    fi
+}
+
+# Main Ollama setup flow
+OS=$(detect_os)
+echo "Detected OS: $OS"
+
+if check_ollama_installed; then
+    echo "Ollama is installed"
+else
+    echo "Ollama not found, installing..."
+    if ! install_ollama "$OS"; then
+        echo "Warning: Could not install Ollama automatically"
+        echo "Semantic search will use CPU-only sidecar (slower)"
+    fi
+fi
+
+if check_ollama_installed; then
+    if check_ollama_running; then
+        echo "Ollama is running"
+    else
+        start_ollama "$OS"
+    fi
+
+    # Pull model if Ollama is running
+    if check_ollama_running; then
+        pull_model "$OLLAMA_MODEL"
+        echo "Ollama setup complete - GPU acceleration enabled"
+    fi
+else
+    echo "Warning: Ollama not available - will use CPU-only sidecar"
+    echo "To enable GPU acceleration, install Ollama manually:"
+    echo "  macOS: brew install ollama"
+    echo "  Linux: curl -fsSL https://ollama.ai/install.sh | sh"
+    echo "  Windows: https://ollama.ai/download/windows"
+fi
+
+# ============================================================================
 # Pull latest Docker image (bypass Docker cache on rebuild)
 # ============================================================================
 echo ""

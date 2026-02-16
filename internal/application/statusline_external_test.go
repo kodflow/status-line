@@ -32,8 +32,8 @@ func (m *mockTaskwarriorProv) Info() model.TaskwarriorInfo {
 
 type mockUsageProv struct{}
 
-func (m *mockUsageProv) Usage() (model.Usage, error) {
-	return model.Usage{}, nil
+func (m *mockUsageProv) Usage() (model.UsageData, error) {
+	return model.UsageData{}, nil
 }
 
 type mockRenderer struct{}

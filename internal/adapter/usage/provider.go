@@ -51,26 +51,22 @@ func NewProvider() *Provider {
 }
 
 
-// Usage returns the current weekly API usage.
+// Usage returns both session (5h) and weekly (7d) API usage.
 //
 // Returns:
-//   - model.Usage: utilization and reset time
+//   - model.UsageData: session and weekly utilization and reset times
 //   - error: any error during fetch
-func (p *Provider) Usage() (model.Usage, error) {
+func (p *Provider) Usage() (model.UsageData, error) {
 	// Get OAuth token
 	token, err := p.getToken()
-	// Check if token retrieval failed
 	if err != nil {
-		// Return empty usage on error
-		return model.Usage{}, err
+		return model.UsageData{}, err
 	}
 
 	// Create API request
 	req, err := http.NewRequest(http.MethodGet, usageAPIURL, nil)
-	// Check if request creation failed
 	if err != nil {
-		// Return empty usage on error
-		return model.Usage{}, err
+		return model.UsageData{}, err
 	}
 
 	// Set authorization header
@@ -80,40 +76,39 @@ func (p *Provider) Usage() (model.Usage, error) {
 
 	// Execute request
 	resp, err := p.client.Do(req)
-	// Check if request failed
 	if err != nil {
-		// Return empty usage on error
-		return model.Usage{}, err
+		return model.UsageData{}, err
 	}
-	// Ensure body is closed
 	defer resp.Body.Close()
 
 	// Read response body
 	body, err := io.ReadAll(resp.Body)
-	// Check if read failed
 	if err != nil {
-		// Return empty usage on error
-		return model.Usage{}, err
+		return model.UsageData{}, err
 	}
 
 	// Parse JSON response
 	var usage usageResponse
-	// Check if parsing failed
 	if err := json.Unmarshal(body, &usage); err != nil {
-		// Return empty usage on error
-		return model.Usage{}, err
+		return model.UsageData{}, err
 	}
 
-	// Parse reset time
-	resetsAt, err := time.Parse(time.RFC3339, usage.SevenDay.ResetsAt)
-	// Check if time parsing failed
+	// Parse session (five_hour) reset time
+	sessionResetsAt, err := time.Parse(time.RFC3339, usage.FiveHour.ResetsAt)
 	if err != nil {
-		// Use zero time on parse error
-		resetsAt = time.Time{}
+		sessionResetsAt = time.Time{}
 	}
 
-	// Return parsed usage data
-	return model.NewUsage(int(usage.SevenDay.Utilization), resetsAt), nil
+	// Parse weekly (seven_day) reset time
+	weeklyResetsAt, err := time.Parse(time.RFC3339, usage.SevenDay.ResetsAt)
+	if err != nil {
+		weeklyResetsAt = time.Time{}
+	}
+
+	return model.UsageData{
+		Session: model.NewSessionUsage(int(usage.FiveHour.Utilization), sessionResetsAt),
+		Weekly:  model.NewWeeklyUsage(int(usage.SevenDay.Utilization), weeklyResetsAt),
+	}, nil
 }
 
 // getToken retrieves the OAuth token from the appropriate source.
