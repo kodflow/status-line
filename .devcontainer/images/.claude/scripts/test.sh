@@ -1,4 +1,7 @@
 #!/bin/bash
+# shellcheck disable=SC1091,SC2015,SC2034,SC2221,SC2222
+# SC1091 optional sourced env; SC2015 intentional fail-open;
+# SC2034 BASENAME used in case dispatch; SC2221/SC2222 case patterns share body intentionally
 # Run tests for modified files
 # Usage: test.sh <file_path>
 #
@@ -12,7 +15,14 @@
 
 set +e  # Fail-open: hooks should never block unexpectedly
 
-FILE="${1:-}"
+# Read file_path from stdin JSON (preferred) or fallback to argument
+INPUT="$(cat 2>/dev/null || true)"
+FILE=""
+if [ -n "$INPUT" ] && command -v jq &>/dev/null; then
+    FILE=$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // ""' 2>/dev/null || true)
+fi
+FILE="${FILE:-${1:-}}"
+
 if [ -z "$FILE" ] || [ ! -f "$FILE" ]; then
     exit 0
 fi
@@ -20,6 +30,13 @@ fi
 EXT="${FILE##*.}"
 BASENAME=$(basename "$FILE")
 DIR=$(dirname "$FILE")
+
+# Pre-flight: skip files that never contain tests
+case "$BASENAME" in
+    *.md|*.json|*.yaml|*.yml|*.toml|*.lock|*.env|*.sh|*.css|*.scss|*.html|Dockerfile*|Makefile|*.gitignore)
+        exit 0
+        ;;
+esac
 
 # Source shared utilities
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -49,7 +66,7 @@ case "$EXT" in
     js|jsx|ts|tsx)
         if [ $IS_TEST -eq 1 ]; then
             if [ -f "$PROJECT_ROOT/package.json" ]; then
-                cd "$PROJECT_ROOT"
+                cd "$PROJECT_ROOT" || exit 1
                 # Check for test script in package.json
                 if grep -q '"test"' package.json 2>/dev/null; then
                     npm test -- "$FILE" 2>/dev/null || \
@@ -67,7 +84,7 @@ case "$EXT" in
     # Python
     py)
         if [ $IS_TEST -eq 1 ]; then
-            cd "$PROJECT_ROOT"
+            cd "$PROJECT_ROOT" || exit 1
             if command -v pytest &>/dev/null; then
                 pytest "$FILE" -v 2>/dev/null || true
             elif command -v python &>/dev/null; then
@@ -107,7 +124,7 @@ case "$EXT" in
     # Ruby
     rb)
         if [[ "$BASENAME" == *"_spec.rb" ]] || [[ "$BASENAME" == *"_test.rb" ]]; then
-            cd "$PROJECT_ROOT"
+            cd "$PROJECT_ROOT" || exit 1
             if command -v rspec &>/dev/null && [[ "$BASENAME" == *"_spec.rb" ]]; then
                 rspec "$FILE" 2>/dev/null || true
             elif command -v ruby &>/dev/null; then
@@ -130,7 +147,7 @@ case "$EXT" in
     # Java - Maven or Gradle
     java)
         if [[ "$BASENAME" == *"Test.java" ]] || [[ "$BASENAME" == *"Tests.java" ]]; then
-            cd "$PROJECT_ROOT"
+            cd "$PROJECT_ROOT" || exit 1
             CLASS_NAME="${BASENAME%.java}"
             if [ -f "$PROJECT_ROOT/pom.xml" ]; then
                 mvn test -Dtest="$CLASS_NAME" -q 2>/dev/null || true
@@ -154,7 +171,7 @@ case "$EXT" in
     # Dart - dart test or flutter test
     dart)
         if [[ "$BASENAME" == *"_test.dart" ]]; then
-            cd "$PROJECT_ROOT"
+            cd "$PROJECT_ROOT" || exit 1
             if [ -f "$PROJECT_ROOT/pubspec.yaml" ]; then
                 if command -v flutter &>/dev/null && grep -q "flutter:" "$PROJECT_ROOT/pubspec.yaml" 2>/dev/null; then
                     flutter test "$FILE" 2>/dev/null || true
@@ -193,7 +210,7 @@ case "$EXT" in
     # Kotlin - gradle test
     kt|kts)
         if [[ "$BASENAME" == *"Test.kt" ]] || [[ "$BASENAME" == *"Test.kts" ]]; then
-            cd "$PROJECT_ROOT"
+            cd "$PROJECT_ROOT" || exit 1
             CLASS_NAME="${BASENAME%.kt}"
             CLASS_NAME="${CLASS_NAME%.kts}"
             if [ -f "$PROJECT_ROOT/build.gradle" ] || [ -f "$PROJECT_ROOT/build.gradle.kts" ]; then

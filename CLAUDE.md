@@ -1,4 +1,4 @@
-<!-- updated: 2026-02-16T14:59:00Z -->
+<!-- updated: 2026-05-01T16:30:00Z -->
 # Status Line
 
 CLI Go pour afficher une status line Powerline personnalisée dans Claude Code.

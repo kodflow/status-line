@@ -5,6 +5,33 @@
 # Sourced by format.sh, lint.sh, typecheck.sh, test.sh to avoid duplication.
 # ============================================================================
 
+# Hook profile gating — controls which hooks execute based on HOOK_PROFILE env var.
+# Levels: minimal (critical only), standard (+ quality), full (all, default)
+#
+# Usage: check_hook_profile "standard" || exit 0
+#   critical  = always runs (git-guard, security)
+#   standard  = runs in standard + full (lint, format, quality)
+#   full      = runs only in full mode (observe, feature-update, logging)
+check_hook_profile() {
+    local required_level="$1"
+    local current="${HOOK_PROFILE:-full}"
+
+    case "$current" in
+        minimal)
+            if [ "$required_level" = "critical" ]; then
+                return 0
+            fi
+            return 1 ;;
+        standard)
+            if [ "$required_level" = "critical" ] || [ "$required_level" = "standard" ]; then
+                return 0
+            fi
+            return 1 ;;
+        full|*)
+            return 0 ;;
+    esac
+}
+
 # Find project root by walking up from a given directory
 # Checks for common build/config files that indicate a project root.
 # Usage: PROJECT_ROOT=$(find_project_root "$DIR")
@@ -68,4 +95,27 @@ run_makefile_target() {
     else
         make "$target" 2>/dev/null || true
     fi
+}
+
+# Get files changed on current branch vs base + working tree
+# Returns one path per line (relative to repo root), deduplicated.
+# On main/base branch: only working tree + index (no branch diff).
+# Usage: CHANGED=$(get_branch_changed_files [base_branch] [project_dir])
+get_branch_changed_files() {
+    local base="${1:-main}"
+    local project_dir="${2:-${CLAUDE_PROJECT_DIR:-/workspace}}"
+    (
+        cd "$project_dir" 2>/dev/null || return
+        local current_branch
+        current_branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+        {
+            # Branch diff only if not on the base branch itself
+            if [ -n "$current_branch" ] && [ "$current_branch" != "$base" ]; then
+                git diff --name-only "$base"...HEAD 2>/dev/null
+            fi
+            # Always include working tree + index changes
+            git diff --name-only 2>/dev/null
+            git diff --cached --name-only 2>/dev/null
+        } | sort -u
+    )
 }

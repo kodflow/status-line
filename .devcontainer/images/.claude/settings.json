@@ -1,23 +1,18 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
-  "model": "opus",
-  "alwaysThinkingEnabled": true,
-  "spinnerTipsEnabled": false,
-  "promptSuggestionEnabled": true,
-  "outputStyle": "default",
   "cleanupPeriodDays": 30,
-  "statusLine": {
-    "type": "command",
-    "command": "status-line"
-  },
   "env": {
     "BASH_DEFAULT_TIMEOUT_MS": "60000",
     "MAX_THINKING_TOKENS": "10000",
     "MCP_TIMEOUT": "30000",
-    "MAX_MCP_OUTPUT_TOKENS": "25000"
+    "MAX_MCP_OUTPUT_TOKENS": "25000",
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1",
+    "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR": "1",
+    "CLAUDE_CODE_AUTOCOMPACT_PCT_OVERRIDE": "85",
+    "DISABLE_ERROR_REPORTING": "1",
+    "CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY": "1"
   },
   "permissions": {
-    "defaultMode": "acceptEdits",
     "allow": [
       "Bash(npm:*)",
       "Bash(pnpm:*)",
@@ -74,7 +69,6 @@
       "Bash(date:*)",
       "Bash(env:*)",
       "Bash(printenv:*)",
-      "Bash(grepai:*)",
       "Bash(ruff:*)",
       "Bash(black:*)",
       "Bash(isort:*)",
@@ -131,18 +125,27 @@
       "Bash(nasm:*)",
       "Bash(sqlfluff:*)",
       "Bash(sql-formatter:*)",
+      "Bash(rtk:*)",
       "Bash(/home/vscode/.claude/scripts/*:*)",
       "Read(**/*)",
       "Glob(**/*)",
       "Grep(**/*)",
-      "mcp__grepai__*",
-      "mcp__context7__*"
+      "mcp__context7__*",
+      "Write(.claude/**)",
+      "Write(.devcontainer/**)",
+      "Write(.github/**)",
+      "Write(.githooks/**)",
+      "Edit(.claude/**)",
+      "Edit(.devcontainer/**)",
+      "Edit(.github/**)",
+      "Edit(.githooks/**)"
     ],
     "deny": [],
+    "defaultMode": "bypassPermissions",
     "additionalDirectories": []
   },
   "enableAllProjectMcpServers": true,
-  "disabledMcpjsonServers": ["codacy", "playwright"],
+  "disabledMcpjsonServers": [],
   "hooks": {
     "SessionStart": [
       {
@@ -166,24 +169,49 @@
         ]
       }
     ],
+    "SessionEnd": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/vscode/.claude/scripts/session-end.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/vscode/.claude/scripts/user-prompt-submit.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "Bash",
         "hooks": [
           {
             "type": "command",
-            "command": "/home/vscode/.claude/scripts/commit-validate.sh",
-            "timeout": 10
+            "command": "/home/vscode/.claude/scripts/git-guard.sh",
+            "timeout": 15
           },
           {
             "type": "command",
-            "command": "/home/vscode/.claude/scripts/security.sh",
-            "timeout": 30
+            "command": "/home/vscode/.claude/scripts/rtk-rewrite.sh",
+            "timeout": 5
           },
           {
             "type": "command",
             "command": "/home/vscode/.claude/scripts/log.sh",
-            "timeout": 5
+            "timeout": 5,
+            "async": true
           }
         ]
       },
@@ -192,8 +220,20 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/home/vscode/.claude/scripts/pre-validate.sh \"$CLAUDE_FILE_PATH\"",
-            "timeout": 60
+            "command": "/home/vscode/.claude/scripts/pre-validate.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/vscode/.claude/scripts/permission-request.sh",
+            "timeout": 5
           }
         ]
       }
@@ -204,18 +244,15 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/home/vscode/.claude/scripts/post-edit.sh \"$CLAUDE_FILE_PATH\"",
-            "timeout": 60
+            "command": "/home/vscode/.claude/scripts/post-edit.sh",
+            "timeout": 15,
+            "statusMessage": "Formatting..."
           },
           {
             "type": "command",
-            "command": "/home/vscode/.claude/scripts/security.sh \"$CLAUDE_FILE_PATH\"",
-            "timeout": 60
-          },
-          {
-            "type": "command",
-            "command": "/home/vscode/.claude/scripts/test.sh \"$CLAUDE_FILE_PATH\"",
-            "timeout": 60
+            "command": "/home/vscode/.claude/scripts/feature-update.sh",
+            "timeout": 5,
+            "async": true
           }
         ]
       },
@@ -225,34 +262,170 @@
           {
             "type": "command",
             "command": "/home/vscode/.claude/scripts/log.sh",
+            "timeout": 5,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/vscode/.claude/scripts/post-tool-failure.sh",
             "timeout": 5
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/vscode/.claude/scripts/subagent-start.sh",
+            "timeout": 5,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/vscode/.claude/scripts/subagent-stop.sh",
+            "timeout": 5,
+            "async": true
           }
         ]
       }
     ],
     "Stop": [
       {
-        "matcher": "*",
+        "matcher": "",
         "hooks": [
           {
             "type": "command",
             "command": "/home/vscode/.claude/scripts/on-stop.sh",
+            "timeout": 45
+          }
+        ]
+      }
+    ],
+    "TeammateIdle": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/vscode/.claude/scripts/teammate-idle.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "TaskCompleted": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/vscode/.claude/scripts/task-completed.sh",
+            "timeout": 5,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "TaskCreated": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/vscode/.claude/scripts/task-created.sh",
+            "timeout": 5,
+            "async": false
+          }
+        ]
+      }
+    ],
+    "ConfigChange": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/vscode/.claude/scripts/config-change.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "WorktreeCreate": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/vscode/.claude/scripts/worktree-create.sh",
             "timeout": 10
+          }
+        ]
+      }
+    ],
+    "WorktreeRemove": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/vscode/.claude/scripts/worktree-remove.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/home/vscode/.claude/scripts/pre-compact.sh",
+            "timeout": 10,
+            "async": true
           }
         ]
       }
     ],
     "Notification": [
       {
-        "matcher": "*",
+        "matcher": "",
         "hooks": [
           {
             "type": "command",
             "command": "/home/vscode/.claude/scripts/notification.sh",
-            "timeout": 5
+            "timeout": 5,
+            "async": true
           }
         ]
       }
     ]
-  }
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "status-line"
+  },
+  "outputStyle": "default",
+  "spinnerTipsEnabled": false,
+  "alwaysThinkingEnabled": true,
+  "promptSuggestionEnabled": true,
+  "skipDangerousModePermissionPrompt": true
 }

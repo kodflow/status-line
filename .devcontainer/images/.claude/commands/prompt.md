@@ -43,6 +43,32 @@ DONE:  All public routes throttled at 100 req/min per IP, existing tests pass, n
 
 ---
 
+## Interview Mode (Complex Features)
+
+When requirements are unclear or the feature is large, skip the template and ask Claude to challenge your thinking:
+
+```
+/plan "
+INTERVIEW: <brief description of what you want to build>
+"
+```
+
+Claude will:
+1. Ask targeted questions about implementation, edge cases, and tradeoffs
+2. Challenge assumptions you might not have considered
+3. Generate a spec from your answers before planning
+
+**When to use Interview vs Template:**
+
+| Situation | Use |
+|-----------|-----|
+| Clear scope, known files | Template (WHAT/WHY/WHERE/HOW/DONE) |
+| Fuzzy requirements, many unknowns | Interview mode |
+| Large feature (10+ files) | Interview mode |
+| Bug fix with known location | Template |
+
+---
+
 ## Dimension Guide
 
 | Dimension | Question it answers | Feeds /plan phase |
@@ -70,13 +96,13 @@ DONE:  All public routes throttled at 100 req/min per IP, existing tests pass, n
 ## When to Use Each Command
 
 ```
-Need research first?  ->  /search <topic>  ->  generates .context.md
+Need research first?  ->  /search <topic>  ->  generates .claude/contexts/{slug}.md
 Ready to plan?        ->  /prompt           ->  helps write the description
-Have the description? ->  /plan "..."       ->  creates implementation plan
-Plan approved?        ->  /do               ->  executes the plan
+Have the description? ->  /plan "..."       ->  creates plan + persists to .claude/plans/{slug}.md
+Plan approved?        ->  /do               ->  executes the plan (from conversation or disk)
 ```
 
-**Rule of thumb:** If your /plan description exceeds 10 lines, run /search first to offload context into .context.md, then keep the /plan description focused on WHAT/WHY/WHERE/HOW/DONE.
+**Rule of thumb:** If your /plan description exceeds 10 lines, run /search first to offload context into `.claude/contexts/{slug}.md`, then keep the /plan description focused on WHAT/WHY/WHERE/HOW/DONE.
 
 ---
 

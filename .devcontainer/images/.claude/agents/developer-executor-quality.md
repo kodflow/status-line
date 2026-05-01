@@ -1,5 +1,7 @@
 ---
 name: developer-executor-quality
+teamRole: teammate
+teamSafe: true
 description: |
   Code quality analysis executor. Detects complexity issues, code smells,
   style violations, and maintainability problems. Invoked by developer-specialist-review.
@@ -9,20 +11,12 @@ tools:
   - Read
   - Glob
   - Grep
-  - mcp__grepai__grepai_search
-  - mcp__grepai__grepai_trace_callers
-  - mcp__grepai__grepai_trace_callees
-  - mcp__grepai__grepai_trace_graph
-  - mcp__grepai__grepai_index_status
   - Bash
-  # Codacy MCP (Quality Analysis)
-  - mcp__codacy__codacy_list_repository_issues
-  - mcp__codacy__codacy_get_file_issues
-  - mcp__codacy__codacy_get_file_with_analysis
-  - mcp__codacy__codacy_get_file_clones
-  - mcp__codacy__codacy_get_repository_with_analysis
-  - mcp__codacy__codacy_list_files
-  - mcp__codacy__codacy_cli_analyze
+  - SendMessage
+  - TaskCreate
+  - TaskUpdate
+  - TaskList
+  - TaskGet
 model: haiku
 context: fork
 allowed-tools:
@@ -112,20 +106,6 @@ quality_checks:
 }
 ```
 
-## MCP Integration
-
-Use Codacy for quality issues:
-
-```
-mcp__codacy__codacy_list_repository_issues:
-  provider: "gh"
-  organization: <from git remote>
-  repository: <from git remote>
-  options:
-    categories: ["complexity", "errorprone", "codestyle"]
-    levels: ["Warning", "Error"]
-```
-
 ## Severity Mapping
 
 | Level | Criteria |
@@ -185,3 +165,15 @@ dto_check:
 ```
 
 **Reference:** `~/.claude/docs/conventions/dto-tags.md`
+
+---
+
+## When spawned as a TEAMMATE
+
+You are an independent Claude Code instance. You do NOT see the lead's conversation history.
+
+- Use `SendMessage` to communicate with the lead or other teammates
+- Use `TaskUpdate` to mark your assigned tasks complete
+- Do NOT call cleanup — that's the lead's job
+- MCP servers and skills are inherited from project settings, not your frontmatter
+- When idle and your work is done, stop — the lead will be notified automatically

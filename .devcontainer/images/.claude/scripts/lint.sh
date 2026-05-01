@@ -1,4 +1,6 @@
 #!/bin/bash
+# shellcheck disable=SC1091,SC2034  # SC1091: optional sourced env; SC2034: BASENAME used downstream
+
 # Lint files based on extension
 # Usage: lint.sh <file_path>
 #
@@ -24,6 +26,9 @@ BASENAME=$(basename "$FILE")
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=common.sh
 [ -f "$SCRIPT_DIR/common.sh" ] && . "$SCRIPT_DIR/common.sh"
+
+# Hook profile gate: lint is "standard" level (skipped in minimal mode)
+check_hook_profile "standard" || exit 0
 
 PROJECT_ROOT=$(find_project_root "$DIR" "$DIR")
 
