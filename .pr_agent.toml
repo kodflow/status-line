@@ -1,0 +1,67 @@
+# Qodo Merge (formerly PR-Agent) configuration
+# Triggered manually by adding the `qodo` label on a PR.
+# https://qodo-merge-docs.qodo.ai/usage-guide/configuration_options/
+
+[config]
+# Don't auto-run on every PR — too noisy alongside CodeRabbit.
+# Use the `qodo` label as the trigger.
+model = "claude-sonnet-4-6"
+fallback_models = ["claude-haiku-4-5"]
+publish_output = true
+verbosity_level = 1
+
+[github_app]
+# Auto-actions on PR events. Empty = nothing runs automatically.
+# Devs trigger via label or `/review` / `/improve` / `/describe` comments.
+pr_commands = []
+push_commands = []
+
+# Label-triggered review: when `qodo` is added on a PR, run /review.
+handle_pr_actions = ["labeled"]
+labels_to_handle = ["qodo"]
+labels_to_actions = { qodo = ["/review", "/improve"] }
+
+[pr_reviewer]
+require_score_review = true
+require_tests_review = true
+require_estimated_effort_to_review = true
+require_can_be_split_review = false
+require_security_review = true
+num_code_suggestions = 4
+extra_instructions = """
+Focus on:
+- Hexagonal-boundary breaches (adapter types leaking into internal/domain).
+- Hot-path latency (StatusLineService.Render must stay tens of ms).
+- Error surfacing (status line must never crash or block Claude Code).
+- Conventional Commit scope on the PR title.
+Skip stylistic nits unless they obscure intent. Skip .devcontainer/**.
+"""
+
+[pr_description]
+publish_labels = false  # CodeRabbit owns labeling
+add_original_user_description = true
+keep_original_user_title = true
+extra_instructions = """
+Preserve the user-written Summary and Test plan sections verbatim.
+Do not append AI disclaimers.
+"""
+
+[pr_code_suggestions]
+num_code_suggestions = 4
+commitable_code_suggestions = false
+suggestions_score_threshold = 7
+extra_instructions = """
+Skip suggestions on .devcontainer/**, .github/**, vendor/**.
+Prioritize correctness and concurrency over style.
+"""
+
+[ignore]
+glob = [
+    ".devcontainer/**",
+    ".github/**",
+    "vendor/**",
+    "bin/**",
+    ".claude/**",
+    "**/*.sum",
+    "**/*.lock",
+]

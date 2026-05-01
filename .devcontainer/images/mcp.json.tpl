@@ -1,23 +1,29 @@
 {
   "mcpServers": {
-    "codacy": {
-      "command": "npx",
-      "args": ["-y", "@codacy/codacy-mcp@latest"],
-      "env": {
-        "CODACY_ACCOUNT_TOKEN": "{{CODACY_TOKEN}}"
-      }
-    },
     "github": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "-e",
+        "GITHUB_PERSONAL_ACCESS_TOKEN",
+        "ghcr.io/github/github-mcp-server:latest"
+      ],
       "env": {
         "GITHUB_PERSONAL_ACCESS_TOKEN": "{{GITHUB_TOKEN}}"
       }
     },
-    "taskwarrior": {
+    "gitlab": {
       "command": "npx",
-      "args": ["-y", "mcp-server-taskwarrior"],
-      "env": {}
+      "args": [
+        "-y",
+        "@zereight/mcp-gitlab@latest"
+      ],
+      "env": {
+        "GITLAB_PERSONAL_ACCESS_TOKEN": "{{GITLAB_TOKEN}}",
+        "GITLAB_API_URL": "{{GITLAB_API_URL:-https://gitlab.com/api/v4}}"
+      }
     }
   }
 }

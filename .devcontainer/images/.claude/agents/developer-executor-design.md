@@ -1,5 +1,7 @@
 ---
 name: developer-executor-design
+teamRole: teammate
+teamSafe: true
 description: |
   Design pattern and architecture analyzer. Detects antipatterns, DDD violations,
   layering issues, and SOLID principle violations. Consults ~/.claude/docs/ for patterns
@@ -10,17 +12,17 @@ tools:
   - Read
   - Glob
   - Grep
-  - mcp__grepai__grepai_search
-  - mcp__grepai__grepai_trace_callers
-  - mcp__grepai__grepai_trace_callees
-  - mcp__grepai__grepai_trace_graph
-  - mcp__grepai__grepai_index_status
   - Bash
   # Documentation (local + remote)
   - mcp__context7__resolve-library-id
   - mcp__context7__query-docs
   - WebFetch
-model: opus
+  - SendMessage
+  - TaskCreate
+  - TaskUpdate
+  - TaskList
+  - TaskGet
+model: sonnet
 context: fork
 allowed-tools:
   - "Bash(git diff:*)"
@@ -287,3 +289,15 @@ solid:
 | **HIGH** | Layering violation, DDD violation |
 | **MEDIUM** | Design antipattern, SOLID violation |
 | **LOW** | Maintainability antipattern |
+
+---
+
+## When spawned as a TEAMMATE
+
+You are an independent Claude Code instance. You do NOT see the lead's conversation history.
+
+- Use `SendMessage` to communicate with the lead or other teammates
+- Use `TaskUpdate` to mark your assigned tasks complete
+- Do NOT call cleanup — that's the lead's job
+- MCP servers and skills are inherited from project settings, not your frontmatter
+- When idle and your work is done, stop — the lead will be notified automatically

@@ -1,5 +1,7 @@
 ---
 name: docs-analyzer-mcp
+teamRole: teammate
+teamSafe: true
 description: |
   Docs analyzer: MCP server configuration inventory.
   Analyzes mcp.json and mcp.json.tpl for servers, tools, and auth.
@@ -9,7 +11,11 @@ tools:
   - Glob
   - Grep
   - Bash
-  - mcp__grepai__grepai_search
+  - SendMessage
+  - TaskCreate
+  - TaskUpdate
+  - TaskList
+  - TaskGet
 model: haiku
 context: fork
 allowed-tools:
@@ -39,7 +45,7 @@ Analyze MCP server configuration and produce a condensed inventory.
    - When to use (from CLAUDE.md rules)
 3. Document special rules:
    - MCP-FIRST rule
-   - GREPAI-FIRST rule
+   - RTK-FIRST rule (PreToolUse hook compresses Bash output)
    - Context7 usage pattern
 
 ## Scoring
@@ -60,15 +66,27 @@ Analyze MCP server configuration and produce a condensed inventory.
 {
   "agent": "mcp",
   "servers": [
-    {"name": "grepai", "package": "grepai binary", "auth": "none", "key_tools": ["grepai_search", "grepai_trace_callers"], "usage": "Semantic code search"},
-    {"name": "github", "package": "ghcr.io/github/github-mcp-server", "auth": "GITHUB_TOKEN", "key_tools": ["create_pull_request", "list_issues"], "usage": "GitHub operations"}
+    {"name": "github", "package": "ghcr.io/github/github-mcp-server", "auth": "GITHUB_TOKEN", "key_tools": ["create_pull_request", "list_issues"], "usage": "GitHub operations"},
+    {"name": "context7", "package": "@upstash/context7-mcp", "auth": "none", "key_tools": ["resolve-library-id", "query-docs"], "usage": "Up-to-date library documentation"}
   ],
-  "rules": ["MCP-FIRST", "GREPAI-FIRST", "context7 for docs"],
-  "total_servers": 6,
+  "rules": ["MCP-FIRST", "RTK-FIRST for token savings", "context7 for docs"],
+  "total_servers": 5,
   "scoring": {"complexity": 6, "usage": 10, "uniqueness": 8, "gap": 4},
-  "summary": "6 MCP servers with MCP-FIRST and GREPAI-FIRST rules"
+  "summary": "5 MCP servers with MCP-FIRST and RTK-FIRST rules"
 }
 ```
 
 5. Return EXACTLY one line: `DONE: mcp - {count} servers analyzed, score {avg}/10`
 6. Do NOT return the full JSON in your response - only the DONE line
+
+---
+
+## When spawned as a TEAMMATE
+
+You are an independent Claude Code instance. You do NOT see the lead's conversation history.
+
+- Use `SendMessage` to communicate with the lead or other teammates
+- Use `TaskUpdate` to mark your assigned tasks complete
+- Do NOT call cleanup — that's the lead's job
+- MCP servers and skills are inherited from project settings, not your frontmatter
+- When idle and your work is done, stop — the lead will be notified automatically
