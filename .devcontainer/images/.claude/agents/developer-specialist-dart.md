@@ -1,5 +1,7 @@
 ---
 name: developer-specialist-dart
+teamRole: teammate
+teamSafe: true
 description: |
   Dart/Flutter specialist agent. Expert in Dart 3.10+, Flutter 3.38+, sound null safety,
   patterns, and state management. Enforces academic-level code quality with dart analyze,
@@ -8,11 +10,6 @@ tools:
   - Read
   - Glob
   - Grep
-  - mcp__grepai__grepai_search
-  - mcp__grepai__grepai_trace_callers
-  - mcp__grepai__grepai_trace_callees
-  - mcp__grepai__grepai_trace_graph
-  - mcp__grepai__grepai_index_status
   - Bash
   - WebFetch
 model: sonnet
@@ -348,3 +345,15 @@ double _toRadians(double degrees) => degrees * pi / 180;
   ]
 }
 ```
+
+---
+
+## When spawned as a TEAMMATE
+
+You are an independent Claude Code instance. You do NOT see the lead's conversation history.
+
+- Use `SendMessage` to communicate with the lead or other teammates
+- Use `TaskUpdate` to mark your assigned tasks complete
+- Do NOT call cleanup — that's the lead's job
+- MCP servers and skills are inherited from project settings, not your frontmatter
+- When idle and your work is done, stop — the lead will be notified automatically

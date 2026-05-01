@@ -15,6 +15,45 @@ set +e  # Fail-open: never block
 
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-/workspace}"
 
+# Read stdin for session metadata
+INPUT="$(cat 2>/dev/null || true)"
+SOURCE=""
+MODEL=""
+if [ -n "$INPUT" ] && command -v jq &>/dev/null; then
+    SOURCE=$(printf '%s' "$INPUT" | jq -r '.source // ""' 2>/dev/null || echo "")
+    MODEL=$(printf '%s' "$INPUT" | jq -r '.model // ""' 2>/dev/null || echo "")
+fi
+
+# Clean up orphaned worktrees FIRST (from crashed/interrupted sessions)
+# Avoids leaving stale worktree directories around between sessions.
+# Must run before any early-exit so cleanup always happens
+WORKTREE_BASE="$HOME/.claude/worktrees"
+BUILTIN_BASE="$PROJECT_DIR/.claude/worktrees"
+WORKTREE_BASE_REAL=$(realpath -m "$WORKTREE_BASE" 2>/dev/null || echo "")
+BUILTIN_BASE_REAL=$(realpath -m "$BUILTIN_BASE" 2>/dev/null || echo "")
+for WT_BASE in "$WORKTREE_BASE" "$BUILTIN_BASE"; do
+    if [ -d "$WT_BASE" ]; then
+        for wt_dir in "$WT_BASE"/*/; do
+            wt_dir="${wt_dir%/}"
+            [ -d "$wt_dir" ] || continue
+            # Skip symlinks to prevent following them into unrelated directories
+            [ -L "$wt_dir" ] && continue
+            # Canonicalize and verify path is under allowed bases
+            wt_real=$(realpath -m "$wt_dir" 2>/dev/null || echo "")
+            [ -n "$wt_real" ] || continue
+            [[ "$wt_real" == "$WORKTREE_BASE_REAL/"* ]] || \
+            [[ "$wt_real" == "$BUILTIN_BASE_REAL/"* ]] || continue
+            [ -d "$wt_real" ] || continue
+            # Remove worktrees older than 24h (likely orphaned)
+            if find "$wt_real" -maxdepth 0 -mmin +1440 -print -quit 2>/dev/null | grep -q .; then
+                git -C "$PROJECT_DIR" worktree remove "$wt_real" --force 2>/dev/null || \
+                    rm -rf -- "$wt_real" 2>/dev/null || true
+            fi
+        done
+        git -C "$PROJECT_DIR" worktree prune 2>/dev/null || true
+    fi
+done
+
 # CLAUDE_ENV_FILE is set by Claude Code runtime; if not, we cannot write env vars
 ENV_FILE="${CLAUDE_ENV_FILE:-}"
 if [ -z "$ENV_FILE" ]; then
@@ -43,5 +82,21 @@ fi
     echo "GH_BRANCH=$GH_BRANCH"
     echo "GH_DEFAULT_BRANCH=$GH_DEFAULT_BRANCH"
 } >> "$ENV_FILE" 2>/dev/null || true
+
+# Log session start with source and model
+BRANCH_SAFE=$(printf '%s' "$GH_BRANCH" | tr '/ ' '__')
+LOG_DIR="$PROJECT_DIR/.claude/logs/$BRANCH_SAFE"
+mkdir -p "$LOG_DIR" 2>/dev/null || true
+
+if command -v jq &>/dev/null; then
+    TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+    jq -n -c \
+        --arg ts "$TIMESTAMP" \
+        --arg src "$SOURCE" \
+        --arg mdl "$MODEL" \
+        --arg branch "$GH_BRANCH" \
+        '{timestamp:$ts,source:$src,model:$mdl,branch:$branch,event:"SessionStart"}' \
+        >> "$LOG_DIR/session.jsonl" 2>/dev/null || true
+fi
 
 exit 0

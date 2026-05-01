@@ -1,5 +1,7 @@
 ---
 name: docs-analyzer-architecture
+teamRole: lead
+teamSafe: true
 description: |
   Docs analyzer: Deep architecture analysis with C4 diagrams.
   Reads Phase 1A results from /tmp/docs-analysis/ for context.
@@ -10,10 +12,11 @@ tools:
   - Glob
   - Grep
   - Bash
-  - mcp__grepai__grepai_search
-  - mcp__grepai__grepai_trace_callers
-  - mcp__grepai__grepai_trace_callees
-  - mcp__grepai__grepai_trace_graph
+  - SendMessage
+  - TaskCreate
+  - TaskUpdate
+  - TaskList
+  - TaskGet
 model: sonnet
 context: fork
 allowed-tools:
@@ -130,3 +133,15 @@ Search for: caching, event sourcing, CQRS, rate limiting, circuit breakers, obse
 
 4. Return EXACTLY one line: `DONE: architecture - {component_count} components, {api_count} APIs, score {avg}/10`
 5. Do NOT return the full JSON in your response - only the DONE line
+
+---
+
+## When spawned as a TEAMMATE
+
+You are an independent Claude Code instance. You do NOT see the lead's conversation history.
+
+- Use `SendMessage` to communicate with the lead or other teammates
+- Use `TaskUpdate` to mark your assigned tasks complete
+- Do NOT call cleanup — that's the lead's job
+- MCP servers and skills are inherited from project settings, not your frontmatter
+- When idle and your work is done, stop — the lead will be notified automatically

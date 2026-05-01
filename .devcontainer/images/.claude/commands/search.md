@@ -3,33 +3,24 @@ name: search
 description: |
   Documentation Research with RLM (Recursive Language Model) patterns.
   LOCAL-FIRST: Searches internal docs (~/.claude/docs/) before external sources.
-  Cross-validates sources, generates .context.md, handles conflicts.
+  Cross-validates sources, generates .claude/contexts/{slug}.md, handles conflicts.
   Use when: researching technologies, APIs, or best practices before implementation.
 allowed-tools:
   - "WebSearch(*)"
   - "WebFetch(*)"
   - "Read(**/*)"
   - "Glob(**/*)"
-  - "mcp__grepai__*"
   - "Grep(**/*)"
-  - "Write(.context.md)"
+  - "Write(.claude/contexts/*.md)"
   - "Task(*)"
   - "AskUserQuestion(*)"
   - "mcp__context7__*"
-  - "mcp__github__create_issue"
+  - "mcp__github__issue_write"
 ---
 
 # Search - Documentation Research (RLM-Enhanced)
 
 $ARGUMENTS
-
-## GREPAI-FIRST (MANDATORY)
-
-Use `grepai_search` for ALL semantic/meaning-based queries BEFORE Grep.
-Use `grepai_trace_callers`/`grepai_trace_callees` for impact analysis.
-Fallback to Grep ONLY for exact string matches or regex patterns.
-
----
 
 ## Description
 
@@ -63,9 +54,11 @@ Research with **LOCAL-FIRST** strategy and RLM patterns.
 | Pattern | Action |
 |---------|--------|
 | `<query>` | New search on the topic |
-| `--append` | Append to existing context |
+| `--append` | Append to existing context (by slug) |
 | `--status` | Display current context |
-| `--clear` | Delete the .context.md file |
+| `--list` | List all available contexts |
+| `--clear` | Delete specific context (by slug) |
+| `--clear --all` | Delete all context files |
 | `--help` | Display help |
 
 ---
@@ -81,10 +74,16 @@ Usage: /search <query> [options]
 
 Options:
   <query>           Search topic
-  --append          Append to existing context
+  --append          Append to existing context (by slug)
   --status          Display current context
-  --clear           Delete .context.md
+  --list            List all available contexts
+  --clear           Delete specific context (by slug)
+  --clear --all     Delete all context files
   --help            Display this help
+
+Output: .claude/contexts/{slug}.md
+  Slug generated from query keywords (lowercase, hyphens, max 40 chars)
+  Example: "OAuth2 JWT authentication" → oauth2-jwt-auth
 
 RLM Patterns (always applied):
   1. Peek    - Quick preview of results
@@ -104,7 +103,7 @@ Workflow:
 
 ---
 
-## Official sources (Whitelist)
+## Official Sources (Whitelist)
 
 **ABSOLUTE RULE**: ONLY the following domains.
 
@@ -117,6 +116,21 @@ Workflow:
 | Rust | rust-lang.org, doc.rust-lang.org |
 | Java | docs.oracle.com, openjdk.org |
 | C/C++ | cppreference.com, isocpp.org |
+| C# / .NET | learn.microsoft.com, dotnet.microsoft.com |
+| Ruby | ruby-lang.org, ruby-doc.org |
+| PHP | php.net |
+| Elixir | elixir-lang.org, hexdocs.pm |
+| Kotlin | kotlinlang.org |
+| Swift | swift.org, developer.apple.com |
+| Scala | scala-lang.org, docs.scala-lang.org |
+| Dart/Flutter | dart.dev, api.flutter.dev |
+| Perl | perldoc.perl.org |
+| Lua | lua.org |
+| R | r-project.org, cran.r-project.org |
+| Fortran | fortran-lang.org |
+| Ada | ada-lang.io, learn.adacore.com |
+| COBOL | gnucobol.sourceforge.io |
+| Pascal | freepascal.org, lazarus-ide.org |
 
 ### Cloud & Infra
 
@@ -149,499 +163,54 @@ Workflow:
 
 ### Blacklist
 
-- ❌ Blogs, Medium, Dev.to
-- ❌ Stack Overflow (except for problem identification)
-- ❌ Third-party tutorials, online courses
+- Blogs, Medium, Dev.to
+- Stack Overflow (except for problem identification)
+- Third-party tutorials, online courses
 
 ---
 
-## RLM Workflow (7 phases)
+## Phase Reference
 
-### Phase 1.0: Local documentation (LOCAL-FIRST)
-
-**ALWAYS execute first. Local documentation is VALIDATED and takes priority.**
-
-```yaml
-local_first:
-  source: "~/.claude/docs/"
-  index: "~/.claude/docs/README.md"
-
-  workflow:
-    1_search_local:
-      action: |
-        Grep("~/.claude/docs/", pattern=<keywords>)
-        Glob("~/.claude/docs/**/*.md", pattern=<topic>)
-      output: [matching_files]
-
-    2_read_matches:
-      action: |
-        FOR each matching_file:
-          Read(matching_file)
-          Extract: definition, examples, related patterns
-      output: local_knowledge
-
-    3_evaluate_coverage:
-      rule: |
-        IF local_knowledge covers >= 80% of the query:
-          status = "LOCAL_COMPLETE"
-          → Skip Phase 1-3, go to Phase 6
-        ELSE IF local_knowledge covers >= 40%:
-          status = "LOCAL_PARTIAL"
-          → Continue Phase 0+ for gaps only
-        ELSE:
-          status = "LOCAL_NONE"
-          → Continue normal workflow
-
-  categories_mapping:
-    design_patterns: "creational/, structural/, behavioral/"
-    performance: "performance/"
-    concurrency: "concurrency/"
-    enterprise: "enterprise/"
-    messaging: "messaging/"
-    ddd: "ddd/"
-    functional: "functional/"
-    architecture: "architectural/"
-    cloud: "cloud/, resilience/"
-    security: "security/"
-    testing: "testing/"
-    devops: "devops/"
-    integration: "integration/"
-    principles: "principles/"
-```
-
-**Output Phase 1.0:**
-
-```
-═══════════════════════════════════════════════
-  /search - Local Documentation Check
-═══════════════════════════════════════════════
-
-  Query    : <query>
-  Keywords : <k1>, <k2>, <k3>
-
-  Local Search (~/.claude/docs/):
-    ├─ Matches: 3 files
-    │   ├─ behavioral/observer.md (95% match)
-    │   ├─ behavioral/README.md (70% match)
-    │   └─ principles/solid.md (40% match)
-    │
-    └─ Coverage: 85% → LOCAL_COMPLETE
-
-  Status: ✓ Using local documentation (validated)
-  External search: SKIPPED (local sufficient)
-
-═══════════════════════════════════════════════
-```
-
-**If LOCAL_PARTIAL:**
-
-```
-═══════════════════════════════════════════════
-  /search - Local Documentation Check
-═══════════════════════════════════════════════
-
-  Query    : "OAuth2 JWT authentication"
-  Keywords : OAuth2, JWT, authentication
-
-  Local Search (~/.claude/docs/):
-    ├─ Matches: 1 file
-    │   └─ security/README.md (50% match)
-    │
-    └─ Coverage: 50% → LOCAL_PARTIAL
-
-  Status: ⚠ Partial local coverage
-  Gaps identified:
-    ├─ OAuth2 flow details (not in local)
-    └─ JWT implementation specifics (not in local)
-
-  Action: External search for gaps only
-
-═══════════════════════════════════════════════
-```
+| Phase | Module | Description |
+|-------|--------|-------------|
+| 1.0-2.0 | Read ~/.claude/commands/search/local.md | Local-first search + decomposition |
+| 3.0-5.0, 8.0 | Read ~/.claude/commands/search/parallel.md | Parallel search + deep fetch + questions |
+| 6.0-7.0 | Read ~/.claude/commands/search/validate.md | Cross-reference + conflict resolution |
+| 9.0 | Read ~/.claude/commands/search/generate.md | Context file generation + management |
 
 ---
 
-### Phase 2.0: Decomposition (RLM Pattern: Peek + Grep)
-
-**Analyze the query BEFORE any search:**
-
-1. **Peek** - Identify complexity
-   - Simple query (1 concept) → Direct Phase 1
-   - Complex query (2+ concepts) → Decompose
-
-2. **Grep** - Extract keywords
-   ```
-   Query: "OAuth2 with JWT for REST API"
-   Keywords: [OAuth2, JWT, API, REST]
-   Technologies: [OAuth2 → rfc-editor.org, JWT → tools.ietf.org]
-   ```
-
-3. **Systematic parallelization**
-   - Always launch up to 6 Task agents in parallel
-   - Cover all relevant domains
-
-**Output Phase 0:**
-```
-═══════════════════════════════════════════════
-  /search - RLM Decomposition
-═══════════════════════════════════════════════
-
-  Query    : <query>
-  Keywords : <k1>, <k2>, <k3>
-
-  Decomposition:
-    ├─ Sub-query 1: <concept1> → <domain1>
-    ├─ Sub-query 2: <concept2> → <domain2>
-    └─ Sub-query 3: <concept3> → <domain3>
-
-  Strategy: PARALLEL (6 Task agents max)
-
-═══════════════════════════════════════════════
-```
-
----
-
-### Phase 3.0: Parallel search (RLM Pattern: Partition + Map)
-
-**For each sub-query, launch a Task agent:**
+## Execution Flow
 
 ```
-Task({
-  subagent_type: "Explore",
-  prompt: "Search <concept> on <domain>. Extract: definition, usage, examples.",
-  model: "haiku"  // Fast for search
-})
+Phase 1.0: Local Documentation (LOCAL-FIRST)
+  → LOCAL_COMPLETE? → Skip to Phase 9.0
+  → LOCAL_PARTIAL?  → Search only for gaps
+  → LOCAL_NONE?     → Full external search
+
+Phase 2.0: Decomposition (Peek + Grep)
+  → Extract keywords, identify domains
+
+Phase 3.0: Parallel Search (Partition + Map)
+  → Up to 6 Task agents in parallel
+
+Phase 4.0: Peek at Results
+  → Score relevance, filter < 5
+
+Phase 5.0: Deep Fetch (Summarization)
+  → Progressive summarization (3 levels)
+
+Phase 6.0: Cross-referencing
+  → Confidence scoring based on source count
+
+Phase 7.0: Conflict Resolution
+  → User resolution if local vs external conflict
+
+Phase 8.0: Questions (if ambiguity)
+
+Phase 9.0: Generate Context File
+  → .claude/contexts/{slug}.md
 ```
-
-**IMPORTANT**: Launch ALL agents in A SINGLE message (parallel).
-
-**Multi-agent example:**
-```
-// Single message with 3 Task calls
-Task({ prompt: "OAuth2 on rfc-editor.org", ... })
-Task({ prompt: "JWT on tools.ietf.org", ... })
-Task({ prompt: "REST API on developer.mozilla.org", ... })
-```
-
----
-
-### Phase 4.0: Peek at results
-
-**Before full analysis, peek at each result:**
-
-1. Read the first 500 characters of each response
-2. Check relevance (score 0-10)
-3. Filter irrelevant results (< 5)
-
-```
-Agent results:
-  ✓ OAuth2 (score: 9) - RFC 6749 found
-  ✓ JWT (score: 8) - RFC 7519 found
-  ✗ REST (score: 3) - Result too generic
-    → Relaunch with refined query
-```
-
----
-
-### Phase 5.0: Deep fetch (RLM Pattern: Summarization)
-
-**For relevant results, WebFetch with summarization:**
-
-```
-WebFetch({
-  url: "<found url>",
-  prompt: "Summarize in 5 key points: 1) Definition, 2) Use cases, 3) Implementation, 4) Security, 5) Examples"
-})
-```
-
-**Progressive summarization:**
-
-- Level 1: Summary per source (5 points)
-- Level 2: Merge summaries (synthesis)
-- Level 3: Final context (actionable)
-
----
-
-### Phase 6.0: Cross-referencing and validation
-
-| Situation | Confidence | Action |
-|-----------|------------|--------|
-| Local + 2+ externals confirm | HIGHEST | Include (local takes priority) |
-| Local only | HIGH | Include (validated) |
-| 3+ external sources confirm | MEDIUM | Include + compare with local |
-| 2 external sources confirm | LOW | Include + warning |
-| 1 external source | VERIFY | Verify against local |
-| Contradictory sources | CONFLICT | User resolution |
-| 0 sources | NONE | Exclude |
-
-**Contradiction detection LOCAL vs EXTERNAL:**
-
-```yaml
-conflict_detection:
-  trigger: |
-    IF external_info != local_info:
-      status = "CONFLICT"
-      action = "user_resolution"
-
-  comparison:
-    - Versions/dates
-    - Syntax/API
-    - Breaking changes
-    - Best practices
-
-  priority_rule: |
-    LOCAL is ALWAYS considered VALIDATED.
-    EXTERNAL may be outdated or incorrect.
-```
-
----
-
-### Phase 7.0: Conflict resolution (CONFLICT HANDLING)
-
-**MANDATORY if conflict detected between local and external documentation.**
-
-```yaml
-conflict_resolution:
-  step_1_notify_user:
-    tool: AskUserQuestion
-    prompt: |
-      ⚠️ CONFLICT detected between local and external documentation
-
-      **Topic:** {topic}
-
-      **Local documentation (~/.claude/docs/):**
-      {local_content}
-
-      **External documentation ({source}):**
-      {external_content}
-
-      **Difference:**
-      {diff_summary}
-
-    questions:
-      - question: "How to resolve this conflict?"
-        header: "Resolution"
-        options:
-          - label: "Keep LOCAL"
-            description: "Local doc is correct, ignore external"
-          - label: "Update LOCAL"
-            description: "External is more recent, create issue for update"
-          - label: "Both valid"
-            description: "Different contexts, document both"
-
-  step_2_create_issue:
-    condition: "user_choice == 'Update LOCAL'"
-    tool: mcp__github__create_issue
-    params:
-      owner: "kodflow"
-      repo: "devcontainer-template"
-      title: "docs: Update {category}/{file} - conflict with official docs"
-      body: |
-        ## Conflict Report
-
-        **Generated by:** `/search` skill
-        **Date:** {ISO8601}
-
-        ### Local Documentation
-        **File:** `~/.claude/docs/{path}`
-        **Content:**
-        ```
-        {local_excerpt}
-        ```
-
-        ### External Source
-        **URL:** {external_url}
-        **Content:**
-        ```
-        {external_excerpt}
-        ```
-
-        ### Difference
-        {diff_description}
-
-        ### Suggested Action
-        - [ ] Review external source validity
-        - [ ] Update local documentation if confirmed
-        - [ ] Add version/date metadata
-
-        ---
-        _Auto-generated by /search conflict detection_
-      labels:
-        - "documentation"
-        - "auto-generated"
-
-  step_3_continue:
-    action: |
-      IF user_choice == "Keep LOCAL":
-        → Use local info, ignore external
-      IF user_choice == "Update LOCAL":
-        → Issue created, use external with warning
-      IF user_choice == "Both valid":
-        → Document both contexts
-```
-
-**Output Phase 7.0:**
-
-```
-═══════════════════════════════════════════════
-  /search - Conflict Resolution
-═══════════════════════════════════════════════
-
-  ⚠️ CONFLICT DETECTED
-
-  Topic: Observer Pattern implementation
-
-  Local (~/.claude/docs/behavioral/observer.md):
-    → Uses EventEmitter interface
-    → Recommends typed events
-
-  External (developer.mozilla.org):
-    → Uses addEventListener
-    → Browser-specific API
-
-  User Decision: "Both valid"
-    → Local = Application patterns
-    → External = Browser DOM events
-
-  Issue: NOT CREATED (different contexts)
-
-═══════════════════════════════════════════════
-```
-
-**Output if issue created:**
-
-```
-═══════════════════════════════════════════════
-  /search - Conflict Resolution
-═══════════════════════════════════════════════
-
-  ⚠️ CONFLICT DETECTED
-
-  Topic: JWT expiration handling
-
-  Local (~/.claude/docs/security/jwt.md):
-    → Recommends 15min access token
-
-  External (tools.ietf.org/html/rfc7519):
-    → No specific recommendation
-
-  User Decision: "Update LOCAL"
-
-  ✓ Issue created: kodflow/devcontainer-template#142
-    Title: "docs: Update security/jwt.md - add RFC reference"
-
-  Action: Using external info with warning
-
-═══════════════════════════════════════════════
-```
-
----
-
-### Phase 8.0: Questions (if needed)
-
-**ONLY if ambiguity detected:**
-
-```
-AskUserQuestion({
-  questions: [{
-    question: "The query mentions X and Y. Which one to prioritize?",
-    header: "Priority",
-    options: [
-      { label: "X first", description: "Focus on X" },
-      { label: "Y first", description: "Focus on Y" },
-      { label: "Both", description: "Full search" }
-    ]
-  }]
-})
-```
-
-**DO NOT ask if:**
-
-- Query is clear and unambiguous
-- Single technology
-- Sufficient context
-
----
-
-### Phase 9.0: Generate context.md (RLM Pattern: Programmatic)
-
-**Generate the file in a structured way:**
-
-```markdown
-# Context: <topic>
-
-Generated: <ISO8601>
-Query: <query>
-Iterations: <n>
-RLM-Depth: <parallel_agents_count>
-
-## Summary
-
-<2-3 sentences summarizing the findings>
-
-## Key Information
-
-### <Concept 1>
-
-<Validated information>
-
-**Sources:**
-- [<Title>](<url>) - "<excerpt>"
-- [<Title2>](<url>) - "<confirmation>"
-
-**Confidence:** HIGH
-
-### <Concept 2>
-
-<Information>
-
-**Sources:**
-- [<Title>](<url>)
-
-**Confidence:** MEDIUM
-
-## Clarifications
-
-| Question | Answer |
-|----------|--------|
-| <Q1> | <A1> |
-
-## Recommendations
-
-1. <Actionable recommendation>
-2. <Actionable recommendation>
-
-## Warnings
-
-- ⚠ <Point of attention>
-
-## Sources Summary
-
-| Source | Domain | Confidence | Used In |
-|--------|--------|------------|---------|
-| RFC 6749 | rfc-editor.org | HIGH | §1 |
-| RFC 7519 | tools.ietf.org | HIGH | §2 |
-
----
-_Generated by /search (RLM-enhanced). Do not commit._
-```
-
----
-
-## --append
-
-Enrich existing context:
-
-1. Read existing `.context.md`
-2. Identify gaps (missing sections)
-3. Search only for gaps
-4. Merge without duplicates
-
----
-
-## --status / --clear
-
-Same as previous version.
 
 ---
 
@@ -649,13 +218,13 @@ Same as previous version.
 
 | Action | Status |
 |--------|--------|
-| Skip Phase 1.0 (local documentation) | ❌ **FORBIDDEN** |
-| Ignore local/external conflict | ❌ **FORBIDDEN** |
-| Prefer external over local without validation | ❌ **FORBIDDEN** |
-| Non-official source | ❌ FORBIDDEN |
-| Skip Phase 2.0 (decomposition) | ❌ FORBIDDEN |
-| Sequential agents when parallelizable | ❌ FORBIDDEN |
-| Info without source | ❌ FORBIDDEN |
+| Skip local documentation | **FORBIDDEN** |
+| Ignore local/external conflict | **FORBIDDEN** |
+| Prefer external over local without validation | **FORBIDDEN** |
+| Non-official source | **FORBIDDEN** |
+| Skip decomposition | **FORBIDDEN** |
+| Sequential agents when parallelizable | **FORBIDDEN** |
+| Info without source | **FORBIDDEN** |
 
 **ABSOLUTE LOCAL-FIRST RULE:**
 
@@ -673,7 +242,7 @@ local_first_rule:
 
 ---
 
-## Execution examples
+## Execution Examples
 
 ### Simple query
 

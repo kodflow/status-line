@@ -54,7 +54,7 @@ redact_secrets() {
 set +o pipefail
 INPUT="$(cat 2>/dev/null)"
 set -o pipefail
-INPUT="${INPUT:-{\}}"
+INPUT="${INPUT:-{}}"
 
 # Fail gracefully if no input or empty
 if [[ -z "$INPUT" ]] || [[ "$INPUT" == "{}" ]]; then
@@ -75,10 +75,19 @@ PERMISSION_MODE=$(printf '%s' "$INPUT" | jq -r '.permission_mode // ""' 2>/dev/n
 CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // ""' 2>/dev/null || echo "")
 TRANSCRIPT_PATH=$(printf '%s' "$INPUT" | jq -r '.transcript_path // ""' 2>/dev/null || echo "")
 
-# === Get current branch ===
-BRANCH=$(git -C "$PROJECT_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "detached")
+# === Get current branch (cached to avoid subprocess overhead) ===
+# Use cached values from session-init.sh if available, fallback to git
+if [[ -n "${CLAUDE_GIT_BRANCH:-}" ]]; then
+    BRANCH="$CLAUDE_GIT_BRANCH"
+else
+    BRANCH=$(git -C "$PROJECT_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "detached")
+fi
 BRANCH_SAFE=$(printf '%s' "$BRANCH" | tr '/ ' '__')
-COMMIT_SHA=$(git -C "$PROJECT_DIR" rev-parse --short HEAD 2>/dev/null || echo "")
+if [[ -n "${CLAUDE_GIT_COMMIT:-}" ]]; then
+    COMMIT_SHA="$CLAUDE_GIT_COMMIT"
+else
+    COMMIT_SHA=$(git -C "$PROJECT_DIR" rev-parse --short HEAD 2>/dev/null || echo "")
+fi
 
 # === Setup log directory ===
 LOG_DIR="$LOGS_BASE/$BRANCH_SAFE"

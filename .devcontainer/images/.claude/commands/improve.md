@@ -33,6 +33,37 @@ Automatic continuous improvement. Detects context and acts.
 
 ---
 
+## Execution Mode Detection (Agent Teams)
+
+@.devcontainer/images/.claude/commands/shared/team-mode.md
+
+Before Phase 3 (parallel violation detection), determine runtime mode:
+
+```bash
+source "$HOME/.claude/scripts/team-mode-primitives.sh"
+MODE=$(detect_runtime_mode)
+```
+
+Branch:
+- `TEAMS_TMUX` / `TEAMS_INPROCESS` → **TEAMS improvement dispatch** (4 parallel axes)
+- `SUBAGENTS` → legacy sequential/Task dispatch (unchanged)
+
+### TEAMS improvement dispatch
+
+Lead: `developer-orchestrator`. Spawn 4 axis teammates:
+
+```text
+TaskCreate × 4:
+  improve-design    → using developer-executor-design    (antipatterns, SOLID, DDD)
+  improve-quality   → using developer-executor-quality   (complexity, smells, style)
+  improve-security  → using developer-executor-security  (OWASP, taint analysis)
+  improve-shell     → using developer-executor-shell     (shell/Dockerfile/CI safety)
+```
+
+Each task embeds a task-contract v1 block with `access_mode` matching the current mode (read-only for detection, write with explicit `owned_paths` from the scan for auto-fix). Token ceiling ≤ 2.5x legacy.
+
+---
+
 ## RLM Workflow
 
 ### Phase 1: Context detection
@@ -93,7 +124,7 @@ parallel_execution:
          - Outdated info
          - Missing examples
          - Inconsistencies
-      3. WebSearch "{pattern} best practices 2024"
+      3. WebSearch "{pattern} best practices {current_year}"
       4. Propose fixes
 
       OUTPUT JSON:
@@ -146,7 +177,7 @@ parallel_execution:
 ```yaml
 validation:
   for_each_improvement:
-    search: "{pattern} {year} best practices"
+    search: "{pattern} best practices" (use current year dynamically)
     sources:
       - Official docs (go.dev, docs.python.org, etc.)
       - martinfowler.com, refactoring.guru
@@ -174,7 +205,7 @@ application:
   mode_antipattern:
     action: |
       FOR each HIGH/MEDIUM violation:
-        mcp__github__create_issue(
+        mcp__github__issue_write(
           owner: "kodflow",
           repo: "devcontainer-template",
           title: "pattern: {description}",
@@ -183,8 +214,11 @@ application:
         )
 
       FOR each positive worth_documenting:
-        mcp__github__create_issue(
+        mcp__github__issue_write(
+          owner: "kodflow",
+          repo: "devcontainer-template",
           title: "new-pattern: {description}",
+          body: "## New Pattern\n{description}\n## Context\n{context}",
           labels: ["new-pattern", "auto-generated"]
         )
 

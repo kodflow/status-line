@@ -11,7 +11,7 @@ allowed-tools:
   - "Read(**/*)"
   - "Write(**/*)"
   - "Glob(**/*)"
-  - "mcp__grepai__*"
+  - "mcp__context7__*"
   - "Grep(**/*)"
   - "Task(*)"
 ---
@@ -20,11 +20,12 @@ allowed-tools:
 
 $ARGUMENTS
 
-## GREPAI-FIRST (MANDATORY)
+## CONTEXT7 (RECOMMENDED)
 
-Use `grepai_search` for ALL semantic/meaning-based queries BEFORE Grep.
-Use `grepai_trace_callers`/`grepai_trace_callees` for impact analysis.
-Fallback to Grep ONLY for exact string matches or regex patterns.
+Use `mcp__context7__resolve-library-id` + `mcp__context7__query-docs` to:
+- Verify Playwright API usage and available selectors
+- Check test framework APIs (Jest, Vitest, pytest, Go testing)
+- Validate assertion library patterns
 
 ---
 
@@ -37,15 +38,6 @@ E2E tests and frontend debugging with **RLM** patterns:
 - **Parallelize** - Simultaneous assertions and captures
 - **Synthesize** - Consolidated test report
 
-**Playwright MCP Capabilities:**
-
-- **Navigation** - Open URLs, navigate, screenshots
-- **Interaction** - Click, type, select, hover, drag
-- **Assertions** - Verify text, elements, states
-- **Tracing** - Record sessions for debugging
-- **PDF** - Generate PDFs from pages
-- **Codegen** - Generate test code
-
 ---
 
 ## Arguments
@@ -54,6 +46,7 @@ E2E tests and frontend debugging with **RLM** patterns:
 |---------|--------|
 | `<url>` | Open the URL and explore the page |
 | `--run` | Run the project's Playwright tests |
+| `--tdd` | TDD mode: RED-GREEN-REFACTOR cycle enforcement |
 | `--debug <url>` | Interactive debug mode |
 | `--trace` | Enable tracing for the session |
 | `--screenshot <url>` | Screenshot the page |
@@ -105,291 +98,132 @@ Examples:
 
 ---
 
-## Phase 1.0: Peek (RLM Pattern)
+## Module Reference
 
-**Analyze the page BEFORE interaction:**
-
-```yaml
-peek_workflow:
-  1_navigate:
-    tool: mcp__playwright__browser_navigate
-    params:
-      url: "<url>"
-
-  2_snapshot:
-    tool: mcp__playwright__browser_snapshot
-    output: "Accessibility tree of the page"
-
-  3_analyze:
-    action: "Identify interactive elements"
-    extract:
-      - forms: "input, select, textarea"
-      - buttons: "button, [type=submit]"
-      - links: "a[href]"
-      - content: "main content areas"
-```
-
-**Phase 1 Output:**
-
-```
-═══════════════════════════════════════════════════════════════
-  /test - Peek Analysis
-═══════════════════════════════════════════════════════════════
-
-  URL: https://myapp.com/login
-
-  Page Structure:
-    ├─ Header (nav, logo, menu)
-    ├─ Main
-    │   ├─ Form#login
-    │   │   ├─ Input[email]
-    │   │   ├─ Input[password]
-    │   │   └─ Button[Submit]
-    │   └─ Link[Forgot password]
-    └─ Footer
-
-  Interactive Elements: 5
-  Forms: 1
-  Testable: YES
-
-═══════════════════════════════════════════════════════════════
-```
+| Action | Module |
+|--------|--------|
+| MCP tools & guardrails | Read ~/.claude/commands/test/playwright.md |
+| RLM phases & test workflows | Read ~/.claude/commands/test/workflow.md |
 
 ---
 
-## Phase 2.0: Decompose (RLM Pattern)
+## Execution Mode Detection (Agent Teams)
 
-**Split the test into steps:**
+@.devcontainer/images/.claude/commands/shared/team-mode.md
 
-```yaml
-decompose_workflow:
-  example_login_test:
-    steps:
-      - step: "Navigate to login"
-        action: browser_navigate
-        url: "/login"
+Before dispatching test suites, determine runtime mode:
 
-      - step: "Fill email"
-        action: browser_type
-        element: "Email input"
-        value: "user@test.com"
-
-      - step: "Fill password"
-        action: browser_type
-        element: "Password input"
-        value: "******"
-
-      - step: "Submit form"
-        action: browser_click
-        element: "Submit button"
-
-      - step: "Verify redirect"
-        action: browser_expect
-        expectation: "URL contains /dashboard"
+```bash
+source "$HOME/.claude/scripts/team-mode-primitives.sh"
+MODE=$(detect_runtime_mode)
 ```
+
+Branch:
+- `TEAMS_TMUX` / `TEAMS_INPROCESS` → **TEAMS test dispatch** (3 parallel suites)
+- `SUBAGENTS` → legacy sequential/Task dispatch from `test/workflow.md` (unchanged)
+
+### TEAMS test dispatch
+
+Lead: `developer-orchestrator`. Spawn up to 3 suite teammates:
+
+```text
+TaskCreate × 3:
+  test-unit         → using developer-specialist-<detected-lang>
+                      scope: tests/unit/ (or project's unit test path)
+                      access_mode: read-only (analysis) OR write (if --generate)
+  test-integration  → using developer-specialist-<detected-lang>
+                      scope: tests/integration/
+                      access_mode: read-only OR write
+  test-e2e          → using developer-specialist-review  (or Playwright agent if available)
+                      scope: tests/e2e/ + Playwright traces
+                      access_mode: read-only
+```
+
+Wait for all 3 → aggregate coverage + failures → Phase 4.0 synthesis. Token ceiling ≤ 2x (test suites parallelize naturally).
 
 ---
 
-## Phase 3.0: Parallelize (RLM Pattern)
+## Routing
 
-**Simultaneous assertions and captures:**
-
-```yaml
-parallel_validation:
-  mode: "PARALLEL (single message, multiple MCP calls)"
-
-  actions:
-    - task: "Visibility check"
-      tool: mcp__playwright__browser_expect
-      params:
-        expectation: "to_be_visible"
-        ref: "<dashboard_ref>"
-
-    - task: "Text check"
-      tool: mcp__playwright__browser_expect
-      params:
-        expectation: "to_have_text"
-        ref: "<welcome_ref>"
-        expected: "Welcome"
-
-    - task: "Screenshot"
-      tool: mcp__playwright__browser_screenshot
-      params:
-        fullPage: true
-```
-
-**IMPORTANT**: Launch ALL assertions in a SINGLE message.
+1. **Any URL action**: Start with Phase 1.0 Peek from `workflow.md`
+2. **--run / --trace / --codegen**: Execute specific workflow from `workflow.md`
+3. **--tdd**: Execute TDD workflow below
+4. **MCP tool reference**: Refer to `playwright.md` for tool details
+5. **Guardrails**: Refer to `playwright.md` for safety rules
 
 ---
 
-## Phase 4.0: Synthesize (RLM Pattern)
+## TDD Mode (`--tdd`)
 
-**Consolidated test report:**
+Test-Driven Development cycle enforcement. Use when building new features or fixing bugs.
 
-```yaml
-synthesize_workflow:
-  1_collect:
-    action: "Gather all results"
-    data:
-      - step_results
-      - assertions_passed
-      - screenshots
-      - timing
+**Iron Law:** If you didn't watch the test fail, you don't know if it tests the right thing.
 
-  2_analyze:
-    action: "Identify failures and root causes"
-
-  3_generate_report:
-    format: "Structured test report"
-```
-
-**Final Output:**
-
-```
-═══════════════════════════════════════════════════════════════
-  /test - Test Report
-═══════════════════════════════════════════════════════════════
-
-  URL: https://myapp.com/login
-  Scenario: Login flow
-
-  Steps:
-    ✓ Navigate to /login (245ms)
-    ✓ Fill email input (32ms)
-    ✓ Fill password input (28ms)
-    ✓ Click submit button (156ms)
-    ✓ Verify dashboard redirect (1.2s)
-
-  Assertions:
-    ✓ Dashboard visible
-    ✓ Welcome message present
-    ✓ User avatar displayed
-
-  Artifacts:
-    - Screenshot: /tmp/test-login-success.png
-    - Trace: /tmp/trace-login.zip
-
-  Result: PASS (5/5 steps, 3/3 assertions)
-
-═══════════════════════════════════════════════════════════════
-```
-
----
-
-## Workflows
-
-### --run (Execute project tests)
+### RED-GREEN-REFACTOR Cycle
 
 ```yaml
-run_workflow:
-  1_peek:
-    action: "Scan test files"
-    tools: [Glob]
-    patterns: ["**/*.spec.ts", "**/*.test.ts", "**/e2e/**"]
+tdd_cycle:
+  RED:
+    action: "Write ONE minimal failing test showing expected behavior"
+    test_name: "Descriptive name of the behavior being tested"
+    use_real_code: "No mocks unless absolutely unavoidable"
 
-  2_decompose:
-    action: "Categorize tests"
-    categories:
-      - unit: "**/unit/**"
-      - integration: "**/integration/**"
-      - e2e: "**/e2e/**"
+  VERIFY_RED:
+    action: "Run test suite, confirm the NEW test FAILS"
+    check:
+      - "Failure is for the RIGHT reason (feature missing, not typo)"
+      - "Failure message is meaningful and expected"
+      - "If test passes → you're testing existing behavior, fix the test"
 
-  3_parallelize:
-    action: "Run test suites in parallel"
-    tools: [Task agents]
+  GREEN:
+    action: "Write the MINIMAL code to make the test pass"
+    rules:
+      - "Simplest possible implementation"
+      - "Don't add features beyond what the test requires"
+      - "Don't refactor during this step"
+      - "Don't improve other code"
 
-  4_synthesize:
-    action: "Consolidated test report"
+  VERIFY_GREEN:
+    action: "Run test suite, confirm the NEW test PASSES"
+    check:
+      - "New test passes"
+      - "ALL other tests still pass"
+      - "No warnings or errors in output"
+
+  REFACTOR:
+    action: "Clean up code while keeping tests green"
+    allowed:
+      - "Remove duplication"
+      - "Improve naming"
+      - "Extract helpers"
+    forbidden:
+      - "Adding new behavior"
+      - "Changing test expectations"
+
+  COMMIT:
+    action: "Commit after each green-refactor cycle"
 ```
 
-### --trace (Debug with tracing)
+### TDD Anti-patterns (STOP immediately)
 
-```yaml
-trace_workflow:
-  1_start:
-    tool: mcp__playwright__browser_start_tracing
-    params:
-      name: "debug-session"
+| Pattern | Problem |
+|---------|---------|
+| Writing code before test | Proves nothing when test passes |
+| Test passes immediately | You're testing existing behavior |
+| Multiple changes before running | Can't isolate what worked |
+| "Too simple to test" | Simple code breaks. Test takes 30 seconds. |
+| "I'll test after" | Tests-after answer "what does it do?" not "what should it do?" |
+| "Keep code as reference, write tests" | You'll adapt it. That's testing after. |
 
-  2_interact:
-    action: "Perform interactions"
+### TDD Completion Checklist
 
-  3_stop:
-    tool: mcp__playwright__browser_stop_tracing
-    output: "trace.zip (viewable in trace.playwright.dev)"
+```text
+- [ ] Every new function/method has a test
+- [ ] Watched each test fail before implementing
+- [ ] Each test failed for expected reason (not typo)
+- [ ] Wrote minimal code to pass each test
+- [ ] All tests pass
+- [ ] Output pristine (no errors, warnings)
+- [ ] Tests use real code (mocks only if unavoidable)
+- [ ] Edge cases and error paths covered
 ```
-
-### --codegen (Generate test code)
-
-```yaml
-codegen_workflow:
-  1_peek:
-    action: "Analyze page structure"
-
-  2_record:
-    action: "Record interactions"
-
-  3_synthesize:
-    action: "Generate Playwright test code"
-    output: "*.spec.ts file"
-```
-
----
-
-## MCP Tools Reference
-
-### Navigation
-
-| Tool | Description |
-|------|-------------|
-| `browser_navigate` | Open a URL |
-| `browser_go_back` | Previous page |
-| `browser_go_forward` | Next page |
-| `browser_reload` | Reload |
-
-### Interaction
-
-| Tool | Description |
-|------|-------------|
-| `browser_click` | Click element |
-| `browser_type` | Type text |
-| `browser_fill` | Fill a field |
-| `browser_select_option` | Select option |
-| `browser_hover` | Hover element |
-| `browser_press_key` | Press key |
-
-### Capture
-
-| Tool | Description |
-|------|-------------|
-| `browser_snapshot` | Accessibility tree |
-| `browser_screenshot` | Screenshot |
-| `browser_pdf_save` | Generate PDF |
-
-### Testing
-
-| Tool | Description |
-|------|-------------|
-| `browser_expect` | Assertions |
-| `browser_generate_locator` | Generate selector |
-| `browser_start_tracing` | Start trace |
-| `browser_stop_tracing` | Stop trace |
-
----
-
-## Guardrails (ABSOLUTE)
-
-| Action | Status | Reason |
-|--------|--------|--------|
-| Skip Phase 1 (Peek/Snapshot) | ❌ **FORBIDDEN** | Analyze page before interaction |
-| Navigate to malicious sites | ❌ **FORBIDDEN** | Security |
-| Enter real credentials | ⚠ **WARNING** | Use fixtures |
-| Modify production data | ❌ **FORBIDDEN** | Test environment only |
-
-### Legitimate parallelization
-
-| Element | Parallel? | Reason |
-|---------|-----------|--------|
-| E2E steps (navigate->fill->click) | ❌ Sequential | Interaction order required |
-| Independent final assertions | ✅ Parallel | No dependency between checks |
-| Screenshots + validations | ✅ Parallel | Independent operations |
