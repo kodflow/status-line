@@ -59,3 +59,35 @@ make demo           # Démo avec données exemple
 - Tests: `*_test.go` dans le même package (`_internal_test` et `_external_test`)
 - Structure: `cmd/` et `internal/` (pas de `/src`)
 - Go 1.25.5 (go.mod), toolchain Go 1.26
+
+## Documentation
+
+| Fichier | Contenu |
+|---------|---------|
+| [`docs/vision.md`](docs/vision.md) | Vision projet, problème résolu, principes, non-goals |
+| [`docs/architecture.md`](docs/architecture.md) | Diagramme C4, composants, data flow, contraintes |
+| [`docs/workflows.md`](docs/workflows.md) | Setup, dev loop, tests, déploiement, CI/CD |
+| [`AGENTS.md`](AGENTS.md) | Mapping stack → agents spécialistes (`/review`, `/lint`) |
+
+## Reviews IA (label-triggered)
+
+CodeRabbit et Qodo Merge ne tournent **pas** automatiquement sur chaque PR
+(trop bruyant alongside l'un de l'autre). Ils sont déclenchés par label :
+
+| Label | Outil | Quand l'utiliser |
+|-------|-------|------------------|
+| `coderabbit` | CodeRabbit | Review approfondie (89 règles ast-grep + path_instructions) |
+| `qodo` | Qodo Merge | Second avis indépendant (security review + tests review) |
+
+Les chemins `.devcontainer/**`, `.github/**`, `vendor/**` sont exclus des
+deux outils — c'est du contenu template-managed, pas du code projet.
+
+## Branch protection (main)
+
+| Règle | Valeur |
+|-------|--------|
+| Required status checks | `test`, `build (linux\|darwin\|windows, amd64\|arm64)` (7 checks) |
+| Required approving reviews | 0 (solo maintainer) |
+| Dismiss stale reviews on push | ✓ (CodeRabbit CHANGES_REQUESTED s'auto-dismiss au push suivant) |
+| Force push | ✗ |
+| Branch deletion | ✗ |
