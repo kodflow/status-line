@@ -203,7 +203,7 @@ func TestProvider_convertServers(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			p := &Provider{}
-			result := p.convertServers(tt.servers)
+			result := p.convertServers(tt.servers, "/tmp/test-mcp.json")
 			if len(result) != tt.wantLen {
 				t.Errorf("convertServers() len = %d, want %d", len(result), tt.wantLen)
 			}
@@ -226,7 +226,7 @@ func TestProvider_convertServers_EnabledState(t *testing.T) {
 			servers := map[string]mcpServerConfig{
 				"test": {Disabled: tt.disabled},
 			}
-			result := p.convertServers(servers)
+			result := p.convertServers(servers, "/tmp/test-mcp.json")
 			if len(result) != 1 {
 				t.Fatalf("convertServers() len = %d, want 1", len(result))
 			}

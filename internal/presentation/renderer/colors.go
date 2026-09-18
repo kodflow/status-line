@@ -25,6 +25,13 @@ const (
 	BgSonnet string = "\033[48;5;183m"
 	// BgOpus is the pale orange background for Opus.
 	BgOpus string = "\033[48;5;222m"
+	// BgFable is the mint background for Fable. The other families are all
+	// warm — orange, violet, pink — so a cool hue tells Fable apart at once.
+	BgFable string = "\033[48;5;158m"
+	// BgModelUnknown is the neutral background for an unrecognised model. It is
+	// deliberately not white: that is the OS segment's colour, and a model
+	// sharing it merges with the segment before it, separator included.
+	BgModelUnknown string = "\033[48;5;252m"
 	// FgBlue is the pale blue foreground color for separators.
 	FgBlue string = "\033[38;5;111m"
 	// FgCyan is the pale cyan foreground color for separators.
@@ -41,12 +48,20 @@ const (
 	FgSonnet string = "\033[38;5;183m"
 	// FgOpus is the pale orange foreground for Opus pill caps.
 	FgOpus string = "\033[38;5;222m"
+	// FgFable is the mint foreground for Fable pill caps.
+	FgFable string = "\033[38;5;158m"
+	// FgModelUnknown is the neutral foreground for an unrecognised model.
+	FgModelUnknown string = "\033[38;5;252m"
 	// FgHaikuDark is a darker pink for text on Haiku background.
 	FgHaikuDark string = "\033[38;5;168m"
 	// FgSonnetDark is a darker purple for text on Sonnet background.
 	FgSonnetDark string = "\033[38;5;97m"
 	// FgOpusDark is a darker orange for text on Opus background.
 	FgOpusDark string = "\033[38;5;172m"
+	// FgFableDark is a deep green for text on the Fable background.
+	FgFableDark string = "\033[38;5;29m"
+	// FgModelUnknownDark is the dark text on an unrecognised model background.
+	FgModelUnknownDark string = "\033[38;5;238m"
 	// BgGreen is the pale green background for lines added.
 	BgGreen string = "\033[48;5;114m"
 	// FgGreenText is the darker green for text on green background.
@@ -59,24 +74,6 @@ const (
 	FgRedText string = "\033[38;5;124m"
 	// FgRedSep is the pale red foreground for separator.
 	FgRedSep string = "\033[38;5;174m"
-	// BgMCPEnabled is the pale teal background for enabled MCP servers.
-	BgMCPEnabled string = "\033[48;5;116m"
-	// FgMCPEnabled is the pale teal foreground for enabled MCP pill caps.
-	FgMCPEnabled string = "\033[38;5;116m"
-	// FgMCPEnabledText is the dark teal for text on enabled MCP background.
-	FgMCPEnabledText string = "\033[38;5;30m"
-	// BgMCPDisabled is the pale gray background for disabled MCP servers.
-	BgMCPDisabled string = "\033[48;5;250m"
-	// FgMCPDisabled is the pale gray foreground for disabled MCP pill caps.
-	FgMCPDisabled string = "\033[38;5;250m"
-	// FgMCPDisabledText is the dark gray for text on disabled MCP background.
-	FgMCPDisabledText string = "\033[38;5;240m"
-	// BgTaskwarrior is the pale lavender background for Taskwarrior pill.
-	BgTaskwarrior string = "\033[48;5;147m"
-	// FgTaskwarrior is the lavender foreground for Taskwarrior pill caps.
-	FgTaskwarrior string = "\033[38;5;147m"
-	// FgTaskwarriorText is the dark indigo for text on Taskwarrior background.
-	FgTaskwarriorText string = "\033[38;5;55m"
 	// ColorGray is the gray foreground for incomplete progress.
 	ColorGray string = "\033[38;5;245m"
 	// FgCursorOrange is the dark orange foreground for burn-rate cursor.
@@ -91,6 +88,18 @@ const (
 	FgGraySep string = "\033[38;5;245m"
 	// FgCyanTask is the cyan foreground for current task indicator.
 	FgCyanTask string = "\033[38;5;44m"
+	// BgMCPEnabled is the pale teal background for enabled MCP servers.
+	BgMCPEnabled string = "\033[48;5;116m"
+	// FgMCPEnabled is the pale teal foreground for enabled MCP pill caps.
+	FgMCPEnabled string = "\033[38;5;116m"
+	// FgMCPEnabledText is the dark teal for text on enabled MCP background.
+	FgMCPEnabledText string = "\033[38;5;30m"
+	// BgMCPDisabled is the pale gray background for disabled MCP servers.
+	BgMCPDisabled string = "\033[48;5;250m"
+	// FgMCPDisabled is the pale gray foreground for disabled MCP pill caps.
+	FgMCPDisabled string = "\033[38;5;250m"
+	// FgMCPDisabledText is the dark gray for text on disabled MCP background.
+	FgMCPDisabledText string = "\033[38;5;240m"
 	// BgWeekly is the pale gray background for weekly usage segment.
 	BgWeekly string = "\033[48;5;252m"
 	// FgWeekly is the pale gray foreground for weekly usage separator.
@@ -124,9 +133,15 @@ func GetModelColors(modelName string) (bgColor, fgColor, textColor string) {
 	case strings.Contains(nameLower, "opus"):
 		// Return Opus colors
 		return BgOpus, FgOpus, FgOpusDark
-	// White colors for unknown models
+	// Mint colors for Fable model. Without an entry of its own Fable fell back
+	// to white, which is the OS segment's colour: the two segments then merged
+	// into one block with an invisible separator between them.
+	case strings.Contains(nameLower, "fable"):
+		// Return Fable colors
+		return BgFable, FgFable, FgFableDark
+	// Neutral colors for unknown models
 	default:
 		// Return default colors
-		return BgWhite, FgWhite, FgBlack
+		return BgModelUnknown, FgModelUnknown, FgModelUnknownDark
 	}
 }

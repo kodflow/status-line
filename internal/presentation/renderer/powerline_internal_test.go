@@ -45,37 +45,6 @@ func TestPowerline_renderLine1(t *testing.T) {
 	}
 }
 
-func TestPowerline_renderLine2(t *testing.T) {
-	tests := []struct {
-		name string
-		data model.StatusLineData
-	}{
-		{
-			name: "with taskwarrior",
-			data: model.StatusLineData{
-				Taskwarrior: model.TaskwarriorInfo{
-					Installed: true,
-					Projects:  []model.TaskwarriorProject{{Name: "test", Pending: 5, Completed: 3}},
-				},
-			},
-		},
-		{
-			name: "empty",
-			data: model.StatusLineData{
-				Taskwarrior: model.TaskwarriorInfo{Installed: false},
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			r := &Powerline{}
-			var sb strings.Builder
-			r.renderLine2(&sb, tt.data)
-			_ = sb.String() // Just verify no panic
-		})
-	}
-}
-
 func TestItoa(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -169,7 +138,7 @@ func TestPowerline_renderGitSegment(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &Powerline{}
 			var sb strings.Builder
-			r.renderGitSegment(&sb, tt.git, true, "")
+			r.renderGitSegment(&sb, tt.git, true, "", "https://github.com/acme/demo")
 			_ = sb.String() // Just verify no panic
 		})
 	}
@@ -207,63 +176,6 @@ func TestPowerline_renderMCPPills(t *testing.T) {
 			var sb strings.Builder
 			r.renderMCPPills(&sb, tt.servers)
 			_ = sb.String() // Just verify no panic
-		})
-	}
-}
-
-func TestPowerline_renderMCPPill(t *testing.T) {
-	tests := []struct {
-		name   string
-		server model.MCPServer
-	}{
-		{name: "enabled", server: model.MCPServer{Name: "test", Enabled: true}},
-		{name: "disabled", server: model.MCPServer{Name: "test", Enabled: false}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			r := &Powerline{}
-			var sb strings.Builder
-			r.renderMCPPill(&sb, tt.server)
-			if sb.Len() == 0 {
-				t.Error("renderMCPPill() produced empty output")
-			}
-		})
-	}
-}
-
-func TestPowerline_renderTaskwarriorPill(t *testing.T) {
-	tests := []struct {
-		name string
-		tw   model.TaskwarriorInfo
-	}{
-		{name: "installed with projects", tw: model.TaskwarriorInfo{Installed: true, Projects: []model.TaskwarriorProject{{Name: "test", Pending: 5}}}},
-		{name: "not installed", tw: model.TaskwarriorInfo{Installed: false}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			r := &Powerline{}
-			var sb strings.Builder
-			r.renderTaskwarriorPill(&sb, tt.tw)
-			_ = sb.String() // Just verify no panic
-		})
-	}
-}
-
-func TestPowerline_renderTaskwarriorProjectPill(t *testing.T) {
-	tests := []struct {
-		name    string
-		project model.TaskwarriorProject
-	}{
-		{name: "with tasks", project: model.TaskwarriorProject{Name: "test", Pending: 5, Completed: 3}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			r := &Powerline{}
-			var sb strings.Builder
-			r.renderTaskwarriorProjectPill(&sb, tt.project)
-			if sb.Len() == 0 {
-				t.Error("renderTaskwarriorProjectPill() produced empty output")
-			}
 		})
 	}
 }

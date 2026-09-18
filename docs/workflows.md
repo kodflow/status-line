@@ -7,7 +7,7 @@ Prerequisites:
 
 - Go 1.25.5+ (toolchain 1.26)
 - `make`
-- Optional: `git`, `task` (Taskwarrior), `op` (1Password CLI) — used by
+- Optional: `git`, `op` (1Password CLI) — used by
   adapters at runtime; missing tools are gracefully skipped.
 
 Bootstrap:

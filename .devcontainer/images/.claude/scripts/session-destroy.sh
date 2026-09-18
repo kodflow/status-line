@@ -7,7 +7,6 @@
 # - Pointeur active-session
 # - Symlink state.json
 # - Branche locale (optionnel)
-# - Tasks Taskwarrior (archivées)
 #
 # Exit 0 = succès, Exit 1 = erreur, Exit 2 = bloqué
 
@@ -78,33 +77,23 @@ main() {
     echo "═══════════════════════════════════════════════"
     echo ""
     
-    # 1. Archiver tasks Taskwarrior
-    if command -v task &>/dev/null; then
-        local task_count
-        task_count=$(task project:"$project" count 2>/dev/null || echo "0")
-        if [[ "$task_count" -gt 0 ]]; then
-            task project:"$project" rc.confirmation=off modify status:deleted 2>/dev/null || true
-            echo "  ✓ Tasks archivées: $task_count"
-        fi
-    fi
-    
-    # 2. Supprimer pointeur active-session
+    # 1. Supprimer pointeur active-session
     if [[ -f "/workspace/.claude/active-session" ]]; then
         rm -f /workspace/.claude/active-session
         echo "  ✓ Pointeur active-session supprimé"
     fi
     
-    # 3. Supprimer symlink state.json
+    # 2. Supprimer symlink state.json
     if [[ -L "/workspace/.claude/state.json" ]]; then
         rm -f /workspace/.claude/state.json
         echo "  ✓ Symlink state.json supprimé"
     fi
     
-    # 4. Supprimer fichier session
+    # 3. Supprimer fichier session
     rm -f "$session_file"
     echo "  ✓ Session supprimée: $session_file"
     
-    # 5. Optionnel: supprimer branche locale
+    # 4. Optionnel: supprimer branche locale
     local current_branch main_branch
     current_branch=$(git branch --show-current 2>/dev/null || echo "")
     main_branch=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@' || echo "main")

@@ -1,6 +1,8 @@
 // Package model contains domain entities and value objects.
 package model
 
+import "time"
+
 // Default values for input fields.
 const (
 	// defaultModelName is the fallback model name.
@@ -14,10 +16,18 @@ const (
 // Input represents the JSON input from Claude Code.
 // It contains all the information needed to render the status line.
 type Input struct {
-	Model         InputModel     `json:"model"`
-	Workspace     InputWorkspace `json:"workspace"`
-	ContextWindow InputContext   `json:"context_window"`
-	Cost          InputCost      `json:"cost"`
+	Model         InputModel       `json:"model"`
+	Workspace     InputWorkspace   `json:"workspace"`
+	ContextWindow InputContext     `json:"context_window"`
+	Cost          InputCost        `json:"cost"`
+	RateLimits    InputRateLimits  `json:"rate_limits"`
+	Effort        InputEffort      `json:"effort"`
+	Thinking      InputThinking    `json:"thinking"`
+	OutputStyle   InputOutputStyle `json:"output_style"`
+	SessionName   string           `json:"session_name"`
+	Version       string           `json:"version"`
+	FastMode      bool             `json:"fast_mode"`
+	Exceeds200k   bool             `json:"exceeds_200k_tokens"`
 }
 
 // InputCost contains cost and code change information from JSON.
@@ -31,25 +41,59 @@ type InputCost struct {
 }
 
 // InputModel contains model display information from JSON.
-// It holds the display name of the AI model being used.
+// It holds the display name and identifier of the AI model being used.
 type InputModel struct {
 	DisplayName string `json:"display_name"`
+	ID          string `json:"id"`
 }
 
 // InputWorkspace contains workspace information from JSON.
 // It holds the current working directory path.
 type InputWorkspace struct {
-	CurrentDir string `json:"current_dir"`
+	CurrentDir string    `json:"current_dir"`
+	ProjectDir string    `json:"project_dir"`
+	Repo       InputRepo `json:"repo"`
+}
+
+// InputRepo is the repository identity Claude Code parses from the origin
+// remote. It is what lets the status line point at the project on its forge
+// without shelling out to git for a remote URL.
+type InputRepo struct {
+	Host  string `json:"host"`
+	Owner string `json:"owner"`
+	Name  string `json:"name"`
+}
+
+// URL returns the browser URL of the repository.
+//
+// Returns:
+//   - string: repository URL, empty when the remote is unknown
+func (r InputRepo) URL() string {
+	// Without all three parts there is no address to build
+	if r.Host == "" || r.Owner == "" || r.Name == "" {
+		return ""
+	}
+	return "https://" + r.Host + "/" + r.Owner + "/" + r.Name
 }
 
 // InputContext contains context window information from JSON.
 // It tracks input/output tokens and the maximum context size.
 type InputContext struct {
-	TotalInputTokens    int      `json:"total_input_tokens"`
-	TotalOutputTokens   int      `json:"total_output_tokens"`
-	ContextWindowSize   int      `json:"context_window_size"`
-	UsedPercentage      *float64 `json:"used_percentage"`
-	RemainingPercentage *float64 `json:"remaining_percentage"`
+	CurrentUsage        InputCurrentUsage `json:"current_usage"`
+	TotalInputTokens    int               `json:"total_input_tokens"`
+	TotalOutputTokens   int               `json:"total_output_tokens"`
+	ContextWindowSize   int               `json:"context_window_size"`
+	UsedPercentage      *float64          `json:"used_percentage"`
+	RemainingPercentage *float64          `json:"remaining_percentage"`
+}
+
+// InputCurrentUsage is the live token composition of the context window.
+// It reflects what is resident now, unlike the cumulative session totals.
+type InputCurrentUsage struct {
+	InputTokens              int `json:"input_tokens"`
+	OutputTokens             int `json:"output_tokens"`
+	CacheCreationInputTokens int `json:"cache_creation_input_tokens"`
+	CacheReadInputTokens     int `json:"cache_read_input_tokens"`
 }
 
 // ModelInfo returns parsed model information.
@@ -151,4 +195,90 @@ func parseModelName(name string) (baseName, version string) {
 	}
 	// Return name only if no version found
 	return name, ""
+}
+
+// StdinLimits returns the quotas Claude Code piped in on stdin.
+// These are free and always current, unlike the API which costs a request.
+// A plan without a weekly cap yields a set with only the session limit, and
+// that absence is preserved rather than flattened into a zero percent bar.
+//
+// Returns:
+//   - LimitSet: context window plus whichever rate limits were present
+func (i *Input) StdinLimits() LimitSet {
+	set := LimitSet{
+		Context: NewLimit(KindContext, "ctx", i.Progress().Percent, time.Time{}, 0, SourceStdin),
+	}
+
+	// Adopt the five-hour bucket when the plan exposes one
+	if session, ok := i.RateLimits.FiveHour.Limit(KindSession, "session", SessionWindow); ok {
+		set.Session = session
+	}
+	// Adopt the seven-day bucket when the plan exposes one
+	if weekly, ok := i.RateLimits.SevenDay.Limit(KindWeekly, "weekly", WeeklyWindow); ok {
+		set.Weekly = weekly
+	}
+
+	return set
+}
+
+// EffortLevel returns the reasoning effort of the session.
+//
+// Returns:
+//   - string: effort level, empty when not reported
+func (i *Input) EffortLevel() string {
+	// Return the level verbatim; the renderer maps it to a glyph
+	return i.Effort.Level
+}
+
+// ContextTokens returns the tokens currently held in the context window.
+// Cumulative totals overshoot after a compaction, so the live usage block is
+// preferred and the cumulative sum is only a fallback.
+//
+// Returns:
+//   - int: tokens resident in the context window
+func (i *Input) ContextTokens() int {
+	usage := i.ContextWindow.CurrentUsage
+	live := usage.InputTokens + usage.CacheCreationInputTokens + usage.CacheReadInputTokens
+	// Prefer the live figure whenever the block was populated
+	if live > 0 {
+		return live
+	}
+	// Fall back to the cumulative totals
+	return i.TotalTokens()
+}
+
+// SessionCost returns the accumulated cost of the session in USD.
+//
+// Returns:
+//   - float64: session cost
+func (i *Input) SessionCost() float64 {
+	// Return the cumulative cost reported by Claude Code
+	return i.Cost.TotalCostUSD
+}
+
+// IsFastMode reports whether fast mode is enabled for the session.
+//
+// Returns:
+//   - bool: true when fast mode is on
+func (i *Input) IsFastMode() bool {
+	// Return the flag as reported by Claude Code
+	return i.FastMode
+}
+
+// SessionLabel returns the human name of the session.
+//
+// Returns:
+//   - string: session name, empty when unnamed
+func (i *Input) SessionLabel() string {
+	// Return the name verbatim; truncation is the renderer's concern
+	return i.SessionName
+}
+
+// RepoURL returns the browser URL of the repository being worked on.
+//
+// Returns:
+//   - string: repository URL, empty outside a recognised remote
+func (i *Input) RepoURL() string {
+	// Delegate to the parsed repository identity
+	return i.Workspace.Repo.URL()
 }

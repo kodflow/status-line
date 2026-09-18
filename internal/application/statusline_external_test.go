@@ -2,6 +2,7 @@ package application_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/florent/status-line/internal/application"
 	"github.com/florent/status-line/internal/domain/model"
@@ -24,16 +25,10 @@ type mockMCPProv struct{}
 
 func (m *mockMCPProv) Servers() model.MCPServers { return model.MCPServers{} }
 
-type mockTaskwarriorProv struct{}
-
-func (m *mockTaskwarriorProv) Info() model.TaskwarriorInfo {
-	return model.TaskwarriorInfo{Installed: false}
-}
-
 type mockUsageProv struct{}
 
-func (m *mockUsageProv) Usage() (model.UsageData, error) {
-	return model.UsageData{}, nil
+func (m *mockUsageProv) Limits() (model.LimitSet, error) {
+	return model.LimitSet{}, nil
 }
 
 type mockRenderer struct{}
@@ -45,6 +40,18 @@ type mockInputProvider struct{}
 func (m *mockInputProvider) ModelInfo() model.ModelInfo { return model.ModelInfo{Name: "Opus"} }
 func (m *mockInputProvider) WorkingDir() string         { return "/workspace" }
 func (m *mockInputProvider) Progress() model.Progress   { return model.Progress{Percent: 50} }
+func (m *mockInputProvider) EffortLevel() string        { return model.EffortHigh }
+func (m *mockInputProvider) ContextTokens() int         { return 100000 }
+func (m *mockInputProvider) ContextWindowSize() int     { return 200000 }
+func (m *mockInputProvider) SessionCost() float64       { return 1.23 }
+func (m *mockInputProvider) IsFastMode() bool           { return false }
+func (m *mockInputProvider) SessionLabel() string       { return "test session" }
+func (m *mockInputProvider) RepoURL() string            { return "https://github.com/acme/demo" }
+func (m *mockInputProvider) StdinLimits() model.LimitSet {
+	return model.LimitSet{
+		Context: model.NewLimit(model.KindContext, "ctx", 50, time.Time{}, 0, model.SourceStdin),
+	}
+}
 
 func TestNewStatusLineService(t *testing.T) {
 	tests := []struct {
@@ -55,12 +62,11 @@ func TestNewStatusLineService(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			deps := application.ServiceDeps{
-				Git:         &mockGitRepo{},
-				System:      &mockSystemProv{},
-				Terminal:    &mockTerminalProv{},
-				MCP:         &mockMCPProv{},
-				Taskwarrior: &mockTaskwarriorProv{},
-				Usage:       &mockUsageProv{},
+				Git:      &mockGitRepo{},
+				System:   &mockSystemProv{},
+				Terminal: &mockTerminalProv{},
+				MCP:      &mockMCPProv{},
+				Usage:    &mockUsageProv{},
 			}
 			svc := application.NewStatusLineService(deps, &mockRenderer{})
 			if svc == nil {
@@ -80,12 +86,11 @@ func TestStatusLineService_Generate(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			deps := application.ServiceDeps{
-				Git:         &mockGitRepo{},
-				System:      &mockSystemProv{},
-				Terminal:    &mockTerminalProv{},
-				MCP:         &mockMCPProv{},
-				Taskwarrior: &mockTaskwarriorProv{},
-				Usage:       &mockUsageProv{},
+				Git:      &mockGitRepo{},
+				System:   &mockSystemProv{},
+				Terminal: &mockTerminalProv{},
+				MCP:      &mockMCPProv{},
+				Usage:    &mockUsageProv{},
 			}
 			svc := application.NewStatusLineService(deps, &mockRenderer{})
 			result := svc.Generate(&mockInputProvider{})

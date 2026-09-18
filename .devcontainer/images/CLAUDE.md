@@ -14,7 +14,7 @@ Tu dois TOUJOURS travailler dans l'un de ces deux modes :
 3. **Analyse projet** - Glob/Grep/Read pour comprendre l'existant
 4. **Affûtage** - Croiser les infos (retour phase 2 si manque info)
 5. **Définition épics/tasks** - Présenter le plan → **VALIDATION USER**
-6. **Écriture Taskwarrior** - Créer épics et tasks
+6. **Écriture des tâches** - Créer épics et tasks
 
 **INTERDIT en PLAN MODE:**
 - ❌ Write/Edit sur fichiers code
@@ -38,7 +38,7 @@ Puis `AskUserQuestion: "Valider ce plan ?"`
 
 ### BYPASS MODE (Exécution - tu agis)
 
-**Quand:** Après validation du plan et écriture dans Taskwarrior
+**Quand:** Après validation du plan et écriture des tâches
 
 **Workflow par task:**
 ```bash
@@ -67,24 +67,10 @@ Si plusieurs tasks consécutives ont `parallel:yes`:
 
 ---
 
-## COMMANDES TASKWARRIOR
-
-| Script | Usage |
-|--------|-------|
-| `task-init.sh <type> <desc>` | Initialiser projet |
-| `task-epic.sh <project> <num> <name>` | Créer un epic |
-| `task-add.sh <project> <epic> <uuid> <name> [parallel] [ctx]` | Ajouter task |
-| `task-start.sh <uuid>` | TODO → WIP |
-| `task-done.sh <uuid>` | WIP → DONE |
-
-Chemin: `/home/vscode/.claude/scripts/`
-
----
-
-## STRUCTURE TASKWARRIOR
+## STRUCTURE DES TÂCHES
 
 ```
-project:"feat-xxx"              # Conteneur global
+projet "feat-xxx"               # Conteneur global
 ├─ Epic 1 (+epic)               # Phase
 │  ├─ Task 1.1 (+task)          # Action atomique
 │  ├─ Task 1.2 [parallel:yes]
@@ -193,7 +179,6 @@ planning ──→ planned ──→ applying ──→ applied
 | Hook | Déclencheur | Action |
 |------|-------------|--------|
 | `task-validate.sh` | PreToolUse (Write/Edit) | Bloque si mode/task invalide |
-| `task-log.sh` | PostToolUse | Log l'action dans Taskwarrior |
 | `pre-validate.sh` | PreToolUse | Protège fichiers critiques |
 | `post-edit.sh` | PostToolUse | Format + Lint auto |
 
@@ -225,7 +210,7 @@ planning ──→ planned ──→ applying ──→ applied
 │ 3. Existant     │
 │ 4. Affûtage     │
 │ 5. Épics/Tasks  │ → Validation utilisateur
-│ 6. Taskwarrior  │
+│ 6. Tâches       │
 └────────┬────────┘
          │
          ▼

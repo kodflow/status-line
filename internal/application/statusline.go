@@ -2,6 +2,7 @@
 package application
 
 import (
+	"sync"
 	"time"
 
 	"github.com/florent/status-line/internal/domain/model"
@@ -55,31 +56,65 @@ func (s *StatusLineService) Generate(input port.InputProvider) string {
 // Returns:
 //   - string: formatted status line ready for output
 func (s *StatusLineService) GenerateWithUpdate(input port.InputProvider, update model.UpdateInfo) string {
-	// Fetch usage data (ignore error, use zero value on failure)
-	usageData, _ := s.deps.Usage.Usage()
+	// Every provider shells out to something: git, the keychain,
+	// the filesystem. Run in sequence their latencies add up on a process that
+	// is re-executed on every redraw, so gather them concurrently instead and
+	// pay only the slowest one.
+	var (
+		wg          sync.WaitGroup
+		apiLimits   model.LimitSet
+		gitStatus   model.GitStatus
+		gitChanges  model.CodeChanges
+		systemInfo  model.SystemInfo
+		terminalNfo model.TerminalInfo
+		mcpServers  model.MCPServers
+	)
 
-	// Determine progress: prefer session API (real rate limit), fallback to context window
-	progress := input.Progress()
-	if usageData.Session.IsValid() {
-		progress = usageData.Session.Progress()
+	gather := func(fn func()) {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			fn()
+		}()
 	}
+
+	// An unreachable API only costs the enrichment it would have added
+	gather(func() { apiLimits, _ = s.deps.Usage.Limits() })
+	gather(func() { gitStatus = s.deps.Git.Status() })
+	gather(func() { gitChanges = s.deps.Git.DiffStats() })
+	gather(func() { systemInfo = s.deps.System.Info() })
+	gather(func() { terminalNfo = s.deps.Terminal.Info() })
+	gather(func() { mcpServers = s.deps.MCP.Servers() })
+	wg.Wait()
+
+	// Merge stdin and API quotas without ever letting a rate limit overwrite
+	// the context window: they measure different things and both must stay
+	// readable at a glance
+	limits := resolveLimits(input.StdinLimits(), apiLimits)
 
 	// Gather all data from various sources
 	data := model.StatusLineData{
-		Model:       input.ModelInfo(),
-		Progress:    progress,
-		Session:     usageData.Session,
-		Usage:       usageData.Weekly,
-		Icons:       model.IconConfigFromEnv(),
-		Git:         s.deps.Git.Status(),
-		System:      s.deps.System.Info(),
-		Terminal:    s.deps.Terminal.Info(),
-		Dir:         input.WorkingDir(),
-		Time:        time.Now().Format(timeFormat),
-		Changes:     s.deps.Git.DiffStats(),
-		MCP:         s.deps.MCP.Servers(),
-		Taskwarrior: s.deps.Taskwarrior.Info(),
-		Update:      update,
+		Model:         input.ModelInfo(),
+		Progress:      limits.Context.Progress(),
+		Limits:        limits,
+		Session:       limits.Session,
+		Usage:         limits.Weekly,
+		Icons:         model.IconConfigFromEnv(),
+		Git:           gitStatus,
+		System:        systemInfo,
+		Terminal:      terminalNfo,
+		Dir:           input.WorkingDir(),
+		Time:          time.Now().Format(timeFormat),
+		Changes:       gitChanges,
+		MCP:           mcpServers,
+		Update:        update,
+		Effort:        input.EffortLevel(),
+		ContextTokens: input.ContextTokens(),
+		ContextSize:   input.ContextWindowSize(),
+		Cost:          input.SessionCost(),
+		FastMode:      input.IsFastMode(),
+		SessionName:   input.SessionLabel(),
+		RepoURL:       input.RepoURL(),
 	}
 
 	// Delegate rendering to the renderer

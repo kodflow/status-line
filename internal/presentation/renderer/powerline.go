@@ -42,15 +42,26 @@ func NewPowerline() *Powerline {
 func (r *Powerline) Render(data model.StatusLineData) string {
 	var sb strings.Builder
 
-	// Render first line with system info
-	r.renderLine1(&sb, data)
-	sb.WriteString("\n")
-	// Render second line with model pill
-	r.renderLine2(&sb, data)
-	sb.WriteString("\n")
+	r.renderCompact(&sb, data)
 
 	// Return complete status line
 	return sb.String()
+}
+
+// renderCompact renders the two-line shape: everything about the session on
+// the first line, the ambient pills on the second.
+//
+// Params:
+//   - sb: string builder to write to
+//   - data: status line data
+func (r *Powerline) renderCompact(sb *strings.Builder, data model.StatusLineData) {
+	// Line one carries everything the session is: identity, quotas, repository.
+	// Line two carries only what is ambient — the MCP servers and an update
+	// notice — as the original status line did.
+	r.renderLine1(sb, data)
+	sb.WriteString("\n" + LineGap())
+	r.renderLine2(sb, data)
+	sb.WriteString("\n")
 }
 
 // renderLine1 renders the first line with OS, Model, Weekly, Path, Git, and Changes segments.
@@ -65,33 +76,38 @@ func (r *Powerline) renderLine1(sb *strings.Builder, data model.StatusLineData) 
 	// Render OS segment (transitions to Model segment)
 	r.renderOSSegment(sb, data.System, data.Icons.OS, modelBg)
 
-	// Determine what follows the model segment
-	hasWeekly := data.Usage.IsValid()
+	// Build the quota chain first: each segment needs to know the colour of the
+	// one that follows it to draw its separator
+	segments := quotaSegments(data)
+
+	// The model segment carries the account quotas that apply to this model
 	modelNextBg := BgBlue
-	if hasWeekly {
-		modelNextBg = BgWeekly
+	// Hand over to the first remaining segment when there is one
+	if len(segments) > 0 {
+		modelNextBg = segments[0].bg
 	}
-
-	// Build session cursor provider from API data (nil if no API data)
-	var sessionCursor CursorProvider
-	if data.Session.IsValid() {
-		s := data.Session
-		sessionCursor = &s
-	}
-
-	// Render Model segment with session progress and burn-rate cursor
 	modelData := &ModelSegmentData{
-		Model:    data.Model,
-		ShowIcon: data.Icons.Model,
-		Progress: data.Progress,
-		Cursor:   sessionCursor,
-		NextBg:   modelNextBg,
+		Model:         data.Model,
+		ShowIcon:      data.Icons.Model,
+		Progress:      data.Progress,
+		Cursor:        nil,
+		NextBg:        modelNextBg,
+		Effort:        data.Effort,
+		FastMode:      data.FastMode,
+		ContextTokens: data.ContextTokens,
+		ContextSize:   data.ContextSize,
+		Quotas:        modelQuotas(data),
 	}
 	r.renderModelSegment(sb, modelData)
 
-	// Render weekly usage segment if API data is available (auto-hide)
-	if hasWeekly {
-		r.renderWeeklySegment(sb, data.Usage)
+	// Chain every quota, each handing over to the next and the last to the path
+	for idx, seg := range segments {
+		nextBg := BgBlue
+		// Hand over to the next quota when there is one
+		if idx+1 < len(segments) {
+			nextBg = segments[idx+1].bg
+		}
+		renderQuotaSegment(sb, seg, nextBg)
 	}
 
 	// Determine what follows git segment (or path if no git)
@@ -110,12 +126,12 @@ func (r *Powerline) renderLine1(sb *strings.Builder, data model.StatusLineData) 
 	r.renderPathSegment(sb, data.Dir, data.Git.IsInRepo(), data.Icons.Path, changesNextBg)
 
 	// Render git segment if in repo
-	r.renderGitSegment(sb, data.Git, data.Icons.Git, changesNextBg)
+	r.renderGitSegment(sb, data.Git, data.Icons.Git, changesNextBg, data.RepoURL)
 	// Render code changes if any
 	r.renderChangesSegment(sb, data.Changes)
 }
 
-// renderLine2 renders the second line with dynamic pills (Taskwarrior, MCP, Update).
+// renderLine2 renders the second line with dynamic pills (MCP, Update).
 //
 // Params:
 //   - sb: string builder to write to
@@ -123,12 +139,6 @@ func (r *Powerline) renderLine1(sb *strings.Builder, data model.StatusLineData) 
 func (r *Powerline) renderLine2(sb *strings.Builder, data model.StatusLineData) {
 	// Track if we've rendered anything
 	hasContent := false
-
-	// Render Taskwarrior pill if installed and has projects
-	if data.Taskwarrior.Installed && data.Taskwarrior.HasProjects() {
-		r.renderTaskwarriorPill(sb, data.Taskwarrior)
-		hasContent = true
-	}
 
 	// Render MCP server pills if any
 	if len(data.MCP) > 0 {
@@ -183,28 +193,49 @@ func (r *Powerline) renderModelSegment(sb *strings.Builder, data *ModelSegmentDa
 	fullName := data.Model.FullName()
 	bgColor, fgColor, textColor := GetModelColors(fullName)
 
-	// Render progress bar (with cursor if usage data is valid)
-	var bar string
-	// Check if we have valid cursor data
-	if data.Cursor != nil && data.Cursor.IsValid() {
-		// Render with burn-rate cursor
-		bar = RenderProgressBarWithCursor(data.Progress, data.Cursor.CursorPosition(), FgCursorOrange, bgColor+textColor+Bold)
-	} else {
-		// Render without cursor (no API data available)
-		bar = RenderProgressBar(data.Progress, StyleHeavy)
-	}
-
 	// Check if icon should be shown
 	if data.ShowIcon {
 		// Write model name with icon
-		sb.WriteString(bgColor + textColor + Bold + " " + IconModel + " " + data.Model.Name + " " + Reset)
+		sb.WriteString(bgColor + textColor + Bold + " " + IconModel + " " + data.Model.ShortName() + Reset)
 	} else {
 		// Write model name without icon
-		sb.WriteString(bgColor + textColor + Bold + " " + data.Model.Name + " " + Reset)
+		sb.WriteString(bgColor + textColor + Bold + " " + data.Model.ShortName() + Reset)
 	}
 
-	// Write progress bar and percentage (using model's text color with bold for consistency)
-	sb.WriteString(bgColor + textColor + Bold + bar + " " + itoa(data.Progress.Percent) + "% " + Reset)
+	// Append the fast-mode marker when it is on
+	if data.FastMode {
+		sb.WriteString(bgColor + textColor + Bold + " " + glyphs.Fast + Reset)
+	}
+
+	// Draw the account quotas alongside the model they apply to. The session
+	// window, the weekly window and any quota scoped to this model all limit
+	// the same thing — what this account may spend on this model — so they
+	// read as one group and are drawn as one, divided by a thin rule rather
+	// than by a new segment.
+	for idx, quota := range data.Quotas {
+		cursor := noCursor
+		// Place the even-burn cursor only when the window makes it meaningful
+		if quota.HasWindow() {
+			cursor = quota.CursorPosition()
+		}
+		bar := RenderProgressBarWidth(quota.Progress(), cursor, segBarWidth, FgCursorOrange, bgColor+textColor)
+
+		// The first quota is the model's own session budget and runs straight
+		// on from its name; the rest are divided by a thin rule and named
+		if idx == 0 {
+			sb.WriteString(bgColor + textColor + " " + Reset)
+		} else {
+			sb.WriteString(bgColor + textColor + " " + glyphs.Divider + Reset)
+			sb.WriteString(bgColor + textColor + Bold + " " + HyperlinkURL(QuotaLabel(quota), usageURL) + " " + Reset)
+		}
+		sb.WriteString(bgColor + textColor + bar + Bold + " " + itoa(quota.Percent) + "%" + Reset)
+		// Append the countdown to the refill, which the bar cannot say
+		if quota.HasWindow() {
+			sb.WriteString(bgColor + textColor + " " + glyphs.Reset + FormatDuration(quota.Remaining()) + Reset)
+		}
+	}
+
+	sb.WriteString(bgColor + " " + Reset)
 
 	// Write separator to next segment
 	sb.WriteString(data.NextBg + fgColor + SepRight + Reset)
@@ -223,10 +254,10 @@ func (r *Powerline) renderPathSegment(sb *strings.Builder, dir string, hasGit bo
 	// Check if icon should be shown
 	if showIcon {
 		// Write path with folder icon and dark blue text
-		sb.WriteString(BgBlue + FgBlueDark + Bold + " " + IconFolder + " " + truncated + " " + Reset)
+		sb.WriteString(BgBlue + FgBlueDark + Bold + " " + IconFolder + "  " + Hyperlink(truncated, dir) + " " + Reset)
 	} else {
 		// Write path without icon with dark blue text
-		sb.WriteString(BgBlue + FgBlueDark + Bold + " " + truncated + " " + Reset)
+		sb.WriteString(BgBlue + FgBlueDark + Bold + " " + Hyperlink(truncated, dir) + " " + Reset)
 	}
 
 	// Determine separator style based on next segment
@@ -251,7 +282,8 @@ func (r *Powerline) renderPathSegment(sb *strings.Builder, dir string, hasGit bo
 //   - git: git status information
 //   - showIcon: whether to show the git branch icon
 //   - nextBg: background color of next segment for separator
-func (r *Powerline) renderGitSegment(sb *strings.Builder, git model.GitStatus, showIcon bool, nextBg string) {
+//   - repoURL: browser URL of the repository, empty when unknown
+func (r *Powerline) renderGitSegment(sb *strings.Builder, git model.GitStatus, showIcon bool, nextBg, repoURL string) {
 	// Skip if not in a git repository
 	if !git.IsInRepo() {
 		// Return early if not in repo
@@ -261,10 +293,10 @@ func (r *Powerline) renderGitSegment(sb *strings.Builder, git model.GitStatus, s
 	// Check if icon should be shown
 	if showIcon {
 		// Write branch with icon and dark cyan text
-		sb.WriteString(BgCyan + FgCyanDark + Bold + " " + IconGitBranch + " " + git.Branch)
+		sb.WriteString(BgCyan + FgCyanDark + Bold + " " + IconGitBranch + " " + HyperlinkURL(git.Branch, repoURL))
 	} else {
 		// Write branch without icon with dark cyan text
-		sb.WriteString(BgCyan + FgCyanDark + Bold + " " + git.Branch)
+		sb.WriteString(BgCyan + FgCyanDark + Bold + " " + HyperlinkURL(git.Branch, repoURL))
 	}
 
 	// Add modified indicator if present
@@ -330,7 +362,7 @@ func (r *Powerline) renderChangesSegment(sb *strings.Builder, changes model.Code
 // Params:
 //   - sb: string builder to write to
 //   - usage: weekly usage data
-func (r *Powerline) renderWeeklySegment(sb *strings.Builder, usage model.Usage) {
+func (r *Powerline) renderWeeklySegment(sb *strings.Builder, usage model.Limit) {
 	progress := usage.Progress()
 	bar := RenderProgressBarWithCursor(progress, usage.CursorPosition(), FgCursorOrange, BgWeekly+FgWeeklyText+Bold)
 
@@ -390,214 +422,10 @@ func (r *Powerline) renderMCPPill(sb *strings.Builder, server model.MCPServer) {
 
 	// Write left rounded cap
 	sb.WriteString(fgColor + LeftRound + Reset)
-	// Write server name
-	sb.WriteString(bgColor + textColor + " " + server.Name + " " + Reset)
+	// Write server name, clickable when the terminal supports OSC 8
+	sb.WriteString(bgColor + textColor + " " + Hyperlink(server.Name, server.Source) + " " + Reset)
 	// Write right rounded cap
 	sb.WriteString(fgColor + RightRound + Reset)
-}
-
-// renderTaskwarriorPill renders Taskwarrior project pills.
-//
-// Params:
-//   - sb: string builder to write to
-//   - tw: Taskwarrior information
-func (r *Powerline) renderTaskwarriorPill(sb *strings.Builder, tw model.TaskwarriorInfo) {
-	// Skip if Taskwarrior is not installed or no projects
-	if !tw.Installed || !tw.HasProjects() {
-		// Return early if not installed or empty
-		return
-	}
-
-	// Render active project with session (segmented bar)
-	if tw.ActiveProject != nil && tw.ActiveProject.HasSession() {
-		r.renderTaskwarriorSessionPill(sb, tw.ActiveProject)
-		return
-	}
-
-	// Render each legacy project as a pill
-	for _, project := range tw.Projects {
-		r.renderTaskwarriorProjectPill(sb, project)
-	}
-}
-
-// renderTaskwarriorProjectPill renders a single project pill with progress.
-//
-// Params:
-//   - sb: string builder to write to
-//   - project: project information
-func (r *Powerline) renderTaskwarriorProjectPill(sb *strings.Builder, project model.TaskwarriorProject) {
-	// Add space before pill
-	sb.WriteString(" ")
-
-	// Create progress for the project
-	progress := model.NewProgress(project.Completed, project.Total())
-	// Use gray for incomplete, lavender for 100%
-	progressColor := ColorGray
-	// Check if project is complete
-	if progress.Percent == percentComplete {
-		// Use themed color for completed projects
-		progressColor = FgTaskwarriorText
-	}
-	bar := RenderProgressBar(progress, StyleHeavy)
-
-	// Write left rounded cap
-	sb.WriteString(FgTaskwarrior + LeftRound + Reset)
-	// Write icon and project name
-	sb.WriteString(BgTaskwarrior + FgTaskwarriorText + Bold + " " + IconTaskwarrior + " " + project.Name + " " + Reset)
-
-	// Write nested progress bar pill
-	sb.WriteString(BgTaskwarrior + FgWhite + LeftRound + Reset)
-	// Progress bar on white background with progress color
-	sb.WriteString(BgWhite + progressColor + " " + bar + " " + Reset)
-	// Add task count (completed/total)
-	sb.WriteString(BgWhite + FgBlack + Bold + itoa(project.Completed) + "/" + itoa(project.Total()) + " " + Reset)
-	// Write right cap
-	sb.WriteString(FgWhite + RightRound + Reset)
-}
-
-// renderTaskwarriorSessionPill renders a project with Epic/Task session data.
-// Format: 📋 feat-auth ▐━━━━│━━●─│────▌ 41% │ ▶ E2:T2 "AuthService"
-//
-// Params:
-//   - sb: string builder to write to
-//   - project: project with session data
-func (r *Powerline) renderTaskwarriorSessionPill(sb *strings.Builder, project *model.TaskwarriorProject) {
-	// Add space before pill
-	sb.WriteString(" ")
-
-	// Write left rounded cap
-	sb.WriteString(FgTaskwarrior + LeftRound + Reset)
-
-	// Write icon and project name
-	sb.WriteString(BgTaskwarrior + FgTaskwarriorText + Bold + " " + IconTaskwarrior + " " + project.Name + " " + Reset)
-
-	// Render segmented progress bar
-	bar := r.renderSegmentedProgressBar(project.Epics)
-	sb.WriteString(BgTaskwarrior + bar + Reset)
-
-	// Write percentage
-	sb.WriteString(BgTaskwarrior + FgTaskwarriorText + Bold + " " + itoa(project.Percent()) + "% " + Reset)
-
-	// Render mode/task indicator
-	if project.IsPlanMode() {
-		// Show PLAN MODE indicator
-		sb.WriteString(BgTaskwarrior + FgGraySep + "│ " + Reset)
-		sb.WriteString(BgTaskwarrior + ColorGray + "🔍 PLAN" + Reset)
-	} else if project.CurrentTask != "" {
-		// Show current task indicator
-		sb.WriteString(BgTaskwarrior + FgGraySep + "│ " + Reset)
-		sb.WriteString(BgTaskwarrior + FgCyanTask + Bold + "▶ E" + itoa(project.CurrentEpic) + ":" + project.CurrentTask + Reset)
-		// Show task name if available
-		if taskName := project.CurrentTaskName(); taskName != "" {
-			sb.WriteString(BgTaskwarrior + ColorGray + " \"" + taskName + "\"" + Reset)
-		}
-	}
-
-	// Write right rounded cap
-	sb.WriteString(BgTaskwarrior + " " + Reset)
-	sb.WriteString(FgTaskwarrior + RightRound + Reset)
-}
-
-// renderSegmentedProgressBar renders a progress bar segmented by epics.
-// Format: ▐━━━━│━━●─│────▌
-//
-// Params:
-//   - epics: list of epics with task data
-//
-// Returns:
-//   - string: rendered segmented progress bar with ANSI codes
-func (r *Powerline) renderSegmentedProgressBar(epics []model.TaskwarriorEpic) string {
-	var sb strings.Builder
-
-	// Left border
-	sb.WriteString(FgGraySep + "▐" + Reset)
-
-	// Render each epic segment
-	for i, epic := range epics {
-		// Add separator between epics
-		if i > 0 {
-			sb.WriteString(FgGraySep + "│" + Reset)
-		}
-		// Render epic bar
-		sb.WriteString(r.renderEpicBar(&epic))
-	}
-
-	// Right border
-	sb.WriteString(FgGraySep + "▌" + Reset)
-
-	return sb.String()
-}
-
-// epicBarMinWidth is the minimum width for an epic bar segment.
-const epicBarMinWidth = 2
-
-// epicBarMaxWidth is the maximum width for an epic bar segment.
-const epicBarMaxWidth = 8
-
-// renderEpicBar renders a single epic's progress bar segment.
-//
-// Params:
-//   - epic: epic with task data
-//
-// Returns:
-//   - string: rendered epic bar segment
-func (r *Powerline) renderEpicBar(epic *model.TaskwarriorEpic) string {
-	// Calculate width (min 2, max 8)
-	width := epic.TotalCount
-	if width < epicBarMinWidth {
-		width = epicBarMinWidth
-	}
-	if width > epicBarMaxWidth {
-		width = epicBarMaxWidth
-	}
-
-	// Calculate proportions
-	doneWidth := 0
-	wipWidth := 0
-	todoWidth := width
-
-	if epic.TotalCount > 0 {
-		doneWidth = epic.DoneCount * width / epic.TotalCount
-		// Check for WIP task
-		for _, task := range epic.Tasks {
-			if task.Status == model.StatusWip {
-				wipWidth = 1
-				break
-			}
-		}
-		// Adjust done width if WIP present
-		if wipWidth > 0 && doneWidth > 0 {
-			doneWidth--
-		}
-		todoWidth = width - doneWidth - wipWidth
-	}
-
-	var sb strings.Builder
-
-	// Done characters (heavy line, green)
-	if doneWidth > 0 {
-		sb.WriteString(FgGreenDone)
-		for range doneWidth {
-			sb.WriteRune('━')
-		}
-		sb.WriteString(Reset)
-	}
-
-	// WIP character (cursor, yellow)
-	if wipWidth > 0 {
-		sb.WriteString(FgYellowWip + "●" + Reset)
-	}
-
-	// Todo characters (light line, gray)
-	if todoWidth > 0 {
-		sb.WriteString(FgGrayTodo)
-		for range todoWidth {
-			sb.WriteRune('─')
-		}
-		sb.WriteString(Reset)
-	}
-
-	return sb.String()
 }
 
 // renderUpdatePill renders the update notification pill.

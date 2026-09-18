@@ -114,3 +114,7 @@ out/
 CLAUDE.md
 !./CLAUDE.md
 .grepai/
+
+# démo locale (non versionnée)
+.demo-fixtures/
+demo.sh

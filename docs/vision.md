@@ -6,14 +6,14 @@
 Status Line is a small, fast Go CLI that renders a Powerline-style status bar
 for [Claude Code](https://claude.com/claude-code). It reads the JSON event
 that Claude Code emits on every render, queries a handful of local sources
-(git, MCP config, Taskwarrior, the Anthropic OAuth API), and writes ANSI
+(git, MCP config, the Anthropic OAuth API), and writes ANSI
 back to stdout — once per Claude Code interaction, in tens of milliseconds.
 
 The output is two lines:
 
 - **Line 1** — OS, model pill + session burn-rate, weekly burn-rate, path,
   git branch + dirty count, lines added/removed.
-- **Line 2** — Taskwarrior epic/task progress bar, active MCP servers,
+- **Line 2** — active MCP servers,
   available-update notice.
 
 ## Problem Statement
@@ -28,8 +28,6 @@ doesn't expose:
   approximation) and the rolling 7-day weekly bucket.
 - **Git state** — branch, modified count, untracked count, lines added/
   removed in the current session.
-- **Task in progress** — when Taskwarrior is the system of record, the
-  epic/task hierarchy and progress should be visible without context-switching.
 - **Active MCP servers** — what tools the agent currently has access to,
   derived from `~/.claude/.claude.json` and `mcp.json`.
 
@@ -42,14 +40,13 @@ them inline so the next decision is informed.
 - Developers using Claude Code in a terminal — every render gets the bar.
 - Heavy users who hit the 5-hour or weekly rate limit and want a leading
   indicator instead of an error.
-- Devs running Taskwarrior workflows alongside Claude Code (epic/task
   segmented progress).
 - Anyone who wants Powerline aesthetics integrated with the agent state.
 
 ## Goals
 
 1. **Correct** — never crash, never block; degrade gracefully when any
-   external dependency (git, Taskwarrior, MCP, Anthropic API) is missing.
+   external dependency (git, MCP, Anthropic API) is missing.
 2. **Fast** — runs on every Claude Code render tick; budget is tens of
    milliseconds, not hundreds.
 3. **Readable** — Powerline segments + colors that survive narrow terminals
@@ -75,7 +72,7 @@ them inline so the next decision is informed.
 - **Stateless** — no on-disk state of our own; everything is recomputed.
 - **Stdlib-first** — minimize deps. Current footprint: `golang.org/x/term`,
   `golang.org/x/sys`. Adding a dep needs a one-line justification.
-- **Adapter isolation** — every external (git, Taskwarrior, MCP, Anthropic,
+- **Adapter isolation** — every external (git, MCP, Anthropic,
   filesystem, terminal) is behind a port interface in `internal/domain/port`.
 - **No network on the hot path unless cached** — Anthropic OAuth usage is
   cached to disk; refresh happens out-of-band.

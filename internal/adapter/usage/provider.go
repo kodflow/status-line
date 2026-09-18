@@ -3,6 +3,8 @@ package usage
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -20,8 +22,10 @@ import (
 const (
 	// usageAPIURL is the Anthropic usage API endpoint.
 	usageAPIURL string = "https://api.anthropic.com/api/oauth/usage"
-	// httpTimeout is the timeout for API requests.
-	httpTimeout time.Duration = 5 * time.Second
+	// httpTimeout bounds the only blocking fetch: the cold-cache one.
+	httpTimeout time.Duration = 3 * time.Second
+	// refreshFlag re-executes the binary in cache-refresh mode.
+	refreshFlag string = "--refresh-usage"
 	// keychainService is the macOS keychain service name.
 	keychainService string = "Claude Code-credentials"
 	// credentialsFileName is the credentials file name.
@@ -33,10 +37,14 @@ const (
 // Compile-time interface implementation check.
 var _ port.UsageProvider = (*Provider)(nil)
 
+// errDecode marks a payload that could not be parsed as usage data.
+var errDecode = errors.New("usage api: undecodable payload")
+
 // Provider implements port.UsageProvider using Anthropic API.
 // It fetches weekly usage data from the OAuth usage endpoint.
 type Provider struct {
 	client *http.Client
+	cache  *cache
 }
 
 // NewProvider creates a new usage provider adapter.
@@ -47,68 +55,134 @@ func NewProvider() *Provider {
 	// Return provider with configured HTTP client
 	return &Provider{
 		client: &http.Client{Timeout: httpTimeout},
+		cache:  newCache(),
 	}
 }
 
-
-// Usage returns both session (5h) and weekly (7d) API usage.
+// Limits returns every quota the account exposes.
+// The cached payload is served immediately and a stale one triggers a
+// detached refresh, so rendering never pays the network latency.
 //
 // Returns:
-//   - model.UsageData: session and weekly utilization and reset times
-//   - error: any error during fetch
-func (p *Provider) Usage() (model.UsageData, error) {
-	// Get OAuth token
+//   - model.LimitSet: session, weekly, scoped and extra quotas
+//   - error: any error when no usable payload could be obtained
+func (p *Provider) Limits() (model.LimitSet, error) {
+	data, age, cached := p.cache.read()
+
+	// A fresh payload is authoritative; serve it without touching the network
+	if cached && isFresh(age) {
+		return decodeSet(data)
+	}
+
+	// A stale payload is still good enough to render; refresh behind the scenes
+	if cached {
+		p.refreshDetached()
+		return decodeSet(data)
+	}
+
+	// Nothing cached: this is the only path that may block, and only once
+	fresh, err := p.fetch()
+	if err != nil {
+		return model.LimitSet{}, err
+	}
+	// Persist for the next render; a cache write failure is not fatal
+	_ = p.cache.write(fresh)
+	return decodeSet(fresh)
+}
+
+// Refresh fetches the API payload and stores it, ignoring the cache TTL.
+// It is the entry point of the detached refresh process.
+//
+// Returns:
+//   - error: any error during fetch or write
+func (p *Provider) Refresh() error {
+	fresh, err := p.fetch()
+	// Leave the previous payload in place when the fetch fails
+	if err != nil {
+		return err
+	}
+	return p.cache.write(fresh)
+}
+
+// refreshDetached re-executes this binary to refresh the cache out of band.
+// A goroutine would die with the process, which exits as soon as the status
+// line is printed, so the refresh has to outlive it.
+func (p *Provider) refreshDetached() {
+	// A refresh process must never spawn another one
+	if os.Getenv(refreshEnv) != "" {
+		return
+	}
+	self, err := os.Executable()
+	// Without a resolvable path there is nothing to re-execute
+	if err != nil {
+		return
+	}
+	cmd := exec.Command(self, refreshFlag)
+	cmd.Env = append(os.Environ(), refreshEnv+"=1")
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = nil, nil, nil
+	// Detach so the parent can exit immediately
+	cmd.SysProcAttr = detachedAttr()
+	// A refresh that cannot start simply leaves the cache stale
+	if err := cmd.Start(); err != nil {
+		return
+	}
+	// Release the child so it is not left as a zombie
+	_ = cmd.Process.Release()
+}
+
+// fetch performs the authenticated request against the usage endpoint.
+//
+// Returns:
+//   - []byte: raw API payload
+//   - error: any error during the request
+func (p *Provider) fetch() ([]byte, error) {
 	token, err := p.getToken()
+	// Without a token the account simply has no API enrichment
 	if err != nil {
-		return model.UsageData{}, err
+		return nil, err
 	}
 
-	// Create API request
 	req, err := http.NewRequest(http.MethodGet, usageAPIURL, nil)
+	// A malformed request is a programming error, not a runtime state
 	if err != nil {
-		return model.UsageData{}, err
+		return nil, err
 	}
 
-	// Set authorization header
+	// Authenticate with the OAuth token
 	req.Header.Set("Authorization", "Bearer "+token)
-	// Set required beta header
+	// Opt into the usage beta the endpoint requires
 	req.Header.Set("anthropic-beta", "oauth-2025-04-20")
 
-	// Execute request
 	resp, err := p.client.Do(req)
+	// A network failure leaves the previous payload in place
 	if err != nil {
-		return model.UsageData{}, err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
-	// Read response body
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return model.UsageData{}, err
+	// A non-success status carries an error body, not usage data
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("usage api: status %d", resp.StatusCode)
 	}
 
-	// Parse JSON response
-	var usage usageResponse
-	if err := json.Unmarshal(body, &usage); err != nil {
-		return model.UsageData{}, err
-	}
+	return io.ReadAll(resp.Body)
+}
 
-	// Parse session (five_hour) reset time
-	sessionResetsAt, err := time.Parse(time.RFC3339, usage.FiveHour.ResetsAt)
-	if err != nil {
-		sessionResetsAt = time.Time{}
+// decodeSet turns a raw payload into the domain limit set.
+//
+// Params:
+//   - data: raw API payload
+//
+// Returns:
+//   - model.LimitSet: decoded quotas
+//   - error: any error when the payload is not valid JSON
+func decodeSet(data []byte) (model.LimitSet, error) {
+	parsed, ok := decode(data)
+	// A payload that does not decode must not masquerade as zero usage
+	if !ok {
+		return model.LimitSet{}, errDecode
 	}
-
-	// Parse weekly (seven_day) reset time
-	weeklyResetsAt, err := time.Parse(time.RFC3339, usage.SevenDay.ResetsAt)
-	if err != nil {
-		weeklyResetsAt = time.Time{}
-	}
-
-	return model.UsageData{
-		Session: model.NewSessionUsage(int(usage.FiveHour.Utilization), sessionResetsAt),
-		Weekly:  model.NewWeeklyUsage(int(usage.SevenDay.Utilization), weeklyResetsAt),
-	}, nil
+	return parsed.toLimitSet(), nil
 }
 
 // getToken retrieves the OAuth token from the appropriate source.

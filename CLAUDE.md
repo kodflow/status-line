@@ -10,13 +10,12 @@ cmd/statusline/              # Point d'entrée CLI (stdin JSON → stdout ANSI)
 internal/
 ├── application/             # Service orchestration (StatusLineService)
 ├── domain/
-│   ├── model/               # Entités (Input, Progress, Usage, Git, MCP, Taskwarrior...)
+│   ├── model/               # Entités (Input, Limit, LimitSet, Progress, Git, MCP...)
 │   └── port/                # Interfaces (InputProvider, Renderer, GitRepository...)
 ├── adapter/                 # Adaptateurs externes
 │   ├── git/                 # Git status + diff stats
 │   ├── mcp/                 # Détection serveurs MCP (config files)
 │   ├── system/              # Info système (OS, Docker)
-│   ├── taskwarrior/         # Intégration Taskwarrior (épics/tâches)
 │   ├── terminal/            # Info terminal (largeur, couleurs)
 │   ├── updater/             # Auto-update binaire (GitHub releases)
 │   └── usage/               # Usage API Anthropic (OAuth, burn-rate)
@@ -33,26 +32,55 @@ make lint           # Vérifie le code (ktn-linter)
 make demo           # Démo avec données exemple
 ```
 
-## Segments (2 lignes)
+## Affichage
 
-**Ligne 1:**
+`STATUSLINE_LINE_GAP` = lignes vides entre les deux rangées, 0-3 (défaut `0`)
+`STATUSLINE_LINKS` = `0` désactive les segments cliquables OSC 8
+`STATUSLINE_GLYPHS` = `nerd` (défaut) | `text` (repli ASCII, sans Nerd Font)
+`STATUSLINE_HIDE` = pastilles à masquer, séparées par des virgules :
+`context`, `session`, `weekly`, `model`
+
+Les glyphes viennent tous des plages Nerd Font, comme le reste de la ligne : un
+symbole Unicode générique retombe sur une autre police et devient illisible.
+
+**Ligne 1 — tout ce qui concerne la session :**
 
 | Segment | Description |
 |---------|-------------|
 | OS | Icône système (Linux/macOS/Windows/Docker) |
-| Model | Pill colorée (Haiku/Sonnet/Opus) + barre progression session |
-| Weekly | Barre burn-rate hebdomadaire (auto-hide si API indisponible) |
+| Model | Pill colorée (Haiku/Sonnet/Opus/Fable) + effort + fast mode |
 | Path | Répertoire courant (relatif au projet) |
 | Git | Branche + fichiers modifiés/non-trackés |
 | Changes | Lignes ajoutées/supprimées |
 
-**Ligne 2:**
+Les quotas du compte (session 5h, hebdo, quota scopé au modèle courant) sont
+rendus dans le segment du modèle, séparés par un `\ue0b1`. Un quota scopé à une
+famille de modèles ne s'affiche que si ce modèle est en cours d'utilisation.
 
 | Segment | Description |
 |---------|-------------|
-| Taskwarrior | Épic/tâche en cours avec barre de progression |
-| MCP | Pills des serveurs MCP actifs |
-| Update | Notification de mise à jour disponible |
+
+| Pastille | Description |
+|----------|-------------|
+| ctx | Fenêtre de contexte, en % et en tokens |
+| session | Quota 5h : repère de brûlure régulière, atterrissage, reset |
+| weekly | Quota 7j global — absent sur les forfaits qui n'en ont pas |
+| *modèle* | Quota 7j scopé par famille de modèle (`limits[]`) |
+| coût / credits | Coût cumulé de la session, solde de crédits |
+
+**Ligne ambiante:** pills MCP, notification de mise à jour.
+
+## Quotas : d'où viennent les chiffres
+
+stdin (`rate_limits`, Claude Code >= 2.1.140) est prioritaire — gratuit et
+synchrone. L'API OAuth n'apporte que ce que stdin ignore : quotas scopés par
+modèle, crédits, et les buckets non envoyés. Côté API, `limits[]` est la source
+agnostique au forfait ; `five_hour`/`seven_day` ne sont qu'un repli et valent
+`null` sur certains forfaits.
+
+**Un quota absent des deux sources reste absent** : l'afficher à 0 % mentirait
+sur le compte. Réponse API mise en cache 60 s, rafraîchie par un processus
+détaché — l'affichage n'attend jamais le réseau.
 
 ## Convention Go
 

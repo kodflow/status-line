@@ -1,0 +1,95 @@
+// Package renderer provides status line rendering.
+package renderer
+
+// State colours for quota pills. Backgrounds stay pale and text stays dark so
+// that the whole line reads on both light and dark terminal themes, matching
+// the pastel palette the other segments already use.
+const (
+	// BgQuota is the neutral pale background of a quota pill.
+	BgQuota string = "\033[48;5;252m"
+	// FgQuota is the neutral pale foreground for quota pill caps.
+	FgQuota string = "\033[38;5;252m"
+	// FgQuotaText is the dark neutral text on a quota pill.
+	FgQuotaText string = "\033[38;5;240m"
+	// FgQuotaDim is the muted text for secondary values on a quota pill.
+	FgQuotaDim string = "\033[38;5;246m"
+
+	// BgAhead is the pale green background of a comfortable quota.
+	BgAhead string = "\033[48;5;151m"
+	// FgAhead is the pale green foreground for comfortable pill caps.
+	FgAhead string = "\033[38;5;151m"
+	// FgAheadText is the dark green text on a comfortable quota.
+	FgAheadText string = "\033[38;5;22m"
+
+	// BgBehind is the pale amber background of a strained quota.
+	BgBehind string = "\033[48;5;222m"
+	// FgBehind is the pale amber foreground for strained pill caps.
+	FgBehind string = "\033[38;5;222m"
+	// FgBehindText is the dark amber text on a strained quota.
+	FgBehindText string = "\033[38;5;130m"
+
+	// BgOverrun is the pale red background of an overrunning quota.
+	BgOverrun string = "\033[48;5;174m"
+	// FgOverrun is the pale red foreground for overrunning pill caps.
+	FgOverrun string = "\033[38;5;174m"
+	// FgOverrunText is the dark red text on an overrunning quota.
+	FgOverrunText string = "\033[38;5;88m"
+
+	// FgBarFill is the filled portion of a quota bar.
+	FgBarFill string = "\033[38;5;238m"
+	// FgBarCursor is the even-burn reference marker inside a quota bar.
+	FgBarCursor string = "\033[38;5;166m"
+	// Dim renders secondary text at reduced intensity.
+	Dim string = "\033[2m"
+)
+
+// Per-quota hues. Each bucket gets its own pale ground so the quota line reads
+// as a set of distinct objects rather than one grey slab, and so a quota is
+// recognised by its colour before its label is read. The hues run cool to warm
+// as the window widens: conversation, then five hours, then seven days.
+const (
+	// BgHueContext is the white ground of the context window. It repeats the OS
+	// segment's white, which is safe only because the model segment always sits
+	// between the two and is never white itself.
+	BgHueContext string = "\033[48;5;255m"
+	// FgHueContext is the white cap of the context window.
+	FgHueContext string = "\033[38;5;255m"
+	// FgHueContextInk is the dark grey ink on the context ground. Black on white
+	// is harsher than the rest of the line, which nowhere uses full contrast.
+	FgHueContextInk string = "\033[38;5;240m"
+
+	// BgHueSession is the pale blue ground of the five-hour quota.
+	BgHueSession string = "\033[48;5;153m"
+	// FgHueSession is the pale blue cap of the five-hour quota.
+	FgHueSession string = "\033[38;5;153m"
+	// FgHueSessionInk is the deep blue ink on the session ground.
+	FgHueSessionInk string = "\033[38;5;25m"
+
+	// BgHueWeekly is the mint ground of the seven-day quota.
+	BgHueWeekly string = "\033[48;5;158m"
+	// FgHueWeekly is the mint cap of the seven-day quota.
+	FgHueWeekly string = "\033[38;5;158m"
+	// FgHueWeeklyInk is the deep green ink on the weekly ground.
+	FgHueWeeklyInk string = "\033[38;5;29m"
+
+	// BgHueCost is the blush ground of the credit balance.
+	BgHueCost string = "\033[48;5;224m"
+	// FgHueCost is the blush cap of the credit balance.
+	FgHueCost string = "\033[38;5;224m"
+	// FgHueCostInk is the deep red ink on the credit ground.
+	FgHueCostInk string = "\033[38;5;95m"
+)
+
+// MCP list colours. The servers are ambient information: they are read when
+// something is wrong, not while working, so they stay dimmed until one is.
+const (
+	// FgMCPText is the dimmed ink of a healthy server name.
+	FgMCPText string = "\033[38;5;245m"
+	// FgMCPSep is the separator between two server names.
+	FgMCPSep string = "\033[38;5;240m"
+	// FgMCPDown is the ink of a server that is not enabled.
+	FgMCPDown string = "\033[38;5;131m"
+)
+
+// mcpSeparator divides two server names.
+const mcpSeparator string = "\u00b7"

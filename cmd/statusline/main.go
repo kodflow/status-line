@@ -10,7 +10,6 @@ import (
 	"github.com/florent/status-line/internal/adapter/git"
 	"github.com/florent/status-line/internal/adapter/mcp"
 	"github.com/florent/status-line/internal/adapter/system"
-	"github.com/florent/status-line/internal/adapter/taskwarrior"
 	"github.com/florent/status-line/internal/adapter/terminal"
 	"github.com/florent/status-line/internal/adapter/updater"
 	"github.com/florent/status-line/internal/adapter/usage"
@@ -29,21 +28,26 @@ var version string
 // Returns:
 //   - void: exits with code 1 on error
 func main() {
-	// Handle version flag before anything else
+	// Handle flags before reading stdin
 	if len(os.Args) > 1 {
 		arg := os.Args[1]
+		// Print the version and exit
 		if arg == "-v" || arg == "--version" {
 			printVersion()
 			return
 		}
+		// Refresh the usage cache out of band and exit
+		if arg == "--refresh-usage" {
+			// A refresh failure only leaves the cache stale
+			_ = usage.NewProvider().Refresh()
+			return
+		}
 	}
 
-	input, err := readInput()
-	// Check for input reading errors
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "Error:", err)
-		os.Exit(1)
-	}
+	// A malformed payload must still produce a status line: this process is
+	// the shell prompt of a running session, and exiting non-zero replaces it
+	// with a raw error on every single redraw
+	input := readInput()
 
 	// Check for updates (returns info about available update)
 	updateInfo := checkForUpdate()
@@ -98,26 +102,25 @@ func printVersion() {
 }
 
 // readInput reads and parses JSON input from stdin.
+// An unreadable or malformed payload yields a zero input rather than an error:
+// the renderer degrades to what it can still establish on its own, which is
+// strictly better than leaving the session with no status line at all.
 //
 // Returns:
-//   - *model.Input: parsed input data
-//   - error: reading or parsing error if any
-func readInput() (*model.Input, error) {
-	data, err := io.ReadAll(os.Stdin)
-	// Check for stdin read errors
-	if err != nil {
-		// Return wrapped error for context
-		return nil, fmt.Errorf("reading stdin: %w", err)
-	}
-
+//   - *model.Input: parsed input data, zero valued on failure
+func readInput() *model.Input {
 	var input model.Input
-	// Check for JSON parsing errors
-	if err := json.Unmarshal(data, &input); err != nil {
-		// Return wrapped error for context
-		return nil, fmt.Errorf("parsing JSON: %w", err)
+
+	data, err := io.ReadAll(os.Stdin)
+	// An unreadable stdin leaves the zero input in place
+	if err != nil {
+		return &input
 	}
-	// Return successfully parsed input
-	return &input, nil
+	// A malformed payload leaves the zero input in place
+	if err := json.Unmarshal(data, &input); err != nil {
+		return &input
+	}
+	return &input
 }
 
 // buildService creates and wires all dependencies for the status line service.
@@ -129,12 +132,11 @@ func readInput() (*model.Input, error) {
 //   - *application.StatusLineService: fully configured service instance
 func buildService(projectDir string) *application.StatusLineService {
 	deps := application.ServiceDeps{
-		Git:         git.NewRepository(),
-		System:      system.NewProvider(),
-		Terminal:    terminal.NewProvider(),
-		MCP:         mcp.NewProvider(projectDir),
-		Taskwarrior: taskwarrior.NewProvider(),
-		Usage:       usage.NewProvider(),
+		Git:      git.NewRepository(),
+		System:   system.NewProvider(),
+		Terminal: terminal.NewProvider(),
+		MCP:      mcp.NewProvider(projectDir),
+		Usage:    usage.NewProvider(),
 	}
 	// Return service with all adapters injected
 	return application.NewStatusLineService(deps, renderer.NewPowerline())

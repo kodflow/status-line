@@ -1,6 +1,6 @@
 #!/bin/bash
 # PreToolUse hook - Valide les phases obligatoires en PLAN MODE
-# Empêche de sauter des phases ou d'écrire dans Taskwarrior sans validation
+# Empêche de sauter des phases du workflow de planification
 # Exit 0 = autorisé, Exit 2 = bloqué
 
 set -euo pipefail
@@ -40,64 +40,13 @@ STATE=$(jq -r '.state // "unknown"' "$SESSION_FILE")
 CURRENT_PHASE=$(jq -r '.currentPhase // 0' "$SESSION_FILE")
 SCHEMA_VERSION=$(jq -r '.schemaVersion // 2' "$SESSION_FILE")
 
-# Si pas en mode planning, autoriser (vérification task-validate.sh s'en charge)
+# Si pas en mode planning, autoriser
 if [[ "$STATE" != "planning" ]]; then
     exit 0
 fi
 
 # === VALIDATION DES PHASES ===
 
-# Vérifier si on essaie d'appeler les scripts Taskwarrior
-if [[ "$TOOL" == "Bash" ]]; then
-    COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // ""')
-    
-    # Bloquer task-epic.sh et task-add.sh sans phases 1-5 complétées
-    if [[ "$COMMAND" == *"task-epic.sh"* ]] || [[ "$COMMAND" == *"task-add.sh"* ]]; then
-        # Vérifier que les phases 1-5 sont complétées
-        COMPLETED_COUNT=$(jq -r '.completedPhases | length // 0' "$SESSION_FILE")
-        
-        if [[ "$COMPLETED_COUNT" -lt 5 ]]; then
-            echo "═══════════════════════════════════════════════"
-            echo "  🚫 BLOQUÉ - PHASES OBLIGATOIRES"
-            echo "═══════════════════════════════════════════════"
-            echo ""
-            echo "  Action: Écriture Taskwarrior"
-            echo "  Commande: $COMMAND"
-            echo ""
-            echo "  Phases complétées: $COMPLETED_COUNT/5"
-            echo ""
-            echo "  Les phases suivantes doivent être complétées:"
-            echo "    1. Analyse de la demande"
-            echo "    2. Recherche documentation"
-            echo "    3. Analyse projet existant"
-            echo "    4. Affûtage"
-            echo "    5. Définition épics/tasks + VALIDATION"
-            echo ""
-            echo "  La phase 6 (écriture Taskwarrior) nécessite"
-            echo "  la validation utilisateur en phase 5."
-            echo ""
-            echo "═══════════════════════════════════════════════"
-            exit 2
-        fi
-        
-        # Vérifier que la validation utilisateur a eu lieu
-        VALIDATED=$(jq -r '.validated // false' "$SESSION_FILE")
-        if [[ "$VALIDATED" != "true" ]]; then
-            echo "═══════════════════════════════════════════════"
-            echo "  🚫 BLOQUÉ - VALIDATION REQUISE"
-            echo "═══════════════════════════════════════════════"
-            echo ""
-            echo "  L'écriture dans Taskwarrior nécessite"
-            echo "  la validation utilisateur."
-            echo ""
-            echo "  Utilisez AskUserQuestion pour valider"
-            echo "  le plan avant de créer les épics/tasks."
-            echo ""
-            echo "═══════════════════════════════════════════════"
-            exit 2
-        fi
-    fi
-fi
 
 # Vérifier les sauts de phase (si schéma v3+)
 if [[ "$SCHEMA_VERSION" -ge 3 ]] && [[ "$CURRENT_PHASE" -gt 0 ]]; then

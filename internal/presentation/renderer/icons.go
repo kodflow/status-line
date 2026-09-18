@@ -9,6 +9,10 @@ const (
 	SepRight string = "\uE0B0"
 	// SepLeft is the left-pointing arrow separator.
 	SepLeft string = "\uE0B2"
+	// SepThinRight is the soft divider. Unlike SepRight it is drawn as an
+	// outline, which is what divides two parts of one segment: a filled arrow
+	// there would read as a segment boundary that is not one.
+	SepThinRight string = "\uE0B1"
 	// LeftRound is the left rounded cap.
 	LeftRound string = "\uE0B6"
 	// RightRound is the right rounded cap.
@@ -29,8 +33,6 @@ const (
 	IconGitBranch string = "\ue0a0"
 	// IconModel is the microchip icon for AI models.
 	IconModel string = "\uf2db"
-	// IconTaskwarrior is the tasks list icon for Taskwarrior.
-	IconTaskwarrior string = "\uf0ae"
 	// IconUpdate is the download/update icon.
 	IconUpdate string = "\uf019"
 	// IconWeekly is the calendar/clock icon for weekly usage.
@@ -69,5 +71,33 @@ func GetOSIcon(osType model.OSType, isDocker bool) string {
 	default:
 		// Return desktop icon
 		return IconDesktop
+	}
+}
+
+// IconCost marks the session cost.
+const IconCost string = "$"
+
+// EffortGlyph maps a reasoning effort level onto its glyph.
+//
+// Params:
+//   - level: effort level as reported by Claude Code
+//
+// Returns:
+//   - string: glyph for the level, empty when unreported
+func EffortGlyph(level string) string {
+	// Map each level onto a filled, half or empty disc
+	switch level {
+	// Highest effort
+	case model.EffortHigh:
+		return glyphs.EffortHigh
+	// Default effort
+	case model.EffortMedium:
+		return glyphs.EffortMed
+	// Cheapest effort
+	case model.EffortLow:
+		return glyphs.EffortLow
+	// Unreported effort renders nothing
+	default:
+		return ""
 	}
 }

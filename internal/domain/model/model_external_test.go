@@ -8,9 +8,9 @@ import (
 
 func TestModelInfo_FullName(t *testing.T) {
 	tests := []struct {
-		name  string
-		info  model.ModelInfo
-		want  string
+		name string
+		info model.ModelInfo
+		want string
 	}{
 		{name: "name only", info: model.ModelInfo{Name: "Claude"}, want: "Claude"},
 		{name: "name with version", info: model.ModelInfo{Name: "Opus", Version: "4.5"}, want: "Opus 4.5"},

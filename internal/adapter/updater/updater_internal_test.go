@@ -82,10 +82,10 @@ func TestUpdater_getBinaryName(t *testing.T) {
 
 func TestUpdater_shouldCheck(t *testing.T) {
 	tests := []struct {
-		name        string
-		setupCache  bool
-		cacheAge    time.Duration
-		wantCheck   bool
+		name       string
+		setupCache bool
+		cacheAge   time.Duration
+		wantCheck  bool
 	}{
 		{name: "no cache file exists", setupCache: false, wantCheck: true},
 		{name: "cache is old", setupCache: true, cacheAge: 2 * time.Hour, wantCheck: true},
@@ -132,8 +132,10 @@ func TestUpdater_getCachePath(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			u := NewUpdater("")
 			got := u.getCachePath()
-			// Verify path is in temp directory
-			if filepath.Dir(got) != os.TempDir() {
+			// Compare cleaned paths: on macOS TMPDIR carries a trailing slash
+			// that filepath.Join normalises away, so the raw strings differ
+			// while naming the same directory
+			if filepath.Dir(got) != filepath.Clean(os.TempDir()) {
 				t.Errorf("getCachePath() not in temp dir: %s", got)
 			}
 		})
@@ -217,4 +219,3 @@ func TestUpdater_downloadAndReplace(t *testing.T) {
 		})
 	}
 }
-
