@@ -22,7 +22,7 @@ func TestNewProvider(t *testing.T) {
 	}
 }
 
-func TestProvider_Usage(t *testing.T) {
+func TestProvider_Limits(t *testing.T) {
 	tests := []struct {
 		name string
 	}{
@@ -33,21 +33,19 @@ func TestProvider_Usage(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			p := usage.NewProvider()
 			// API call may succeed or fail depending on environment
-			result, err := p.Usage()
-			// Verify both success and error paths work correctly
+			result, err := p.Limits()
+			// Error path: an unreachable API must yield no fabricated quota
 			if err != nil {
-				// Error path: verify result is zero value
-				if result.Session.Utilization != 0 || result.Weekly.Utilization != 0 {
-					t.Error("Usage() should return zero utilization on error")
+				if result.HasTimed() {
+					t.Error("Limits() should return no quota on error")
 				}
 			}
-			// Success path: verify valid percentage range
+			// Success path: every returned quota stays in range
 			if err == nil {
-				if result.Session.Utilization < 0 || result.Session.Utilization > 100 {
-					t.Error("Usage() returned invalid session utilization percentage")
-				}
-				if result.Weekly.Utilization < 0 || result.Weekly.Utilization > 100 {
-					t.Error("Usage() returned invalid weekly utilization percentage")
+				for _, limit := range result.Timed() {
+					if limit.Percent < 0 || limit.Percent > 100 {
+						t.Errorf("Limits() returned out-of-range percentage %d for %s", limit.Percent, limit.Label)
+					}
 				}
 			}
 		})

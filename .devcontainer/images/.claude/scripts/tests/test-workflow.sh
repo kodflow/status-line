@@ -32,7 +32,7 @@ log_fail() {
 test_session_v2_creation() {
     echo "Test: Session v2 création..."
 
-    # Simuler task-init en créant une session v2
+    # Simuler l'initialisation en créant une session v2
     local SESSION_FILE="$TEST_DIR/test-project.json"
     cat > "$SESSION_FILE" << 'EOF'
 {

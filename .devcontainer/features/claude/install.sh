@@ -27,27 +27,7 @@ if ! command -v claude &>/dev/null; then
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 2. Installer Taskwarrior (obligatoire pour /feature et /fix)
-# ─────────────────────────────────────────────────────────────────────────────
-echo "→ Installing Taskwarrior..."
-if ! command -v task &>/dev/null; then
-    if command -v apt-get &>/dev/null; then
-        sudo apt-get update -qq && sudo apt-get install -y -qq taskwarrior && echo "  ✓ taskwarrior"
-    elif command -v apk &>/dev/null; then
-        sudo apk add --no-cache task && echo "  ✓ taskwarrior"
-    elif command -v brew &>/dev/null; then
-        brew install task && echo "  ✓ taskwarrior"
-    elif command -v pacman &>/dev/null; then
-        sudo pacman -S --noconfirm task && echo "  ✓ taskwarrior"
-    else
-        echo "  ⚠ taskwarrior (manual install required: https://taskwarrior.org/download/)"
-    fi
-else
-    echo "  ✓ taskwarrior (already installed)"
-fi
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 3. Créer les dossiers
+# 2. Créer les dossiers
 # ─────────────────────────────────────────────────────────────────────────────
 echo "→ Setting up $TARGET/.claude/..."
 mkdir -p "$TARGET/.claude/commands"
@@ -55,7 +35,7 @@ mkdir -p "$TARGET/.claude/scripts"
 mkdir -p "$TARGET/.claude/sessions"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 4. Télécharger les commandes
+# 3. Télécharger les commandes
 # ─────────────────────────────────────────────────────────────────────────────
 echo "→ Downloading commands..."
 for cmd in apply git plan review update; do
@@ -63,24 +43,24 @@ for cmd in apply git plan review update; do
 done
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 5. Télécharger les scripts (hooks + Taskwarrior)
+# 4. Télécharger les scripts (hooks)
 # ─────────────────────────────────────────────────────────────────────────────
 echo "→ Downloading scripts..."
-for script in format imports lint post-edit pre-validate security test bash-validate commit-validate task-validate task-log task-init task-epic task-add task-start task-done task-check-locks; do
+for script in format imports lint post-edit pre-validate security test bash-validate commit-validate; do
     curl -sL "$BASE/.claude/scripts/$script.sh" -o "$TARGET/.claude/scripts/$script.sh" 2>/dev/null && \
     chmod +x "$TARGET/.claude/scripts/$script.sh"
 done
-echo "  ✓ hooks (format, lint, security, taskwarrior...)"
+echo "  ✓ hooks (format, lint, security...)"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 6. Télécharger settings.json
+# 5. Télécharger settings.json
 # ─────────────────────────────────────────────────────────────────────────────
 echo "→ Downloading settings..."
 curl -sL "$BASE/.claude/settings.json" -o "$TARGET/.claude/settings.json" 2>/dev/null
 echo "  ✓ settings.json"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 7. Télécharger CLAUDE.md (si pas existant)
+# 6. Télécharger CLAUDE.md (si pas existant)
 # ─────────────────────────────────────────────────────────────────────────────
 if [ ! -f "$TARGET/CLAUDE.md" ]; then
     curl -sL "$BASE/CLAUDE.md" -o "$TARGET/CLAUDE.md" 2>/dev/null
@@ -88,27 +68,7 @@ if [ ! -f "$TARGET/CLAUDE.md" ]; then
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 8. Configurer MCP (Taskwarrior)
-# ─────────────────────────────────────────────────────────────────────────────
-echo "→ Configuring MCP..."
-MCP_FILE="$TARGET/.mcp.json"
-TASKWARRIOR_MCP='{"taskwarrior":{"command":"npx","args":["-y","mcp-server-taskwarrior"]}}'
-
-if [ -f "$MCP_FILE" ]; then
-    # Merge with existing
-    if command -v jq &>/dev/null; then
-        jq --argjson tw "$TASKWARRIOR_MCP" '.mcpServers += $tw' "$MCP_FILE" > "$MCP_FILE.tmp" && mv "$MCP_FILE.tmp" "$MCP_FILE"
-        echo "  ✓ .mcp.json (merged + taskwarrior)"
-    else
-        echo "  ⚠ .mcp.json (jq not found, manual config needed)"
-    fi
-else
-    echo "{\"mcpServers\":$TASKWARRIOR_MCP}" > "$MCP_FILE"
-    echo "  ✓ .mcp.json (created + taskwarrior)"
-fi
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 9. Installer status-line (binaire officiel)
+# 7. Installer status-line (binaire officiel)
 # ─────────────────────────────────────────────────────────────────────────────
 echo "→ Installing status-line..."
 mkdir -p "$HOME/.local/bin"
@@ -163,7 +123,6 @@ echo "    /git     - Workflow git (commit, branch, PR)"
 echo "    /review  - Demander une code review"
 echo "    /update  - Mettre à jour depuis GitHub"
 echo ""
-echo "  Taskwarrior: $(command -v task &>/dev/null && echo '✓ Installé' || echo '⚠ Non installé')"
 echo ""
 echo "  → Relance 'claude' pour charger les commandes"
 echo "═══════════════════════════════════════════"

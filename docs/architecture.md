@@ -55,9 +55,9 @@ Entry point. Responsibilities:
 Pure data types and interfaces. No I/O, no concurrency.
 
 - `model/` — `Input`, `Progress`, `Usage`, `Git`, `MCPServer`,
-  `TaskwarriorState`, `OSInfo`, `TerminalInfo`, etc. All value types.
+  `OSInfo`, `TerminalInfo`, etc. All value types.
 - `port/` — `InputProvider`, `Renderer`, `GitRepository`,
-  `MCPDetector`, `SystemInfoProvider`, `TaskwarriorProvider`,
+  `MCPDetector`, `SystemInfoProvider`,
   `TerminalDetector`, `Updater`, `UsageProvider`. Every external
   collaborator the application service needs.
 
@@ -80,7 +80,6 @@ One adapter per external concern. Each implements one port from
 | `git`          | `GitRepository`       | `git` CLI (status, diff stats)                  |
 | `mcp`          | `MCPDetector`         | `~/.claude/.claude.json`, project `mcp.json`    |
 | `system`       | `SystemInfoProvider`  | `runtime.GOOS`, `/.dockerenv`                   |
-| `taskwarrior`  | `TaskwarriorProvider` | `task` CLI (epic/task hierarchy)                |
 | `terminal`     | `TerminalDetector`    | `golang.org/x/term` (width, color depth)        |
 | `updater`      | `Updater`             | GitHub Releases API                             |
 | `usage`        | `UsageProvider`       | Anthropic OAuth API (`five_hour.utilization`)   |
@@ -99,7 +98,6 @@ collapsing rules (responds to `TerminalInfo.Width`), and pill styling
 3. `application.StatusLineService` fans out port calls in parallel:
    - `git.Status()`, `git.DiffStats()` for line 1.
    - `mcp.ActiveServers()` for line 2.
-   - `taskwarrior.CurrentEpicTask()` for line 2.
    - `usage.SessionAndWeekly()` for the burn-rate bars.
    - `terminal.Width()` for collapse decisions.
 4. Per-port errors are dropped; the corresponding segment is omitted.

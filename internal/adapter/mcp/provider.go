@@ -193,7 +193,7 @@ func (p *Provider) readUserConfig() model.MCPServers {
 	}
 
 	// Return servers from root mcpServers
-	return p.convertServers(config.MCPServers)
+	return p.convertServers(config.MCPServers, path)
 }
 
 // readLocalConfig reads MCP servers from local scope config.
@@ -232,7 +232,7 @@ func (p *Provider) readLocalConfig() model.MCPServers {
 	}
 
 	// Return servers from project config
-	return p.convertServers(projCfg.MCPServers)
+	return p.convertServers(projCfg.MCPServers, path)
 }
 
 // readProjectConfig reads MCP servers from project MCP config file.
@@ -257,7 +257,7 @@ func (p *Provider) readProjectConfig() model.MCPServers {
 			continue
 		}
 
-		return p.convertServers(config.MCPServers)
+		return p.convertServers(config.MCPServers, path)
 	}
 
 	return model.MCPServers{}
@@ -290,7 +290,7 @@ func (p *Provider) readManagedConfig() model.MCPServers {
 	}
 
 	// Return servers from mcpServers
-	return p.convertServers(config.MCPServers)
+	return p.convertServers(config.MCPServers, path)
 }
 
 // convertServers converts a map of server configs to MCPServers slice.
@@ -299,8 +299,11 @@ func (p *Provider) readManagedConfig() model.MCPServers {
 //   - servers: map of server name to config
 //
 // Returns:
+//   - source: config file the servers were declared in
+//
+// Returns:
 //   - model.MCPServers: slice of MCP servers
-func (p *Provider) convertServers(servers map[string]mcpServerConfig) model.MCPServers {
+func (p *Provider) convertServers(servers map[string]mcpServerConfig, source string) model.MCPServers {
 	// Check if servers map is empty
 	if len(servers) == 0 {
 		// Return empty list
@@ -322,6 +325,7 @@ func (p *Provider) convertServers(servers map[string]mcpServerConfig) model.MCPS
 		server := model.MCPServer{
 			Name:    name,
 			Enabled: !serverConfig.Disabled,
+			Source:  source,
 		}
 		// Append server to result
 		result = append(result, server)

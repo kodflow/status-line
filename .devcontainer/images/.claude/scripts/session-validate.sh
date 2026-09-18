@@ -129,9 +129,8 @@ approve() {
     echo ""
     echo "  Prochaines étapes:"
     echo "    1. session-transition.sh --complete-phase 5"
-    echo "    2. Écrire epics/tasks dans Taskwarrior"
-    echo "    3. session-transition.sh --finalize"
-    echo "    4. /apply"
+    echo "    2. session-transition.sh --finalize"
+    echo "    3. /apply"
     echo ""
     echo "═══════════════════════════════════════════════"
 }

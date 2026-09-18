@@ -6,10 +6,10 @@ import "github.com/florent/status-line/internal/domain/model"
 // UsageProvider defines the interface for API usage information.
 // Implementations should fetch usage data from Anthropic API.
 type UsageProvider interface {
-	// Usage returns session (5h) and weekly (7d) API usage.
+	// Limits returns every quota the account exposes.
 	//
 	// Returns:
-	//   - model.UsageData: session and weekly utilization and reset times
+	//   - model.LimitSet: session, weekly, scoped and extra quotas
 	//   - error: any error during fetch
-	Usage() (model.UsageData, error)
+	Limits() (model.LimitSet, error)
 }

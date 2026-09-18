@@ -102,13 +102,6 @@ READONLY_ALLOWED=(
     # Scripts session (autorisés car ils valident eux-mêmes)
     "session-transition.sh"
     "session-validate.sh"
-    # Taskwarrior (lecture + modification via scripts dédiés)
-    "task "
-    "task-init.sh"
-    "task-epic.sh"
-    "task-add.sh"
-    "task-start.sh"
-    "task-done.sh"
     # Tests (lecture seule, pas de modification)
     "go test"
     "cargo test"

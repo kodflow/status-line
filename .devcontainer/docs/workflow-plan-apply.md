@@ -24,7 +24,7 @@ flowchart TB
             P3["Phase 3: Analyse projet"]
             P4["Phase 4: Affûtage"]
             P5["Phase 5: Définition épics/tasks"]
-            P6["Phase 6: Écriture Taskwarrior"]
+            P6["Phase 6: Écriture des tâches"]
         end
 
         V{Validation utilisateur?}
@@ -203,7 +203,7 @@ flowchart TB
 
     subgraph PhaseCheck["Validation progression phases"]
         PC1{Phase 6 sans<br/>phases 1-5 complétées?}
-        PC2{Taskwarrior appelé<br/>sans validation?}
+        PC2{Écriture des tâches<br/>sans validation?}
         PC3{Write épics sans<br/>phase 5 complétée?}
     end
 
@@ -247,7 +247,7 @@ flowchart TB
     subgraph BlockedPhases["BLOQUÉ - Phases obligatoires"]
         PH1["Sauter Phase 1 → Phase 4"]
         PH2["Phase 6 sans validation"]
-        PH3["Taskwarrior sans phases 1-5"]
+        PH3["Écriture des tâches sans phases 1-5"]
         PH4["Épics sans Phase 5 complète"]
     end
 
@@ -300,7 +300,7 @@ flowchart TB
         P1C["Nouvelle analyse"]
     end
 
-    subgraph Phase6["Phase 6: Écriture Taskwarrior"]
+    subgraph Phase6["Phase 6: Écriture des tâches"]
         P6A["Créer épics"]
         P6B["Créer tasks"]
         P6C["state → planned"]
@@ -515,7 +515,7 @@ flowchart LR
 | Refus → retour Phase 5 | Refus → **Reset Phase 1** |
 | Pas de tracking phases | `currentPhase` + `completedPhases` |
 | Saut de phases possible | **Hook phase-validate.sh** bloque |
-| Taskwarrior sans validation | **BLOQUÉ** par hook |
+| Écriture des tâches sans validation | **BLOQUÉ** par hook |
 
 ---
 

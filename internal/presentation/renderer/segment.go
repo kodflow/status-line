@@ -15,9 +15,14 @@ type CursorProvider interface {
 // ModelSegmentData groups data needed to render the model segment.
 // It reduces the number of parameters for renderModelSegment.
 type ModelSegmentData struct {
-	Model    model.ModelInfo
-	ShowIcon bool
-	Progress model.Progress
-	Cursor   CursorProvider
-	NextBg   string
+	Model         model.ModelInfo
+	ShowIcon      bool
+	Progress      model.Progress
+	Cursor        CursorProvider
+	NextBg        string
+	Effort        string
+	FastMode      bool
+	ContextTokens int
+	ContextSize   int
+	Quotas        []model.Limit
 }

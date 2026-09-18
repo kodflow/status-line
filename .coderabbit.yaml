@@ -19,7 +19,7 @@ reviews:
     rendered status line are affected.
   auto_title_instructions: >
     Use Conventional Commits. Common scopes for this repo:
-    feat(usage), feat(taskwarrior), feat(git), feat(mcp), feat(renderer),
+    feat(usage), feat(git), feat(mcp), feat(renderer),
     fix(<adapter>), refactor(<package>), chore(devcontainer), ci(release),
     docs(vision|architecture|workflows).
   labeling_instructions:
