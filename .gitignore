@@ -118,3 +118,4 @@ CLAUDE.md
 # démo locale (non versionnée)
 .demo-fixtures/
 demo.sh
+glyph-test.sh

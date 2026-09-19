@@ -65,7 +65,7 @@ famille de modèles ne s'affiche que si ce modèle est en cours d'utilisation.
 
 | Pastille | Description |
 |----------|-------------|
-| ctx | Fenêtre de contexte, en % et en tokens |
+| ctx | Fenêtre de contexte, en % et en tokens ; son glyphe est un thermomètre à 5 niveaux qui se remplit avec elle |
 | session | Quota 5h : repère de brûlure régulière, atterrissage, reset |
 | weekly | Quota 7j global — absent sur les forfaits qui n'en ont pas |
 | *modèle* | Quota 7j scopé par famille de modèle (`limits[]`) |
