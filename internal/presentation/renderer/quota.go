@@ -33,10 +33,9 @@ const (
 func QuotaLabel(limit model.Limit) string {
 	// Map each kind onto its glyph and its name
 	switch limit.Kind {
-	// The conversation window. Its icon is visually tighter than the others, so
-	// it takes one more space to sit at the same optical distance from its name.
+	// The conversation window, labelled by the fill level of its own glyph
 	case model.KindContext:
-		return LabelledWide(ContextGlyph(limit.Percent), nameContext)
+		return Labelled(ContextGlyph(limit.Percent), nameContext)
 	// Every rate limit shares one gauge icon: they are the same kind of thing,
 	// and the model chip belongs to the model segment on line one, not here
 	case model.KindSession:
@@ -51,22 +50,6 @@ func QuotaLabel(limit model.Limit) string {
 	default:
 		return Capitalise(limit.Label)
 	}
-}
-
-// LabelledWide joins a glyph and a name with an extra space.
-//
-// Params:
-//   - glyph: icon for the item, possibly empty
-//   - name: display name
-//
-// Returns:
-//   - string: glyph and name, or the name alone
-func LabelledWide(glyph, name string) string {
-	// An empty glyph leaves the name to stand on its own
-	if glyph == "" {
-		return name
-	}
-	return glyph + "  " + name
 }
 
 // Labelled joins a glyph and a name, skipping the glyph when the active set
