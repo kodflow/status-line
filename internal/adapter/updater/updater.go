@@ -3,6 +3,8 @@
 package updater
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -41,6 +43,14 @@ const (
 	semverComponents int = 3
 	// executablePerm is the permission for executable files.
 	executablePerm os.FileMode = 0755
+	// checksumSuffix is appended to an asset name to reach its checksum file.
+	checksumSuffix string = ".sha256"
+	// disableEnv switches the self-updater off entirely.
+	disableEnv string = "STATUS_LINE_NO_SELF_UPDATE"
+	// checksumMaxBytes bounds the checksum file read.
+	checksumMaxBytes int64 = 1024
+	// sha256HexLen is the length of a SHA-256 digest in hex.
+	sha256HexLen int = 64
 )
 
 // Updater handles self-update logic for status-line binary.
@@ -48,6 +58,18 @@ const (
 type Updater struct {
 	version string
 	client  *http.Client
+	// execPath overrides the binary to replace. Empty means the running one,
+	// which is what production always uses; tests point it at a throwaway file
+	// so a swap can be asserted without replacing the test binary itself.
+	execPath string
+}
+
+// downloadURLFor builds the URL of a release asset. It is a variable so tests
+// can point the updater at a local server: the alternative is reaching the real
+// release endpoint, which would make these tests depend on the network and on
+// whatever is currently published.
+var downloadURLFor = func(owner, repo, version, asset string) string {
+	return fmt.Sprintf(downloadURL, owner, repo, version, asset)
 }
 
 // NewUpdater creates a new updater instance.
@@ -71,6 +93,14 @@ func NewUpdater(version string) *Updater {
 // Returns:
 //   - UpdateInfo: information about available update
 func (u *Updater) CheckForUpdate() UpdateInfo {
+	// Honour an explicit opt-out before anything else. A managed image verifies
+	// this binary at build time and rebuilds on its own schedule; replacing it
+	// at runtime would silently void that verification.
+	if os.Getenv(disableEnv) != "" {
+		// Self-update switched off by the environment
+		return UpdateInfo{}
+	}
+
 	// Skip update for dev builds
 	if u.version == "" {
 		// Dev build detected, skip update
@@ -280,7 +310,17 @@ func (u *Updater) parseVersion(v string) [semverComponents]int {
 func (u *Updater) downloadAndReplace(version string) error {
 	// Get binary name for current platform
 	binaryName := u.getBinaryName()
-	url := fmt.Sprintf(downloadURL, repoOwner, repoName, version, binaryName)
+	url := downloadURLFor(repoOwner, repoName, version, binaryName)
+
+	// Fetch the published checksum first: downloading the binary only to find
+	// there is nothing to check it against wastes the transfer, and a missing
+	// checksum must stop the update rather than wave it through.
+	expected, err := u.fetchChecksum(version, binaryName)
+	// Check for checksum retrieval errors
+	if err != nil {
+		// Return checksum error
+		return fmt.Errorf("fetching checksum: %w", err)
+	}
 
 	// Download new binary
 	resp, err := u.client.Get(url)
@@ -297,18 +337,22 @@ func (u *Updater) downloadAndReplace(version string) error {
 		return fmt.Errorf("download failed: status %d", resp.StatusCode)
 	}
 
-	// Get current executable path
-	execPath, err := os.Executable()
-	// Check for path resolution errors
-	if err != nil {
-		// Return path error
-		return fmt.Errorf("getting executable path: %w", err)
-	}
-	execPath, err = filepath.EvalSymlinks(execPath)
-	// Check for symlink resolution errors
-	if err != nil {
-		// Return symlink error
-		return fmt.Errorf("resolving symlinks: %w", err)
+	// Resolve what to replace: the running binary, unless a test pointed us
+	// somewhere else
+	execPath := u.execPath
+	if execPath == "" {
+		execPath, err = os.Executable()
+		// Check for path resolution errors
+		if err != nil {
+			// Return path error
+			return fmt.Errorf("getting executable path: %w", err)
+		}
+		execPath, err = filepath.EvalSymlinks(execPath)
+		// Check for symlink resolution errors
+		if err != nil {
+			// Return symlink error
+			return fmt.Errorf("resolving symlinks: %w", err)
+		}
 	}
 
 	// Create temporary file
@@ -320,14 +364,26 @@ func (u *Updater) downloadAndReplace(version string) error {
 	}
 	tmpPath := tmpFile.Name()
 
-	// Write downloaded content to temp file
-	_, err = io.Copy(tmpFile, resp.Body)
+	// Hash while writing: the bytes are streamed once, and the digest covers
+	// exactly what landed on disk rather than what was meant to
+	hasher := sha256.New()
+	_, err = io.Copy(io.MultiWriter(tmpFile, hasher), resp.Body)
 	tmpFile.Close()
 	// Check for write errors
 	if err != nil {
 		os.Remove(tmpPath)
 		// Return write error
 		return fmt.Errorf("writing temp file: %w", err)
+	}
+
+	// Refuse anything that does not match the published digest. This binary
+	// replaces itself in place, so an unverified download would be executed on
+	// every redraw from here on.
+	actual := hex.EncodeToString(hasher.Sum(nil))
+	if !strings.EqualFold(actual, expected) {
+		os.Remove(tmpPath)
+		// Return checksum mismatch
+		return fmt.Errorf("checksum mismatch: expected %s, got %s", expected, actual)
 	}
 
 	// Make executable
@@ -364,4 +420,53 @@ func (u *Updater) getBinaryName() string {
 	}
 	// Return platform-specific name
 	return name
+}
+
+// fetchChecksum retrieves the published SHA-256 of a release asset.
+//
+// The checksum file is fetched from the same resolved release tag as the
+// binary, so a tag moving between the two requests cannot pair a new binary
+// with an old digest.
+//
+// Params:
+//   - version: release tag being installed
+//   - binaryName: asset name for the current platform
+//
+// Returns:
+//   - string: expected hex digest
+//   - error: any error while fetching or parsing it
+func (u *Updater) fetchChecksum(version, binaryName string) (string, error) {
+	url := downloadURLFor(repoOwner, repoName, version, binaryName+checksumSuffix)
+
+	resp, err := u.client.Get(url)
+	// A network failure leaves the running binary in place
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	// A release without a checksum file is not one we can verify, and an
+	// unverifiable update is refused rather than trusted
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("status %d", resp.StatusCode)
+	}
+
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, checksumMaxBytes))
+	// An unreadable body carries no digest
+	if err != nil {
+		return "", err
+	}
+
+	// The file is "<hex>  <filename>", as sha256sum writes it
+	digest := strings.TrimSpace(string(raw))
+	if idx := strings.IndexAny(digest, " \t"); idx > 0 {
+		digest = digest[:idx]
+	}
+
+	// A digest of the wrong length is not one, and comparing against it would
+	// pass anything through
+	if len(digest) != sha256HexLen {
+		return "", fmt.Errorf("malformed checksum %q", digest)
+	}
+	return digest, nil
 }
