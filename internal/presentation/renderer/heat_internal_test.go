@@ -13,11 +13,8 @@ func TestContextHeat_RisesWithConsumption(t *testing.T) {
 		want    string
 	}{
 		{name: "empty", percent: 0, want: FgHeatCalm},
-		{name: "just under warm", percent: 39, want: FgHeatCalm},
-		{name: "warm", percent: 40, want: FgHeatWarm},
-		{name: "just under hot", percent: 59, want: FgHeatWarm},
-		{name: "hot", percent: 60, want: FgHeatHot},
-		{name: "just under compaction", percent: 89, want: FgHeatHot},
+		{name: "half", percent: 50, want: FgHeatCalm},
+		{name: "just under compaction", percent: 89, want: FgHeatCalm},
 		{name: "at the compaction threshold", percent: 90, want: FgHeatCritical},
 		{name: "full", percent: 100, want: FgHeatCritical},
 	}
@@ -30,37 +27,27 @@ func TestContextHeat_RisesWithConsumption(t *testing.T) {
 	}
 }
 
-func TestContextHeat_NeverCools(t *testing.T) {
-	rank := map[string]int{
-		FgHeatCalm:     0,
-		FgHeatWarm:     1,
-		FgHeatHot:      2,
-		FgHeatCritical: 3,
-	}
-	prev := 0
-	// Walking the range, the colour must only ever climb: a step backwards
-	// would read as the context emptying while it fills
-	for p := 0; p <= 100; p++ {
-		cur, ok := rank[ContextHeat(p)]
-		if !ok {
-			t.Fatalf("ContextHeat(%d) returned an ink outside the scale", p)
+func TestContextHeat_OnlyAlertsAtTheThreshold(t *testing.T) {
+	// Below the threshold the segment stays quiet: a bar that is coloured all
+	// the time signals nothing when it matters.
+	for p := 0; p < 90; p++ {
+		if ContextHeat(p) != FgHeatCalm {
+			t.Fatalf("ContextHeat(%d) alerts below the compaction threshold", p)
 		}
-		if cur < prev {
-			t.Fatalf("ContextHeat(%d) cooled down from the previous step", p)
-		}
-		prev = cur
 	}
-	// And the scale must actually be traversed end to end
-	if prev != 3 {
-		t.Errorf("the scale topped out at step %d, want the critical step", prev)
+	for p := 90; p <= 100; p++ {
+		if ContextHeat(p) != FgHeatCritical {
+			t.Fatalf("ContextHeat(%d) stays quiet at or past the threshold", p)
+		}
 	}
 }
 
 func TestContextHeat_DistinctInks(t *testing.T) {
-	inks := []string{FgHeatCalm, FgHeatWarm, FgHeatHot, FgHeatCritical}
+	inks := []string{FgHeatCalm, FgHeatCritical}
 	seen := make(map[string]bool, len(inks))
 	for _, ink := range inks {
-		// Two steps sharing an ink would make one of them invisible
+		// The quiet ink and the alert ink sharing a value would make the alert
+		// invisible, which is the one thing this segment has to get right
 		if seen[ink] {
 			t.Errorf("ink %q is used by two different steps", ink)
 		}
@@ -107,8 +94,6 @@ func TestContextHeat_MeetsContrastOnItsOwnGround(t *testing.T) {
 		ink  string
 	}{
 		{name: "calm", ink: FgHeatCalm},
-		{name: "warm", ink: FgHeatWarm},
-		{name: "hot", ink: FgHeatHot},
 		{name: "critical", ink: FgHeatCritical},
 	}
 	for _, tt := range tests {

@@ -9,14 +9,14 @@ const (
 	Reset string = "\033[0m"
 	// Bold enables bold text.
 	Bold string = "\033[1m"
-	// BgBlue is the pale blue background color.
-	BgBlue string = "\033[48;5;111m"
+	// BgBlue is the dark ground of the path segment.
+	BgBlue string = "\033[48;5;236m"
 	// BgCyan is the pale cyan background color.
 	BgCyan string = "\033[48;5;116m"
 	// BgWhite is the white background color.
 	BgWhite string = "\033[48;5;255m"
-	// FgBlueDark is a darker blue for text on blue background.
-	FgBlueDark string = "\033[38;5;20m"
+	// FgBlueDark is the light ink on the path ground.
+	FgBlueDark string = "\033[38;5;250m"
 	// FgCyanDark is a darker cyan for text on cyan background.
 	FgCyanDark string = "\033[38;5;23m"
 	// BgHaiku is the pale pink background for Haiku.
@@ -32,8 +32,8 @@ const (
 	// deliberately not white: that is the OS segment's colour, and a model
 	// sharing it merges with the segment before it, separator included.
 	BgModelUnknown string = "\033[48;5;252m"
-	// FgBlue is the pale blue foreground color for separators.
-	FgBlue string = "\033[38;5;111m"
+	// FgBlue is the path ground as a foreground, for separators.
+	FgBlue string = "\033[38;5;236m"
 	// FgCyan is the pale cyan foreground color for separators.
 	FgCyan string = "\033[38;5;116m"
 	// FgWhite is the white foreground color.
