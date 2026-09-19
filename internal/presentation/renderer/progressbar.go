@@ -48,6 +48,33 @@ var (
 	}
 )
 
+// filledCells returns how many cells of a bar are filled at a percentage.
+//
+// Integer division alone hides the start of every bar: at a width of ten, nine
+// percent rounds to zero cells, so a session that has already spent something
+// reads as untouched. Any consumption at all claims one cell, and the bar only
+// fills completely at a hundred percent — the two ends of the scale are where a
+// bar is actually read.
+//
+// Params:
+//   - percent: consumption percentage
+//   - width: bar width in cells
+//
+// Returns:
+//   - int: number of filled cells
+func filledCells(percent, width int) int {
+	filled := percent * width / percentMax
+	// Show that something has been spent rather than nothing
+	if filled == 0 && percent > 0 {
+		return 1
+	}
+	// Keep the last cell for a quota that is genuinely full
+	if filled >= width && percent < percentMax {
+		return width - 1
+	}
+	return filled
+}
+
 // RenderProgressBar generates a progress bar string.
 //
 // Params:
@@ -122,7 +149,7 @@ func RenderProgressBarWidth(progress model.Progress, cursorPos, width int, curso
 //   - string: rendered progress bar
 func renderHeavyBar(progress model.Progress, _cursorIdx int) string {
 	// Calculate filled characters
-	filled := progress.Percent * progressBarWidth / percentMax
+	filled := filledCells(progress.Percent, progressBarWidth)
 	var result [progressBarWidth]rune
 	// Build progress bar
 	for i := range progressBarWidth {
@@ -151,7 +178,7 @@ func renderHeavyBar(progress model.Progress, _cursorIdx int) string {
 //   - string: rendered progress bar with ANSI color codes for cursor
 func renderHeavyBarWithCursor(progress model.Progress, cursorIdx, width int, cursorColor, bgColor string) string {
 	// Calculate filled characters
-	filled := progress.Percent * width / percentMax
+	filled := filledCells(progress.Percent, width)
 	// Pre-convert runes to strings for efficiency
 	fullChar := string(heavyFull)
 	emptyChar := string(heavyEmpty)
