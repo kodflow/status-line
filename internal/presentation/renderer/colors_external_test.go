@@ -78,19 +78,13 @@ func TestGetModelColors_UnknownFallsBackToNeutral(t *testing.T) {
 	}
 }
 
-func TestContextSegmentNeverTouchesAnotherWhiteSegment(t *testing.T) {
-	// The context segment reuses the OS segment's white. That only reads as two
-	// segments because the model segment always sits between them, so no model
-	// may ever be white — this is what keeps the choice safe.
-	if renderer.BgHueContext != renderer.BgWhite {
-		t.Skip("context no longer shares the OS white")
-	}
+func TestNoModelSharesTheOSSegmentWhite(t *testing.T) {
+	// The OS segment is white. A model sharing that background merges with the
+	// segment before it, separator included, into one unreadable block.
 	for _, name := range []string{"Opus 5", "Sonnet 5", "Haiku 4.5", "Fable 5.1", "Nimbus 2"} {
 		bg, _, _ := renderer.GetModelColors(name)
-		// A white model would merge the OS, the model and the context into one
-		// unbroken white block
 		if bg == renderer.BgWhite {
-			t.Errorf("GetModelColors(%q) is white, which would merge the OS and context segments", name)
+			t.Errorf("GetModelColors(%q) is the OS segment's white", name)
 		}
 	}
 }

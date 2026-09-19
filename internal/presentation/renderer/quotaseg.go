@@ -18,12 +18,10 @@ const (
 // than as an isolated pill, so the whole line reads as a single ribbon the way
 // the original status line did.
 type quotaSegment struct {
-	limit  model.Limit
-	bg     string
-	cap    string
-	ink    string
-	tokens int
-	size   int
+	limit model.Limit
+	bg    string
+	cap   string
+	ink   string
 }
 
 // quotaSegments builds the chain of quota segments for the shared line.
@@ -44,12 +42,10 @@ func quotaSegments(data model.StatusLineData) []quotaSegment {
 	// only one that is always present
 	if limits.Context.IsValid() && !isKindHidden(model.KindContext) {
 		segments = append(segments, quotaSegment{
-			limit:  limits.Context,
-			bg:     BgHueContext,
-			cap:    FgHueContext,
-			ink:    FgHueContextInk,
-			tokens: data.ContextTokens,
-			size:   data.ContextSize,
+			limit: limits.Context,
+			bg:    BgContext,
+			cap:   FgContext,
+			ink:   FgHeatCalm,
 		})
 	}
 
@@ -144,10 +140,6 @@ func renderQuotaSegment(sb *strings.Builder, seg quotaSegment, nextBg string) {
 	// Append the countdown to the refill, which is what the bar cannot say
 	if limit.HasWindow() {
 		sb.WriteString(seg.bg + seg.ink + " " + glyphs.Reset + FormatDuration(limit.Remaining()) + Reset)
-	}
-	// The context window has no refill, so it carries its token figures instead
-	if seg.size > 0 {
-		sb.WriteString(seg.bg + seg.ink + " " + FormatTokens(seg.tokens) + "/" + FormatTokens(seg.size) + Reset)
 	}
 	sb.WriteString(seg.bg + " " + Reset)
 

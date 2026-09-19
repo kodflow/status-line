@@ -87,16 +87,14 @@ func (r *Powerline) renderLine1(sb *strings.Builder, data model.StatusLineData) 
 		modelNextBg = segments[0].bg
 	}
 	modelData := &ModelSegmentData{
-		Model:         data.Model,
-		ShowIcon:      data.Icons.Model,
-		Progress:      data.Progress,
-		Cursor:        nil,
-		NextBg:        modelNextBg,
-		Effort:        data.Effort,
-		FastMode:      data.FastMode,
-		ContextTokens: data.ContextTokens,
-		ContextSize:   data.ContextSize,
-		Quotas:        modelQuotas(data),
+		Model:    data.Model,
+		ShowIcon: data.Icons.Model,
+		Progress: data.Progress,
+		Cursor:   nil,
+		NextBg:   modelNextBg,
+		Effort:   data.Effort,
+		FastMode: data.FastMode,
+		Quotas:   modelQuotas(data),
 	}
 	r.renderModelSegment(sb, modelData)
 

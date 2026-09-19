@@ -16,9 +16,9 @@ const (
 	// BgWhite is the white background color.
 	BgWhite string = "\033[48;5;255m"
 	// FgBlueDark is a darker blue for text on blue background.
-	FgBlueDark string = "\033[38;5;25m"
+	FgBlueDark string = "\033[38;5;20m"
 	// FgCyanDark is a darker cyan for text on cyan background.
-	FgCyanDark string = "\033[38;5;30m"
+	FgCyanDark string = "\033[38;5;23m"
 	// BgHaiku is the pale pink background for Haiku.
 	BgHaiku string = "\033[48;5;218m"
 	// BgSonnet is the pale purple background for Sonnet.
@@ -53,25 +53,25 @@ const (
 	// FgModelUnknown is the neutral foreground for an unrecognised model.
 	FgModelUnknown string = "\033[38;5;252m"
 	// FgHaikuDark is a darker pink for text on Haiku background.
-	FgHaikuDark string = "\033[38;5;168m"
+	FgHaikuDark string = "\033[38;5;89m"
 	// FgSonnetDark is a darker purple for text on Sonnet background.
-	FgSonnetDark string = "\033[38;5;97m"
+	FgSonnetDark string = "\033[38;5;56m"
 	// FgOpusDark is a darker orange for text on Opus background.
-	FgOpusDark string = "\033[38;5;172m"
+	FgOpusDark string = "\033[38;5;58m"
 	// FgFableDark is a deep green for text on the Fable background.
-	FgFableDark string = "\033[38;5;29m"
+	FgFableDark string = "\033[38;5;23m"
 	// FgModelUnknownDark is the dark text on an unrecognised model background.
 	FgModelUnknownDark string = "\033[38;5;238m"
 	// BgGreen is the pale green background for lines added.
 	BgGreen string = "\033[48;5;114m"
 	// FgGreenText is the darker green for text on green background.
-	FgGreenText string = "\033[38;5;28m"
+	FgGreenText string = "\033[38;5;22m"
 	// FgGreenSep is the pale green foreground for separator.
 	FgGreenSep string = "\033[38;5;114m"
 	// BgRed is the pale red background for lines removed.
 	BgRed string = "\033[48;5;174m"
 	// FgRedText is the darker red for text on red background.
-	FgRedText string = "\033[38;5;124m"
+	FgRedText string = "\033[38;5;52m"
 	// FgRedSep is the pale red foreground for separator.
 	FgRedSep string = "\033[38;5;174m"
 	// ColorGray is the gray foreground for incomplete progress.
@@ -93,7 +93,7 @@ const (
 	// FgMCPEnabled is the pale teal foreground for enabled MCP pill caps.
 	FgMCPEnabled string = "\033[38;5;116m"
 	// FgMCPEnabledText is the dark teal for text on enabled MCP background.
-	FgMCPEnabledText string = "\033[38;5;30m"
+	FgMCPEnabledText string = "\033[38;5;23m"
 	// BgMCPDisabled is the pale gray background for disabled MCP servers.
 	BgMCPDisabled string = "\033[48;5;250m"
 	// FgMCPDisabled is the pale gray foreground for disabled MCP pill caps.
