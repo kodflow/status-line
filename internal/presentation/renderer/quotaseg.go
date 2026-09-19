@@ -130,7 +130,7 @@ func renderQuotaSegment(sb *strings.Builder, seg quotaSegment, nextBg string) {
 	bar := RenderProgressBarWidth(limit.Progress(), cursor, segBarWidth, FgCursorOrange, seg.bg+seg.ink+Bold)
 
 	// Write the label, the bar and the consumed percentage
-	sb.WriteString(seg.bg + seg.ink + Bold + " " + HyperlinkURL(QuotaLabel(limit), quotaURL(limit)) + " " + Reset)
+	sb.WriteString(seg.bg + seg.ink + Bold + " " + QuotaLabel(limit) + " " + Reset)
 	sb.WriteString(seg.bg + seg.ink + Bold + bar + " " + strconv.Itoa(limit.Percent) + "%" + Reset)
 	// Append the countdown to the refill, which is what the bar cannot say
 	if limit.HasWindow() {
@@ -144,20 +144,4 @@ func renderQuotaSegment(sb *strings.Builder, seg quotaSegment, nextBg string) {
 
 	// Write the separator into whatever follows
 	sb.WriteString(nextBg + seg.cap + SepRight + Reset)
-}
-
-// quotaURL returns where a quota can be inspected in full.
-//
-// Params:
-//   - limit: quota being rendered
-//
-// Returns:
-//   - string: address to open, empty for quotas with no page of their own
-func quotaURL(limit model.Limit) string {
-	// The context window is local to the conversation and has no page
-	if limit.Kind == model.KindContext {
-		return ""
-	}
-	// Every rate limit is detailed on the account usage page
-	return usageURL
 }

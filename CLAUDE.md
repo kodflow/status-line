@@ -35,7 +35,6 @@ make demo           # Démo avec données exemple
 ## Affichage
 
 `STATUSLINE_LINE_GAP` = lignes vides entre les deux rangées, 0-3 (défaut `0`)
-`STATUSLINE_LINKS` = `0` désactive les segments cliquables OSC 8
 `STATUS_LINE_NO_SELF_UPDATE` = `1` désactive l'auto-update (images managées)
 
 L'auto-update vérifie le `.sha256` publié avec l'asset avant de remplacer le

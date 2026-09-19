@@ -46,7 +46,6 @@ func (m *mockInputProvider) ContextWindowSize() int     { return 200000 }
 func (m *mockInputProvider) SessionCost() float64       { return 1.23 }
 func (m *mockInputProvider) IsFastMode() bool           { return false }
 func (m *mockInputProvider) SessionLabel() string       { return "test session" }
-func (m *mockInputProvider) RepoURL() string            { return "https://github.com/acme/demo" }
 func (m *mockInputProvider) StdinLimits() model.LimitSet {
 	return model.LimitSet{
 		Context: model.NewLimit(model.KindContext, "ctx", 50, time.Time{}, 0, model.SourceStdin),

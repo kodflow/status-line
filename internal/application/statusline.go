@@ -114,7 +114,6 @@ func (s *StatusLineService) GenerateWithUpdate(input port.InputProvider, update 
 		Cost:          input.SessionCost(),
 		FastMode:      input.IsFastMode(),
 		SessionName:   input.SessionLabel(),
-		RepoURL:       input.RepoURL(),
 	}
 
 	// Delegate rendering to the renderer

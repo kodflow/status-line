@@ -26,6 +26,4 @@ type InputProvider interface {
 	IsFastMode() bool
 	// SessionLabel returns the human name of the session.
 	SessionLabel() string
-	// RepoURL returns the browser URL of the repository being worked on.
-	RepoURL() string
 }

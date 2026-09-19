@@ -126,7 +126,7 @@ func (r *Powerline) renderLine1(sb *strings.Builder, data model.StatusLineData) 
 	r.renderPathSegment(sb, data.Dir, data.Git.IsInRepo(), data.Icons.Path, changesNextBg)
 
 	// Render git segment if in repo
-	r.renderGitSegment(sb, data.Git, data.Icons.Git, changesNextBg, data.RepoURL)
+	r.renderGitSegment(sb, data.Git, data.Icons.Git, changesNextBg)
 	// Render code changes if any
 	r.renderChangesSegment(sb, data.Changes)
 }
@@ -226,7 +226,7 @@ func (r *Powerline) renderModelSegment(sb *strings.Builder, data *ModelSegmentDa
 			sb.WriteString(bgColor + textColor + " " + Reset)
 		} else {
 			sb.WriteString(bgColor + textColor + " " + glyphs.Divider + Reset)
-			sb.WriteString(bgColor + textColor + Bold + " " + HyperlinkURL(QuotaLabel(quota), usageURL) + " " + Reset)
+			sb.WriteString(bgColor + textColor + Bold + " " + QuotaLabel(quota) + " " + Reset)
 		}
 		sb.WriteString(bgColor + textColor + bar + Bold + " " + itoa(quota.Percent) + "%" + Reset)
 		// Append the countdown to the refill, which the bar cannot say
@@ -254,10 +254,10 @@ func (r *Powerline) renderPathSegment(sb *strings.Builder, dir string, hasGit bo
 	// Check if icon should be shown
 	if showIcon {
 		// Write path with folder icon and dark blue text
-		sb.WriteString(BgBlue + FgBlueDark + Bold + " " + IconFolder + "  " + Hyperlink(truncated, dir) + " " + Reset)
+		sb.WriteString(BgBlue + FgBlueDark + Bold + " " + IconFolder + "  " + truncated + " " + Reset)
 	} else {
 		// Write path without icon with dark blue text
-		sb.WriteString(BgBlue + FgBlueDark + Bold + " " + Hyperlink(truncated, dir) + " " + Reset)
+		sb.WriteString(BgBlue + FgBlueDark + Bold + " " + truncated + " " + Reset)
 	}
 
 	// Determine separator style based on next segment
@@ -282,8 +282,7 @@ func (r *Powerline) renderPathSegment(sb *strings.Builder, dir string, hasGit bo
 //   - git: git status information
 //   - showIcon: whether to show the git branch icon
 //   - nextBg: background color of next segment for separator
-//   - repoURL: browser URL of the repository, empty when unknown
-func (r *Powerline) renderGitSegment(sb *strings.Builder, git model.GitStatus, showIcon bool, nextBg, repoURL string) {
+func (r *Powerline) renderGitSegment(sb *strings.Builder, git model.GitStatus, showIcon bool, nextBg string) {
 	// Skip if not in a git repository
 	if !git.IsInRepo() {
 		// Return early if not in repo
@@ -293,10 +292,10 @@ func (r *Powerline) renderGitSegment(sb *strings.Builder, git model.GitStatus, s
 	// Check if icon should be shown
 	if showIcon {
 		// Write branch with icon and dark cyan text
-		sb.WriteString(BgCyan + FgCyanDark + Bold + " " + IconGitBranch + " " + HyperlinkURL(git.Branch, repoURL))
+		sb.WriteString(BgCyan + FgCyanDark + Bold + " " + IconGitBranch + " " + git.Branch)
 	} else {
 		// Write branch without icon with dark cyan text
-		sb.WriteString(BgCyan + FgCyanDark + Bold + " " + HyperlinkURL(git.Branch, repoURL))
+		sb.WriteString(BgCyan + FgCyanDark + Bold + " " + git.Branch)
 	}
 
 	// Add modified indicator if present
@@ -422,8 +421,8 @@ func (r *Powerline) renderMCPPill(sb *strings.Builder, server model.MCPServer) {
 
 	// Write left rounded cap
 	sb.WriteString(fgColor + LeftRound + Reset)
-	// Write server name, clickable when the terminal supports OSC 8
-	sb.WriteString(bgColor + textColor + " " + Hyperlink(server.Name, server.Source) + " " + Reset)
+	// Write server name
+	sb.WriteString(bgColor + textColor + " " + server.Name + " " + Reset)
 	// Write right rounded cap
 	sb.WriteString(fgColor + RightRound + Reset)
 }

@@ -106,7 +106,6 @@ dashboard:
 | `STATUSLINE_ICON_PATH` | Show folder icon | `true` |
 | `STATUSLINE_ICON_GIT` | Show git branch icon | `true` |
 | `STATUSLINE_LINE_GAP` | Blank lines between the two rows (0-3) | `0` |
-| `STATUSLINE_LINKS` | `0` disables the OSC 8 clickable segments | `1` |
 | `STATUSLINE_GLYPHS` | `nerd` or `text` (no Nerd Font required) | `nerd` |
 | `STATUSLINE_HIDE` | Comma-separated segments to leave out: `context`, `session`, `weekly`, `model` | — |
 

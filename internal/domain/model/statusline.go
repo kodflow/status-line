@@ -21,7 +21,6 @@ type StatusLineData struct {
 	Effort        string
 	FastMode      bool
 	SessionName   string
-	RepoURL       string
 	Changes       CodeChanges
 	MCP           MCPServers
 	Update        UpdateInfo
