@@ -129,9 +129,18 @@ func renderQuotaSegment(sb *strings.Builder, seg quotaSegment, nextBg string) {
 	}
 	bar := RenderProgressBarWidth(limit.Progress(), cursor, segBarWidth, FgCursorOrange, seg.bg+seg.ink+Bold)
 
+	// The context window heats up as it fills: the glyph and the figure carry
+	// the colour, the name stays neutral so it remains a label rather than a
+	// second alarm
+	ink := seg.ink
+	if limit.Kind == model.KindContext {
+		ink = ContextHeat(limit.Percent)
+	}
+
 	// Write the label, the bar and the consumed percentage
-	sb.WriteString(seg.bg + seg.ink + Bold + " " + QuotaLabel(limit) + " " + Reset)
-	sb.WriteString(seg.bg + seg.ink + Bold + bar + " " + strconv.Itoa(limit.Percent) + "%" + Reset)
+	sb.WriteString(seg.bg + ink + Bold + " " + QuotaLabel(limit) + " " + Reset)
+	sb.WriteString(seg.bg + seg.ink + Bold + bar + Reset)
+	sb.WriteString(seg.bg + ink + Bold + " " + strconv.Itoa(limit.Percent) + "%" + Reset)
 	// Append the countdown to the refill, which is what the bar cannot say
 	if limit.HasWindow() {
 		sb.WriteString(seg.bg + seg.ink + " " + glyphs.Reset + FormatDuration(limit.Remaining()) + Reset)
