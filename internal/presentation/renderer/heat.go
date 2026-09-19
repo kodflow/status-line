@@ -18,38 +18,27 @@ const (
 	// carry it either. 90 matches the documented default for a 200k window;
 	// anyone who moved theirs sets this to match.
 	defaultCompactPct int = 90
-	// warmPct is where the context starts warming up.
-	warmPct int = 40
-	// hotPct is where it reads as hot, short of critical.
-	hotPct int = 60
 )
 
-// Context ground and heat inks.
+// Context ground and inks.
 //
-// The segment sits on a dark grey rather than on white, and that is what lets
-// the scale use the colours the eye reads as heat. On white, every warm hue
-// bright enough to look like amber or orange fails the contrast floor — amber
-// measures 2.88:1 there — so the scale had to fall back on burnt, muddy tones.
-// Against #303030 the same scale runs vivid, and every step clears WCAG AA
-// (4.5:1) with margin to spare.
+// The context sits on the blue the path used to have, and the path takes the
+// dark grey. That swap costs the heat scale: gold, peach and orange all fail
+// the contrast floor against #87afff, and a warning nobody can read is not one.
 //
-// Every step clears WCAG AA (4.5:1) against the segment's own white ground.
-// The obvious bright amber and orange do not: they measure 2.88:1 and 3.28:1,
-// which is below the 3:1 floor for large text in the first case and only
-// passes on boldness in the second. A warning nobody can read is not one.
+// What survives is the step that matters. Deep red clears 6.46:1 on the blue,
+// so the segment stays quiet until the window is about to be compacted, and
+// then says so. A gradient nobody could read bought nothing the percentage did
+// not already give.
 const (
-	// BgContext is the dark grey ground of the context segment.
-	BgContext string = "\033[48;5;236m"
+	// BgContext is the blue ground of the context segment.
+	BgContext string = "[48;5;111m"
 	// FgContext is that ground as a foreground, for the powerline separator.
-	FgContext string = "\033[38;5;236m"
-	// FgHeatCalm is the neutral ink of a context with room to spare. 6.95:1.
-	FgHeatCalm string = "\033[38;5;250m"
-	// FgHeatWarm is the gold ink of a filling context. 7.15:1.
-	FgHeatWarm string = "\033[38;5;214m"
-	// FgHeatHot is the peach ink of a context worth watching. 7.26:1.
-	FgHeatHot string = "\033[38;5;215m"
-	// FgHeatCritical is the red of a context about to be compacted. 5.70:1.
-	FgHeatCritical string = "\033[38;5;210m"
+	FgContext string = "[38;5;111m"
+	// FgHeatCalm is the deep blue ink of a context below the threshold. 4.85:1.
+	FgHeatCalm string = "[38;5;20m"
+	// FgHeatCritical is the deep red of a context about to be compacted. 6.46:1.
+	FgHeatCritical string = "[38;5;52m"
 )
 
 // compactPct is the resolved critical threshold, read once at startup.
@@ -76,9 +65,8 @@ func compactPctFromEnv() int {
 
 // ContextHeat returns the ink for a context percentage.
 //
-// The colour rises with the window so the state is legible before the figure
-// is read, and the top step lands on the compaction threshold: red means the
-// conversation is about to be rewritten, not merely that the bar looks full.
+// Red lands on the compaction threshold: it means the conversation is about to
+// be rewritten, not merely that the bar looks full.
 //
 // Params:
 //   - percent: context window consumption, 0-100
@@ -86,19 +74,9 @@ func compactPctFromEnv() int {
 // Returns:
 //   - string: ANSI foreground for that level
 func ContextHeat(percent int) string {
-	// Map the percentage onto the four steps, hottest first
-	switch {
-	// About to be compacted
-	case percent >= compactPct:
+	// One step, on the only threshold that changes what happens next
+	if percent >= compactPct {
 		return FgHeatCritical
-	// Worth watching
-	case percent >= hotPct:
-		return FgHeatHot
-	// Filling up
-	case percent >= warmPct:
-		return FgHeatWarm
-	// Room to spare
-	default:
-		return FgHeatCalm
 	}
+	return FgHeatCalm
 }

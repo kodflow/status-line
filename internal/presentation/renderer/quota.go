@@ -35,7 +35,7 @@ func QuotaLabel(limit model.Limit) string {
 	switch limit.Kind {
 	// The conversation window, labelled by the fill level of its own glyph
 	case model.KindContext:
-		return Labelled(ContextGlyph(limit.Percent), nameContext)
+		return Labelled(glyphs.Ctx, nameContext)
 	// Every rate limit shares one gauge icon: they are the same kind of thing,
 	// and the model chip belongs to the model segment on line one, not here
 	case model.KindSession:
@@ -85,28 +85,4 @@ func Capitalise(s string) string {
 	}
 	runes := []rune(s)
 	return strings.ToUpper(string(runes[0])) + string(runes[1:])
-}
-
-// ContextGlyph returns the fill level matching a context percentage.
-//
-// The five levels split the range evenly, so the glyph changes four times
-// across a conversation rather than tracking every point: a symbol that moved
-// constantly would draw the eye to a number the bar already shows.
-//
-// Params:
-//   - percent: context window consumption, 0-100
-//
-// Returns:
-//   - string: glyph for that fill level
-func ContextGlyph(percent int) string {
-	// Clamp below the floor so a negative value cannot index backwards
-	if percent < 0 {
-		percent = 0
-	}
-	idx := percent * ctxLevelCount / (percentComplete + 1)
-	// Clamp above the ceiling so 100% lands on the last level, not past it
-	if idx >= ctxLevelCount {
-		idx = ctxLevelCount - 1
-	}
-	return glyphs.CtxLevels[idx]
 }
