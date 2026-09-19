@@ -48,16 +48,6 @@ const (
 // recognised by its colour before its label is read. The hues run cool to warm
 // as the window widens: conversation, then five hours, then seven days.
 const (
-	// BgHueContext is the white ground of the context window. It repeats the OS
-	// segment's white, which is safe only because the model segment always sits
-	// between the two and is never white itself.
-	BgHueContext string = "\033[48;5;255m"
-	// FgHueContext is the white cap of the context window.
-	FgHueContext string = "\033[38;5;255m"
-	// FgHueContextInk is the dark grey ink on the context ground. Black on white
-	// is harsher than the rest of the line, which nowhere uses full contrast.
-	FgHueContextInk string = "\033[38;5;240m"
-
 	// BgHueSession is the pale blue ground of the five-hour quota.
 	BgHueSession string = "\033[48;5;153m"
 	// FgHueSession is the pale blue cap of the five-hour quota.

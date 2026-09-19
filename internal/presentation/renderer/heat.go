@@ -24,16 +24,32 @@ const (
 	hotPct int = 60
 )
 
-// Context heat inks, from calm to critical, readable on the white ground.
+// Context ground and heat inks.
+//
+// The segment sits on a dark grey rather than on white, and that is what lets
+// the scale use the colours the eye reads as heat. On white, every warm hue
+// bright enough to look like amber or orange fails the contrast floor — amber
+// measures 2.88:1 there — so the scale had to fall back on burnt, muddy tones.
+// Against #303030 the same scale runs vivid, and every step clears WCAG AA
+// (4.5:1) with margin to spare.
+//
+// Every step clears WCAG AA (4.5:1) against the segment's own white ground.
+// The obvious bright amber and orange do not: they measure 2.88:1 and 3.28:1,
+// which is below the 3:1 floor for large text in the first case and only
+// passes on boldness in the second. A warning nobody can read is not one.
 const (
-	// FgHeatCalm is the neutral ink of a context with room to spare.
-	FgHeatCalm string = "\033[38;5;240m"
-	// FgHeatWarm is the gold ink of a filling context.
-	FgHeatWarm string = "\033[38;5;136m"
-	// FgHeatHot is the orange ink of a context worth watching.
-	FgHeatHot string = "\033[38;5;166m"
-	// FgHeatCritical is the red ink of a context about to be compacted.
-	FgHeatCritical string = "\033[38;5;88m"
+	// BgContext is the dark grey ground of the context segment.
+	BgContext string = "\033[48;5;236m"
+	// FgContext is that ground as a foreground, for the powerline separator.
+	FgContext string = "\033[38;5;236m"
+	// FgHeatCalm is the neutral ink of a context with room to spare. 6.95:1.
+	FgHeatCalm string = "\033[38;5;250m"
+	// FgHeatWarm is the gold ink of a filling context. 7.15:1.
+	FgHeatWarm string = "\033[38;5;214m"
+	// FgHeatHot is the peach ink of a context worth watching. 7.26:1.
+	FgHeatHot string = "\033[38;5;215m"
+	// FgHeatCritical is the red of a context about to be compacted. 5.70:1.
+	FgHeatCritical string = "\033[38;5;210m"
 )
 
 // compactPct is the resolved critical threshold, read once at startup.

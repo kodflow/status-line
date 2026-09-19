@@ -16,10 +16,6 @@ type InputProvider interface {
 	StdinLimits() model.LimitSet
 	// EffortLevel returns the reasoning effort of the session.
 	EffortLevel() string
-	// ContextTokens returns the tokens resident in the context window.
-	ContextTokens() int
-	// ContextWindowSize returns the total context window size.
-	ContextWindowSize() int
 	// SessionCost returns the accumulated session cost in USD.
 	SessionCost() float64
 	// IsFastMode reports whether fast mode is enabled.

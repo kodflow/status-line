@@ -208,23 +208,6 @@ func (i *Input) EffortLevel() string {
 	return i.Effort.Level
 }
 
-// ContextTokens returns the tokens currently held in the context window.
-// Cumulative totals overshoot after a compaction, so the live usage block is
-// preferred and the cumulative sum is only a fallback.
-//
-// Returns:
-//   - int: tokens resident in the context window
-func (i *Input) ContextTokens() int {
-	usage := i.ContextWindow.CurrentUsage
-	live := usage.InputTokens + usage.CacheCreationInputTokens + usage.CacheReadInputTokens
-	// Prefer the live figure whenever the block was populated
-	if live > 0 {
-		return live
-	}
-	// Fall back to the cumulative totals
-	return i.TotalTokens()
-}
-
 // SessionCost returns the accumulated cost of the session in USD.
 //
 // Returns:
