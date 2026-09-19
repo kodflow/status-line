@@ -50,30 +50,8 @@ type InputModel struct {
 // InputWorkspace contains workspace information from JSON.
 // It holds the current working directory path.
 type InputWorkspace struct {
-	CurrentDir string    `json:"current_dir"`
-	ProjectDir string    `json:"project_dir"`
-	Repo       InputRepo `json:"repo"`
-}
-
-// InputRepo is the repository identity Claude Code parses from the origin
-// remote. It is what lets the status line point at the project on its forge
-// without shelling out to git for a remote URL.
-type InputRepo struct {
-	Host  string `json:"host"`
-	Owner string `json:"owner"`
-	Name  string `json:"name"`
-}
-
-// URL returns the browser URL of the repository.
-//
-// Returns:
-//   - string: repository URL, empty when the remote is unknown
-func (r InputRepo) URL() string {
-	// Without all three parts there is no address to build
-	if r.Host == "" || r.Owner == "" || r.Name == "" {
-		return ""
-	}
-	return "https://" + r.Host + "/" + r.Owner + "/" + r.Name
+	CurrentDir string `json:"current_dir"`
+	ProjectDir string `json:"project_dir"`
 }
 
 // InputContext contains context window information from JSON.
@@ -272,13 +250,4 @@ func (i *Input) IsFastMode() bool {
 func (i *Input) SessionLabel() string {
 	// Return the name verbatim; truncation is the renderer's concern
 	return i.SessionName
-}
-
-// RepoURL returns the browser URL of the repository being worked on.
-//
-// Returns:
-//   - string: repository URL, empty outside a recognised remote
-func (i *Input) RepoURL() string {
-	// Delegate to the parsed repository identity
-	return i.Workspace.Repo.URL()
 }

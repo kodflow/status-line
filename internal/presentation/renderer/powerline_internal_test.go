@@ -138,7 +138,7 @@ func TestPowerline_renderGitSegment(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &Powerline{}
 			var sb strings.Builder
-			r.renderGitSegment(&sb, tt.git, true, "", "https://github.com/acme/demo")
+			r.renderGitSegment(&sb, tt.git, true, "")
 			_ = sb.String() // Just verify no panic
 		})
 	}
