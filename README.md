@@ -112,7 +112,18 @@ dashboard:
 
 ## Auto-Update
 
-Status-line automatically checks for updates once per hour and downloads newer versions in the background. The update notification appears on line 2 while downloading.
+Status-line checks for updates once per hour and downloads newer versions in the
+background. The update notification appears on line 2 while downloading.
+
+**Every download is verified** against the `.sha256` asset published alongside
+it, fetched from the same release tag. A missing, malformed or mismatching
+checksum aborts the update and leaves the running binary untouched — this
+process replaces itself in place, so an unverified payload would be executed on
+every redraw from then on.
+
+Set `STATUS_LINE_NO_SELF_UPDATE=1` to switch the updater off entirely. Managed
+images that verify the binary at build time and rebuild on their own schedule
+should set it, otherwise a runtime replacement voids that verification.
 
 To disable auto-update, build without version:
 ```bash

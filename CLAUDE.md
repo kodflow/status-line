@@ -36,6 +36,10 @@ make demo           # Démo avec données exemple
 
 `STATUSLINE_LINE_GAP` = lignes vides entre les deux rangées, 0-3 (défaut `0`)
 `STATUSLINE_LINKS` = `0` désactive les segments cliquables OSC 8
+`STATUS_LINE_NO_SELF_UPDATE` = `1` désactive l'auto-update (images managées)
+
+L'auto-update vérifie le `.sha256` publié avec l'asset avant de remplacer le
+binaire : une somme absente, malformée ou différente annule la mise à jour.
 `STATUSLINE_GLYPHS` = `nerd` (défaut) | `text` (repli ASCII, sans Nerd Font)
 `STATUSLINE_HIDE` = pastilles à masquer, séparées par des virgules :
 `context`, `session`, `weekly`, `model`
