@@ -6,12 +6,18 @@ import "os"
 // glyphsEnv names the environment variable selecting the glyph set.
 const glyphsEnv string = "STATUSLINE_GLYPHS"
 
+// ctxLevelCount is how many fill levels the context glyph has.
+const ctxLevelCount int = 5
+
 // GlyphSet holds every symbol the quota pills draw.
 //
 // The default set comes from the Nerd Font private-use ranges, like the rest of
 // the status line. A terminal without a Nerd Font shows those as tofu, and a
 // symbol nobody can read is worse than no symbol at all, so a plain-text set
 // stands ready for that case.
+// The context glyph is a series rather than a single symbol: the window fills
+// as the conversation grows, and a glyph that fills with it says so before the
+// percentage is read.
 type GlyphSet struct {
 	Reset      string
 	Project    string
@@ -25,7 +31,7 @@ type GlyphSet struct {
 	EffortLow  string
 	Separator  string
 	Divider    string
-	Ctx        string
+	CtxLevels  [ctxLevelCount]string
 	Quota      string
 	Cost       string
 }
@@ -44,9 +50,15 @@ var nerdGlyphs = GlyphSet{
 	EffortLow:  "○",
 	Separator:  "│",
 	Divider:    SepThinRight,
-	Ctx:        "\uf086",
-	Quota:      "",
-	Cost:       "\uf155",
+	CtxLevels: [ctxLevelCount]string{
+		"\uf2cb", // empty
+		"\uf2ca", // a quarter
+		"\uf2c9", // half
+		"\uf2c8", // three quarters
+		"\uf2c7", // full
+	},
+	Quota: "",
+	Cost:  "\uf155",
 }
 
 // textGlyphs is the fallback set: nothing outside printable ASCII, so it
@@ -64,7 +76,7 @@ var textGlyphs = GlyphSet{
 	EffortLow:  ".",
 	Separator:  "|",
 	Divider:    "|",
-	Ctx:        "",
+	CtxLevels:  [ctxLevelCount]string{"", "", "", "", ""},
 	Quota:      "",
 	Cost:       "$",
 }
