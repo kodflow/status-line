@@ -252,7 +252,7 @@ func (r *Powerline) renderPathSegment(sb *strings.Builder, dir string, hasGit bo
 	// Check if icon should be shown
 	if showIcon {
 		// Write path with folder icon and dark blue text
-		sb.WriteString(BgBlue + FgBlueDark + Bold + " " + IconFolder + "  " + truncated + " " + Reset)
+		sb.WriteString(BgBlue + FgBlueDark + Bold + " " + IconFolder + " " + truncated + " " + Reset)
 	} else {
 		// Write path without icon with dark blue text
 		sb.WriteString(BgBlue + FgBlueDark + Bold + " " + truncated + " " + Reset)
