@@ -52,20 +52,6 @@ const (
 	FgFable string = "\033[38;5;194m"
 	// FgModelUnknown is the neutral foreground for an unrecognised model.
 	FgModelUnknown string = "\033[38;5;252m"
-	// Model inks are 24-bit: the 256-colour cube jumps from a deep ink at 7:1
-	// straight to one under 4.5:1, with nothing in the ground's hue between.
-	// Each ink is its ground's hue, darkened until it reads at about 5.4:1 —
-	// legible without sitting on the pill like a block of ink. The text, the
-	// quota bars and the pace cursor all take it.
-	//
-	// FgHaikuDark is the muted red ink on the Haiku background. 5.44:1.
-	FgHaikuDark string = "\033[38;2;155;52;52m"
-	// FgSonnetDark is the muted indigo ink on the Sonnet background. 5.43:1.
-	FgSonnetDark string = "\033[38;2;66;66;192m"
-	// FgOpusDark is the muted brown ink on the Opus background. 5.42:1.
-	FgOpusDark string = "\033[38;2;117;78;39m"
-	// FgFableDark is the muted green ink on the Fable background. 5.45:1.
-	FgFableDark string = "\033[38;2;38;114;38m"
 	// FgModelUnknownDark is the grey ink on an unrecognised model. 5.39:1.
 	FgModelUnknownDark string = "\033[38;5;239m"
 	// BgGreen is the pale green background for lines added.
@@ -110,6 +96,46 @@ const (
 	FgWeekly string = "\033[38;5;252m"
 	// FgWeeklyText is the dark gray text on weekly usage background.
 	FgWeeklyText string = "\033[38;5;240m"
+)
+
+// Model inks. Each is its ground's hue, darkened until it reads at about
+// 5.4:1 — legible without sitting on the pill like a block of ink. The text,
+// the quota bars and the pace cursor all take it.
+//
+// The 256-colour cube has nothing in these hues between a deep ink at 7:1 and
+// one under 4.5:1, so the tuned inks are 24-bit. Each has a 256-colour
+// fallback: the nearest cube colour (CIELAB) that still clears 4.5:1.
+const (
+	// inkHaikuTrue is the muted red ink on the Haiku ground. 5.44:1.
+	inkHaikuTrue string = "\033[38;2;155;52;52m"
+	// inkHaiku256 is its cube fallback, #870000. 7.86:1.
+	inkHaiku256 string = "\033[38;5;88m"
+	// inkSonnetTrue is the muted indigo ink on the Sonnet ground. 5.43:1.
+	inkSonnetTrue string = "\033[38;2;66;66;192m"
+	// inkSonnet256 is its cube fallback, #5f00af. 7.15:1.
+	inkSonnet256 string = "\033[38;5;55m"
+	// inkOpusTrue is the muted brown ink on the Opus ground. 5.42:1.
+	inkOpusTrue string = "\033[38;2;117;78;39m"
+	// inkOpus256 is its cube fallback, #585858. The nearer olive (58) reads
+	// as dirty green on peach, so the next nearest, a neutral grey, is used.
+	// 5.28:1.
+	inkOpus256 string = "\033[38;5;240m"
+	// inkFableTrue is the muted green ink on the Fable ground. 5.45:1.
+	inkFableTrue string = "\033[38;2;38;114;38m"
+	// inkFable256 is its cube fallback, #005f00. 7.27:1.
+	inkFable256 string = "\033[38;5;22m"
+)
+
+// Active model inks, resolved once at startup from the terminal's colour depth.
+var (
+	// FgHaikuDark is the ink on the Haiku background.
+	FgHaikuDark string = pickInk(inkHaikuTrue, inkHaiku256)
+	// FgSonnetDark is the ink on the Sonnet background.
+	FgSonnetDark string = pickInk(inkSonnetTrue, inkSonnet256)
+	// FgOpusDark is the ink on the Opus background.
+	FgOpusDark string = pickInk(inkOpusTrue, inkOpus256)
+	// FgFableDark is the ink on the Fable background.
+	FgFableDark string = pickInk(inkFableTrue, inkFable256)
 )
 
 // GetModelColors returns colors for a model pill.
