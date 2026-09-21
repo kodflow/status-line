@@ -55,7 +55,7 @@ symbole Unicode générique retombe sur une autre police et devient illisible.
 | OS | Icône système + étincelles 󰙴 = état de Claude (vert/orange/rouge) |
 | Model | Pill colorée (Haiku/Sonnet/Opus/Fable) + effort + fast mode |
 | Path | Répertoire où la session travaille réellement (voir ci-dessous) |
-| Git | Branche + modifiés/non-trackés + ` N` worktrees liés (hors prunable) |
+| Git | Branche + modifiés/non-trackés + nombre de worktrees liés (hors prunable) |
 | Changes | Lignes ajoutées/supprimées |
 
 Les quotas du compte (session 5h, hebdo, quota scopé au modèle courant) sont
