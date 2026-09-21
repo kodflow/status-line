@@ -43,7 +43,7 @@ binaire : une somme absente, malformée ou différente annule la mise à jour.
 `STATUSLINE_COLORS` = `truecolor` | `256` force la profondeur de couleur ;
 absent, elle suit `COLORTERM` (`truecolor`/`24bit` → 24 bits, sinon 256)
 `STATUSLINE_HIDE` = pastilles à masquer, séparées par des virgules :
-`context`, `session`, `weekly`, `model`
+`context`, `session`, `weekly`, `model`, `credits`, `health`
 
 Les glyphes viennent tous des plages Nerd Font, comme le reste de la ligne : un
 symbole Unicode générique retombe sur une autre police et devient illisible.
@@ -52,10 +52,10 @@ symbole Unicode générique retombe sur une autre police et devient illisible.
 
 | Segment | Description |
 |---------|-------------|
-| OS | Icône système (Linux/macOS/Windows/Docker) |
+| OS | Icône système + étincelles 󰙴 = état de Claude (vert/orange/rouge) |
 | Model | Pill colorée (Haiku/Sonnet/Opus/Fable) + effort + fast mode |
-| Path | Répertoire courant (relatif au projet) |
-| Git | Branche + fichiers modifiés/non-trackés |
+| Path | Répertoire où la session travaille réellement (voir ci-dessous) |
+| Git | Branche + modifiés/non-trackés + nombre de worktrees liés (hors prunable) |
 | Changes | Lignes ajoutées/supprimées |
 
 Les quotas du compte (session 5h, hebdo, quota scopé au modèle courant) sont
@@ -74,6 +74,23 @@ famille de modèles ne s'affiche que si ce modèle est en cours d'utilisation.
 | coût / credits | Coût cumulé de la session, solde de crédits |
 
 **Ligne ambiante:** pills MCP, notification de mise à jour.
+
+## Répertoire actif
+
+`workspace.current_dir` ne bouge pas quand l'agent travaille par `cd X && …`
+ou par chemins absolus. `adapter/activity` lit les 256 derniers Ko de
+`transcript_path` et prend le dernier emplacement nommé par un appel d'outil
+(`file_path`/`path`, `cd X` en tête, `git -C X`), remonté à sa racine git.
+`~/.claude/projects` (journaux, mémoire) est ignoré. Git s'exécute dans ce
+répertoire ; MCP garde le répertoire de session.
+
+## État de Claude
+
+`adapter/health` lit `status.claude.com/api/v2/summary.json`, hors composant
+« Government » et hors groupes. 1 composant dégradé/partiel = orange ; ≥ 2, ou
+un `major_outage` = rouge ; la maintenance ne compte pas. Cache 2 min
+rafraîchi par `--refresh-health` détaché ; au-delà de 15 min, rien n'est
+dessiné. Le rendu ne touche jamais le réseau.
 
 ## Palette
 

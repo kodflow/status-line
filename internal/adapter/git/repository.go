@@ -25,15 +25,33 @@ var _ port.GitRepository = (*Repository)(nil)
 
 // Repository implements port.GitRepository using git CLI commands.
 // It retrieves git status information by executing shell commands.
-type Repository struct{}
+type Repository struct {
+	dir string
+}
 
 // NewRepository creates a new git repository adapter.
 //
+// Params:
+//   - dir: work tree to query; empty means the process working directory
+//
 // Returns:
 //   - *Repository: new repository instance
-func NewRepository() *Repository {
-	// Return empty struct as no state is needed
-	return &Repository{}
+func NewRepository(dir string) *Repository {
+	// Remember where every git command must run
+	return &Repository{dir: dir}
+}
+
+// command builds a git invocation that runs in the repository directory.
+//
+// Params:
+//   - args: git arguments
+//
+// Returns:
+//   - *exec.Cmd: command ready to run
+func (r *Repository) command(args ...string) *exec.Cmd {
+	cmd := exec.Command("git", args...)
+	cmd.Dir = r.dir
+	return cmd
 }
 
 // Status retrieves the current git status.
@@ -54,7 +72,48 @@ func (r *Repository) Status() model.GitStatus {
 		Branch:    branch,
 		Modified:  modified,
 		Untracked: untracked,
+		Worktrees: r.countWorktrees(),
 	}
+}
+
+// countWorktrees counts the linked worktrees of the repository.
+//
+// Stale entries whose directory is gone are marked prunable by git and are
+// not counted: nothing is being worked on there.
+//
+// Returns:
+//   - int: linked worktrees, the main one excluded
+func (r *Repository) countWorktrees() int {
+	output, err := r.command("worktree", "list", "--porcelain").Output()
+	// An old git or a failure simply shows no count
+	if err != nil {
+		return 0
+	}
+	return parseWorktrees(string(output))
+}
+
+// parseWorktrees counts live linked worktrees in porcelain output.
+//
+// Params:
+//   - porcelain: output of git worktree list --porcelain
+//
+// Returns:
+//   - int: linked worktrees, the main one and prunable ones excluded
+func parseWorktrees(porcelain string) int {
+	count := 0
+	// Records are separated by blank lines; the first is the main work tree
+	for idx, record := range strings.Split(strings.TrimSpace(porcelain), "\n\n") {
+		// The main work tree is not a linked one
+		if idx == 0 || strings.TrimSpace(record) == "" {
+			continue
+		}
+		// A worktree whose directory is gone is only a leftover
+		if strings.Contains(record, "\nprunable") {
+			continue
+		}
+		count++
+	}
+	return count
 }
 
 // getBranch retrieves the current branch name.
@@ -63,7 +122,7 @@ func (r *Repository) Status() model.GitStatus {
 //   - string: branch name
 //   - error: error if not in a git repository
 func (r *Repository) getBranch() (string, error) {
-	cmd := exec.Command("git", "branch", "--show-current")
+	cmd := r.command("branch", "--show-current")
 	output, err := cmd.Output()
 	// Check for git command errors
 	if err != nil {
@@ -80,7 +139,7 @@ func (r *Repository) getBranch() (string, error) {
 //   - modified: count of modified files
 //   - untracked: count of untracked files
 func (r *Repository) getChangeCounts() (modified, untracked int) {
-	cmd := exec.Command("git", "status", "--porcelain")
+	cmd := r.command("status", "--porcelain")
 	output, err := cmd.Output()
 	// Check for git command errors
 	if err != nil {
@@ -113,7 +172,7 @@ func (r *Repository) getChangeCounts() (modified, untracked int) {
 //   - model.CodeChanges: lines added and removed
 func (r *Repository) DiffStats() model.CodeChanges {
 	// Get diff stats for all changes (staged + unstaged)
-	cmd := exec.Command("git", "diff", "--numstat", "HEAD")
+	cmd := r.command("diff", "--numstat", "HEAD")
 	output, err := cmd.Output()
 	// Check for git command errors
 	if err != nil {

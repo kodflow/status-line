@@ -68,6 +68,7 @@ func (s *StatusLineService) GenerateWithUpdate(input port.InputProvider, update 
 		systemInfo  model.SystemInfo
 		terminalNfo model.TerminalInfo
 		mcpServers  model.MCPServers
+		health      model.ServiceHealth
 	)
 
 	gather := func(fn func()) {
@@ -85,7 +86,17 @@ func (s *StatusLineService) GenerateWithUpdate(input port.InputProvider, update 
 	gather(func() { systemInfo = s.deps.System.Info() })
 	gather(func() { terminalNfo = s.deps.Terminal.Info() })
 	gather(func() { mcpServers = s.deps.MCP.Servers() })
+	// Service health is optional: without a provider nothing is drawn
+	if s.deps.Health != nil {
+		gather(func() { health = s.deps.Health.Health() })
+	}
 	wg.Wait()
+
+	// Show where the session is working rather than where it was started
+	dir := s.deps.WorkDir
+	if dir == "" {
+		dir = input.WorkingDir()
+	}
 
 	// Merge stdin and API quotas without ever letting a rate limit overwrite
 	// the context window: they measure different things and both must stay
@@ -103,7 +114,7 @@ func (s *StatusLineService) GenerateWithUpdate(input port.InputProvider, update 
 		Git:         gitStatus,
 		System:      systemInfo,
 		Terminal:    terminalNfo,
-		Dir:         input.WorkingDir(),
+		Dir:         dir,
 		Time:        time.Now().Format(timeFormat),
 		Changes:     gitChanges,
 		MCP:         mcpServers,
@@ -112,6 +123,7 @@ func (s *StatusLineService) GenerateWithUpdate(input port.InputProvider, update 
 		Cost:        input.SessionCost(),
 		FastMode:    input.IsFastMode(),
 		SessionName: input.SessionLabel(),
+		Health:      health,
 	}
 
 	// Delegate rendering to the renderer

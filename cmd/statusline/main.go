@@ -6,8 +6,11 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
+	"github.com/florent/status-line/internal/adapter/activity"
 	"github.com/florent/status-line/internal/adapter/git"
+	"github.com/florent/status-line/internal/adapter/health"
 	"github.com/florent/status-line/internal/adapter/mcp"
 	"github.com/florent/status-line/internal/adapter/system"
 	"github.com/florent/status-line/internal/adapter/terminal"
@@ -42,6 +45,12 @@ func main() {
 			_ = usage.NewProvider().Refresh()
 			return
 		}
+		// Refresh the service health cache out of band and exit
+		if arg == health.RefreshFlag {
+			// A refresh failure only leaves the cache stale
+			_ = health.NewProvider().Refresh()
+			return
+		}
 	}
 
 	// A malformed payload must still produce a status line: this process is
@@ -53,7 +62,7 @@ func main() {
 	updateInfo := checkForUpdate()
 
 	// Generate and output status line with update notification
-	svc := buildService(input.WorkingDir())
+	svc := buildService(input)
 	fmt.Print(svc.GenerateWithUpdate(input, updateInfo))
 
 	// Download update if available (after output is displayed)
@@ -126,17 +135,28 @@ func readInput() *model.Input {
 // buildService creates and wires all dependencies for the status line service.
 //
 // Params:
-//   - projectDir: the project directory for MCP config lookup
+//   - input: parsed stdin payload
 //
 // Returns:
 //   - *application.StatusLineService: fully configured service instance
-func buildService(projectDir string) *application.StatusLineService {
+func buildService(input *model.Input) *application.StatusLineService {
+	// MCP servers are configured for the session's own directory, while git
+	// follows wherever the session is actually working
+	sessionDir := input.WorkingDir()
+	workDir := activity.Dir(input.TranscriptPath(), sessionDir)
+	// Without a real directory git keeps the process working directory
+	gitDir := workDir
+	if !filepath.IsAbs(gitDir) {
+		gitDir = ""
+	}
 	deps := application.ServiceDeps{
-		Git:      git.NewRepository(),
+		Git:      git.NewRepository(gitDir),
 		System:   system.NewProvider(),
 		Terminal: terminal.NewProvider(),
-		MCP:      mcp.NewProvider(projectDir),
+		MCP:      mcp.NewProvider(sessionDir),
 		Usage:    usage.NewProvider(),
+		Health:   health.NewProvider(),
+		WorkDir:  workDir,
 	}
 	// Return service with all adapters injected
 	return application.NewStatusLineService(deps, renderer.NewPowerline())

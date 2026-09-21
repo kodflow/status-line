@@ -7,6 +7,8 @@ type GitStatus struct {
 	Branch    string
 	Modified  int
 	Untracked int
+	// Worktrees counts the linked worktrees of the repository, the main one excluded.
+	Worktrees int
 }
 
 // IsInRepo returns true if currently inside a git repository.

@@ -14,6 +14,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/florent/status-line/internal/adapter/detach"
+	"github.com/florent/status-line/internal/adapter/diskcache"
 	"github.com/florent/status-line/internal/domain/model"
 	"github.com/florent/status-line/internal/domain/port"
 )
@@ -44,7 +46,7 @@ var errDecode = errors.New("usage api: undecodable payload")
 // It fetches weekly usage data from the OAuth usage endpoint.
 type Provider struct {
 	client *http.Client
-	cache  *cache
+	cache  *diskcache.Cache
 }
 
 // NewProvider creates a new usage provider adapter.
@@ -55,7 +57,7 @@ func NewProvider() *Provider {
 	// Return provider with configured HTTP client
 	return &Provider{
 		client: &http.Client{Timeout: httpTimeout},
-		cache:  newCache(),
+		cache:  diskcache.New(cacheDirPrefix, cacheFileName),
 	}
 }
 
@@ -67,7 +69,7 @@ func NewProvider() *Provider {
 //   - model.LimitSet: session, weekly, scoped and extra quotas
 //   - error: any error when no usable payload could be obtained
 func (p *Provider) Limits() (model.LimitSet, error) {
-	data, age, cached := p.cache.read()
+	data, age, cached := p.cache.Read()
 
 	// A fresh payload is authoritative; serve it without touching the network
 	if cached && isFresh(age) {
@@ -86,7 +88,7 @@ func (p *Provider) Limits() (model.LimitSet, error) {
 		return model.LimitSet{}, err
 	}
 	// Persist for the next render; a cache write failure is not fatal
-	_ = p.cache.write(fresh)
+	_ = p.cache.Write(fresh)
 	return decodeSet(fresh)
 }
 
@@ -101,33 +103,12 @@ func (p *Provider) Refresh() error {
 	if err != nil {
 		return err
 	}
-	return p.cache.write(fresh)
+	return p.cache.Write(fresh)
 }
 
-// refreshDetached re-executes this binary to refresh the cache out of band.
-// A goroutine would die with the process, which exits as soon as the status
-// line is printed, so the refresh has to outlive it.
+// refreshDetached refreshes the cache in a background process.
 func (p *Provider) refreshDetached() {
-	// A refresh process must never spawn another one
-	if os.Getenv(refreshEnv) != "" {
-		return
-	}
-	self, err := os.Executable()
-	// Without a resolvable path there is nothing to re-execute
-	if err != nil {
-		return
-	}
-	cmd := exec.Command(self, refreshFlag)
-	cmd.Env = append(os.Environ(), refreshEnv+"=1")
-	cmd.Stdin, cmd.Stdout, cmd.Stderr = nil, nil, nil
-	// Detach so the parent can exit immediately
-	cmd.SysProcAttr = detachedAttr()
-	// A refresh that cannot start simply leaves the cache stale
-	if err := cmd.Start(); err != nil {
-		return
-	}
-	// Release the child so it is not left as a zombie
-	_ = cmd.Process.Release()
+	detach.Spawn(refreshFlag, refreshEnv)
 }
 
 // fetch performs the authenticated request against the usage endpoint.
