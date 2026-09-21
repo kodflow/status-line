@@ -65,7 +65,7 @@ func TestRenderHeavyBarWithCursor(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			progress := model.Progress{Percent: tt.percent}
-			result := renderHeavyBarWithCursor(progress, tt.cursorIdx, progressBarWidth, FgCursorOrange, Reset)
+			result := renderHeavyBarWithCursor(progress, tt.cursorIdx, progressBarWidth, FgWeeklyText, Reset)
 			if len(result) == 0 {
 				t.Error("renderHeavyBarWithCursor() returned empty string")
 			}

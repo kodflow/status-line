@@ -37,8 +37,6 @@ const (
 
 	// FgBarFill is the filled portion of a quota bar.
 	FgBarFill string = "\033[38;5;238m"
-	// FgBarCursor is the even-burn reference marker inside a quota bar.
-	FgBarCursor string = "\033[38;5;166m"
 	// Dim renders secondary text at reduced intensity.
 	Dim string = "\033[2m"
 )
