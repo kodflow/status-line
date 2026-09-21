@@ -303,3 +303,25 @@ func TestPowerline_renderLine2Tasks(t *testing.T) {
 		t.Error("a finished list must not be drawn")
 	}
 }
+
+func TestPowerline_renderLine2Subagents(t *testing.T) {
+	list := model.TaskList{Items: []model.TaskItem{{ID: "1", Subject: "work", Status: model.TaskInProgress}}}
+	mcp := model.MCPServers{{Name: "github", Enabled: true}}
+
+	var sb strings.Builder
+	(&Powerline{}).renderLine2(&sb, model.StatusLineData{Tasks: list, Subagents: 3, MCP: mcp})
+	out := sb.String()
+	task, agents, pill := strings.Index(out, "0/1"), strings.Index(out, glyphs.Subagents), strings.Index(out, "github")
+	if task < 0 || agents < 0 || pill < 0 || !(task < agents && agents < pill) {
+		t.Errorf("want tasks, then subagents, then MCP; got %q", out)
+	}
+	if !strings.Contains(out, glyphs.Subagents+Reset+" "+Bold+"3") {
+		t.Errorf("subagent count missing from %q", out)
+	}
+
+	var none strings.Builder
+	(&Powerline{}).renderLine2(&none, model.StatusLineData{MCP: mcp})
+	if strings.Contains(none.String(), glyphs.Subagents) {
+		t.Error("no running subagent must draw nothing")
+	}
+}

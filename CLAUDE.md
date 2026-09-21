@@ -87,15 +87,20 @@ l'encre de la pastille, les autres un disque dans sa teinte pâle
 (`GetModelTrack`). Un niveau hors échelle s'écrit en clair (`· ultra`), jamais
 sur une jauge fausse.
 
-## Tâches
+## Tâches et sous-agents
 
-`adapter/tasks` lit `<config>/tasks/<liste>/<n>.json` (un fichier par tâche,
-écrit par TaskCreate/TaskUpdate). La liste vaut `CLAUDE_CODE_TASK_LIST_ID`
-sinon `session-` + 8 premiers caractères de `session_id`. Barre segmentée
-(fait / en cours / à faire), `fait/total`, titre de la tâche en cours ; une
-liste terminée n'est plus dessinée. Depuis Claude Code 2.1.278 les outils de
-tâches ne sont offerts d'office qu'aux modèles antérieurs à Opus/Sonnet 5 :
-`CLAUDE_CODE_ENABLE_TODO_TOOLS=1` les réactive.
+`adapter/tasks` lit deux sources, par session :
+
+1. **MCP tasks de `kodflow-hooks`** (prioritaire) : `<config>/kodflow/sessions/<session_id>/tasks.json`.
+   Chaque tâche porte son `agent` (injecté par le hook PreToolUse) ; seules
+   celles de `main` sont affichées. `agents.json` à côté = sous-agents lancés
+   (hooks SubagentStart/Stop) ; un agent sans stop depuis 12 h est ignoré.
+2. **Outils natifs** (repli) : `<config>/tasks/<liste>/<n>.json`, liste =
+   `CLAUDE_CODE_TASK_LIST_ID` sinon `session-` + 8 premiers caractères.
+
+Ligne 2 : barre segmentée (fait / en cours / à faire), `fait/total`, titre en
+cours, puis `󰚩 N` sous-agents actifs, puis les MCP. Une liste terminée n'est
+plus dessinée.
 
 ## Répertoire actif
 

@@ -24,6 +24,7 @@ type StatusLineData struct {
 	Update      UpdateInfo
 	Health      ServiceHealth
 	Tasks       TaskList
+	Subagents   int
 }
 
 // UpdateInfo contains information about available updates.

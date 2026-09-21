@@ -70,6 +70,7 @@ func (s *StatusLineService) GenerateWithUpdate(input port.InputProvider, update 
 		mcpServers  model.MCPServers
 		health      model.ServiceHealth
 		taskList    model.TaskList
+		subagents   int
 	)
 
 	gather := func(fn func()) {
@@ -90,6 +91,7 @@ func (s *StatusLineService) GenerateWithUpdate(input port.InputProvider, update 
 	// The task list is optional as well
 	if s.deps.Tasks != nil {
 		gather(func() { taskList = s.deps.Tasks.Tasks() })
+		gather(func() { subagents = s.deps.Tasks.Subagents() })
 	}
 	// Service health is optional: without a provider nothing is drawn
 	if s.deps.Health != nil {
@@ -130,6 +132,7 @@ func (s *StatusLineService) GenerateWithUpdate(input port.InputProvider, update 
 		SessionName: input.SessionLabel(),
 		Health:      health,
 		Tasks:       taskList,
+		Subagents:   subagents,
 	}
 
 	// Delegate rendering to the renderer
