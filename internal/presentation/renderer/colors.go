@@ -138,6 +138,71 @@ var (
 	FgFableDark string = pickInk(inkFableTrue, inkFable256)
 )
 
+// Model tracks: a pale tint of each pill, between its ground and its ink, for
+// the unreached levels of the effort gauge. Like the inks, the tuned tints are
+// 24-bit with a nearest 256-colour fallback.
+const (
+	// trackHaikuTrue is the pale tint of the Haiku pill.
+	trackHaikuTrue string = "\033[38;2;215;150;150m"
+	// trackHaiku256 is its cube fallback.
+	trackHaiku256 string = "\033[38;5;174m"
+	// trackSonnetTrue is the pale tint of the Sonnet pill.
+	trackSonnetTrue string = "\033[38;2;160;160;220m"
+	// trackSonnet256 is its cube fallback; 147 sits too close to the ground.
+	trackSonnet256 string = "\033[38;5;146m"
+	// trackOpusTrue is the pale tint of the Opus pill.
+	trackOpusTrue string = "\033[38;2;205;165;125m"
+	// trackOpus256 is its cube fallback.
+	trackOpus256 string = "\033[38;5;180m"
+	// trackFableTrue is the pale tint of the Fable pill.
+	trackFableTrue string = "\033[38;2;140;195;140m"
+	// trackFable256 is its cube fallback.
+	trackFable256 string = "\033[38;5;108m"
+	// trackModelUnknown is the pale tint of an unrecognised model's pill.
+	trackModelUnknown string = "\033[38;5;247m"
+)
+
+// Active model tracks, resolved once at startup from the colour depth.
+var (
+	// fgHaikuTrack is the Haiku pill tint.
+	fgHaikuTrack string = pickInk(trackHaikuTrue, trackHaiku256)
+	// fgSonnetTrack is the Sonnet pill tint.
+	fgSonnetTrack string = pickInk(trackSonnetTrue, trackSonnet256)
+	// fgOpusTrack is the Opus pill tint.
+	fgOpusTrack string = pickInk(trackOpusTrue, trackOpus256)
+	// fgFableTrack is the Fable pill tint.
+	fgFableTrack string = pickInk(trackFableTrue, trackFable256)
+)
+
+// GetModelTrack returns the pale tint of a model pill.
+//
+// Params:
+//   - modelName: the display name of the AI model
+//
+// Returns:
+//   - string: foreground escape of the pill tint
+func GetModelTrack(modelName string) string {
+	nameLower := strings.ToLower(modelName)
+	// Match the families the same way GetModelColors does
+	switch {
+	// Haiku pill
+	case strings.Contains(nameLower, "haiku"):
+		return fgHaikuTrack
+	// Sonnet pill
+	case strings.Contains(nameLower, "sonnet"):
+		return fgSonnetTrack
+	// Opus pill
+	case strings.Contains(nameLower, "opus"):
+		return fgOpusTrack
+	// Fable pill
+	case strings.Contains(nameLower, "fable"):
+		return fgFableTrack
+	// Unrecognised model
+	default:
+		return trackModelUnknown
+	}
+}
+
 // GetModelColors returns colors for a model pill.
 //
 // Params:

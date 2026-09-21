@@ -26,6 +26,7 @@ type Input struct {
 	OutputStyle   InputOutputStyle `json:"output_style"`
 	SessionName   string           `json:"session_name"`
 	Transcript    string           `json:"transcript_path"`
+	SessionID     string           `json:"session_id"`
 	Version       string           `json:"version"`
 	FastMode      bool             `json:"fast_mode"`
 	Exceeds200k   bool             `json:"exceeds_200k_tokens"`
@@ -102,6 +103,15 @@ func (i *Input) WorkingDir() string {
 	}
 	// Return configured directory
 	return i.Workspace.CurrentDir
+}
+
+// Session returns the session identifier, empty when absent.
+//
+// Returns:
+//   - string: session id as reported by Claude Code
+func (i *Input) Session() string {
+	// Hand the raw value over; an absent field is an empty id
+	return i.SessionID
 }
 
 // TranscriptPath returns the session transcript file, empty when absent.

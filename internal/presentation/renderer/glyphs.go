@@ -13,66 +13,72 @@ const glyphsEnv string = "STATUSLINE_GLYPHS"
 // symbol nobody can read is worse than no symbol at all, so a plain-text set
 // stands ready for that case.
 type GlyphSet struct {
-	Reset      string
-	Project    string
-	Overrun    string
-	Ahead      string
-	Behind     string
-	Level      string
-	Fast       string
-	EffortHigh string
-	EffortMed  string
-	EffortLow  string
-	Separator  string
-	Divider    string
-	Ctx        string
-	Quota      string
-	Cost       string
-	Health     string
-	Worktree   string
+	Reset     string
+	Project   string
+	Overrun   string
+	Ahead     string
+	Behind    string
+	Level     string
+	Fast      string
+	EffortOn  string
+	EffortOff string
+	Separator string
+	Divider   string
+	Ctx       string
+	Quota     string
+	Cost      string
+	Health    string
+	Worktree  string
+	Tasks     string
+	TaskOpen  string
+	TaskDone  string
 }
 
 // nerdGlyphs is the default set, drawn from the Nerd Font ranges.
 var nerdGlyphs = GlyphSet{
-	Reset:      " ",
-	Project:    " ",
-	Overrun:    " ",
-	Ahead:      "",
-	Behind:     "",
-	Level:      "",
-	Fast:       "",
-	EffortHigh: "●",
-	EffortMed:  "◑",
-	EffortLow:  "○",
-	Separator:  "│",
-	Divider:    SepThinRight,
-	Ctx:        "\uf1c0",
-	Quota:      "",
-	Cost:       "\uf155",
-	Health:     "\U000F0674",
-	Worktree:   "\uf126",
+	Reset:     " ",
+	Project:   " ",
+	Overrun:   " ",
+	Ahead:     "",
+	Behind:    "",
+	Level:     "",
+	Fast:      "",
+	EffortOn:  "●",
+	EffortOff: "●",
+	Separator: "│",
+	Divider:   SepThinRight,
+	Ctx:       "\uf1c0",
+	Quota:     "",
+	Cost:      "\uf155",
+	Health:    "\U000F0674",
+	Worktree:  "\uf126",
+	Tasks:     "\U000F0134",
+	TaskOpen:  "\u25a1",
+	TaskDone:  "\u25a0",
 }
 
 // textGlyphs is the fallback set: nothing outside printable ASCII, so it
 // renders in any font. "T-" reads as a countdown without needing a clock.
 var textGlyphs = GlyphSet{
-	Reset:      "T-",
-	Project:    ">",
-	Overrun:    "!",
-	Ahead:      "v",
-	Behind:     "^",
-	Level:      "=",
-	Fast:       "F",
-	EffortHigh: "*",
-	EffortMed:  "o",
-	EffortLow:  ".",
-	Separator:  "|",
-	Divider:    "|",
-	Ctx:        "",
-	Quota:      "",
-	Cost:       "$",
-	Health:     "*",
-	Worktree:   "wt",
+	Reset:     "T-",
+	Project:   ">",
+	Overrun:   "!",
+	Ahead:     "v",
+	Behind:    "^",
+	Level:     "=",
+	Fast:      "F",
+	EffortOn:  "#",
+	EffortOff: "-",
+	Separator: "|",
+	Divider:   "|",
+	Ctx:       "",
+	Quota:     "",
+	Cost:      "$",
+	Health:    "*",
+	Worktree:  "wt",
+	Tasks:     "tasks",
+	TaskOpen:  "-",
+	TaskDone:  "#",
 }
 
 // glyphs is the active set, resolved once at startup.

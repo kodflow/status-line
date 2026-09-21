@@ -79,6 +79,19 @@ const (
 	FgHealthDown string = "\033[38;5;160m"
 )
 
+// Task list colours, on the ambient line: finished, started, not started,
+// then the pill's own marks and the current task's title.
+const (
+	// FgTaskDone is a completed task in the segmented bar.
+	FgTaskDone string = "\033[38;5;29m"
+	// FgTaskActive is the task being worked on.
+	FgTaskActive string = "\033[38;5;172m"
+	// FgTaskTodo is a task not started yet.
+	FgTaskTodo string = "\033[38;5;245m"
+	// FgTaskTitle is the title of the task being worked on.
+	FgTaskTitle string = "\033[38;5;250m"
+)
+
 // MCP list colours. The servers are ambient information: they are read when
 // something is wrong, not while working, so they stay dimmed until one is.
 const (

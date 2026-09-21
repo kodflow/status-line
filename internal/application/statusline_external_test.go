@@ -147,3 +147,20 @@ func TestGenerate_WorkDirAndHealth(t *testing.T) {
 		})
 	}
 }
+
+type mockTasksProv struct{ list model.TaskList }
+
+func (m *mockTasksProv) Tasks() model.TaskList { return m.list }
+
+func TestGenerate_Tasks(t *testing.T) {
+	rend := &capturingRenderer{}
+	list := model.TaskList{Items: []model.TaskItem{{ID: "1", Subject: "x", Status: model.TaskPending}}}
+	deps := application.ServiceDeps{
+		Git: &mockGitRepo{}, System: &mockSystemProv{}, Terminal: &mockTerminalProv{},
+		MCP: &mockMCPProv{}, Usage: &mockUsageProv{}, Tasks: &mockTasksProv{list: list},
+	}
+	application.NewStatusLineService(deps, rend).Generate(&mockInputProvider{})
+	if rend.data.Tasks.Total() != 1 {
+		t.Errorf("Tasks.Total() = %d, want 1", rend.data.Tasks.Total())
+	}
+}

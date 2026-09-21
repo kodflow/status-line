@@ -12,6 +12,7 @@ type ServiceDeps struct {
 	MCP      port.MCPProvider
 	Usage    port.UsageProvider
 	Health   port.HealthProvider
+	Tasks    port.TasksProvider
 	// WorkDir is the directory the session is working in, as inferred from
 	// its recent tool calls; empty means the directory Claude Code reported.
 	WorkDir string

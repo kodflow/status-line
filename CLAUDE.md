@@ -53,7 +53,7 @@ symbole Unicode générique retombe sur une autre police et devient illisible.
 | Segment | Description |
 |---------|-------------|
 | OS | Icône système + étincelles 󰙴 = état de Claude (vert/orange/rouge) |
-| Model | Pill colorée (Haiku/Sonnet/Opus/Fable) + effort + fast mode |
+| Model | Pill colorée (Haiku/Sonnet/Opus/Fable) + jauge d'effort + fast mode |
 | Path | Répertoire où la session travaille réellement (voir ci-dessous) |
 | Git | Branche + modifiés/non-trackés + nombre de worktrees liés (hors prunable) |
 | Changes | Lignes ajoutées/supprimées |
@@ -74,6 +74,28 @@ famille de modèles ne s'affiche que si ce modèle est en cours d'utilisation.
 | coût / credits | Coût cumulé de la session, solde de crédits |
 
 **Ligne ambiante:** pills MCP, notification de mise à jour.
+
+**Ligne 2 :** la liste de tâches de la session mène la ligne, puis les pills
+MCP. Aucune troncature : un titre long passe à la ligne plutôt que d'être coupé.
+
+## Effort
+
+Claude Code n'envoie que le nom du niveau (`effort.level`), jamais l'échelle.
+L'échelle `low → medium → high → xhigh → max` est figée dans
+`model.effortScale` (testée) ; chaque niveau atteint est un disque dans
+l'encre de la pastille, les autres un disque dans sa teinte pâle
+(`GetModelTrack`). Un niveau hors échelle s'écrit en clair (`· ultra`), jamais
+sur une jauge fausse.
+
+## Tâches
+
+`adapter/tasks` lit `<config>/tasks/<liste>/<n>.json` (un fichier par tâche,
+écrit par TaskCreate/TaskUpdate). La liste vaut `CLAUDE_CODE_TASK_LIST_ID`
+sinon `session-` + 8 premiers caractères de `session_id`. Barre segmentée
+(fait / en cours / à faire), `fait/total`, titre de la tâche en cours ; une
+liste terminée n'est plus dessinée. Depuis Claude Code 2.1.278 les outils de
+tâches ne sont offerts d'office qu'aux modèles antérieurs à Opus/Sonnet 5 :
+`CLAUDE_CODE_ENABLE_TODO_TOOLS=1` les réactive.
 
 ## Répertoire actif
 
