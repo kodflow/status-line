@@ -1,7 +1,11 @@
 // Package renderer provides status line rendering.
 package renderer
 
-import "github.com/florent/status-line/internal/domain/model"
+import (
+	"strings"
+
+	"github.com/florent/status-line/internal/domain/model"
+)
 
 // Icon and separator constants for powerline rendering.
 const (
@@ -77,27 +81,29 @@ func GetOSIcon(osType model.OSType, isDocker bool) string {
 // IconCost marks the session cost.
 const IconCost string = "$"
 
-// EffortGlyph maps a reasoning effort level onto its glyph.
+// EffortGauge draws a reasoning effort level as a gauge on a model pill.
+//
+// One disc per known level: the reached ones in the pill ink, the others in
+// a pale tint of the pill, the way a quota bar shows its empty part. A level
+// outside the known scale is written out rather than drawn on a wrong scale.
 //
 // Params:
 //   - level: effort level as reported by Claude Code
+//   - ink: pill ink escape
+//   - track: pale pill tint escape for the unreached levels
 //
 // Returns:
-//   - string: glyph for the level, empty when unreported
-func EffortGlyph(level string) string {
-	// Map each level onto a filled, half or empty disc
-	switch level {
-	// Highest effort
-	case model.EffortHigh:
-		return glyphs.EffortHigh
-	// Default effort
-	case model.EffortMedium:
-		return glyphs.EffortMed
-	// Cheapest effort
-	case model.EffortLow:
-		return glyphs.EffortLow
-	// Unreported effort renders nothing
-	default:
+//   - string: gauge with its escapes, empty when no effort is reported
+func EffortGauge(level, ink, track string) string {
+	// No reported effort, nothing to draw
+	if level == "" {
 		return ""
 	}
+	rank, known := model.EffortRank(level)
+	// An unknown level is shown by name so it is never misread
+	if !known {
+		return ink + "\u00b7 " + level
+	}
+	return ink + strings.Repeat(glyphs.EffortOn, rank) +
+		track + strings.Repeat(glyphs.EffortOff, model.EffortSteps()-rank) + ink
 }

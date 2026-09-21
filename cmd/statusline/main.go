@@ -13,6 +13,7 @@ import (
 	"github.com/florent/status-line/internal/adapter/health"
 	"github.com/florent/status-line/internal/adapter/mcp"
 	"github.com/florent/status-line/internal/adapter/system"
+	"github.com/florent/status-line/internal/adapter/tasks"
 	"github.com/florent/status-line/internal/adapter/terminal"
 	"github.com/florent/status-line/internal/adapter/updater"
 	"github.com/florent/status-line/internal/adapter/usage"
@@ -156,6 +157,7 @@ func buildService(input *model.Input) *application.StatusLineService {
 		MCP:      mcp.NewProvider(sessionDir),
 		Usage:    usage.NewProvider(),
 		Health:   health.NewProvider(),
+		Tasks:    tasks.NewProvider(input.Session()),
 		WorkDir:  workDir,
 	}
 	// Return service with all adapters injected

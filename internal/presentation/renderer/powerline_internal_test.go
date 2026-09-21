@@ -270,3 +270,36 @@ func TestPowerline_renderGitSegmentWorktrees(t *testing.T) {
 		t.Errorf("worktree glyph drawn without any linked worktree")
 	}
 }
+
+func TestPowerline_renderLine2Tasks(t *testing.T) {
+	list := model.TaskList{Items: []model.TaskItem{
+		{ID: "1", Subject: "done", Status: model.TaskCompleted},
+		{ID: "2", Subject: "a rather long title that must never be shortened", Status: model.TaskInProgress},
+		{ID: "3", Subject: "later", Status: model.TaskPending},
+	}}
+	mcp := model.MCPServers{{Name: "github", Enabled: true}}
+
+	var sb strings.Builder
+	(&Powerline{}).renderLine2(&sb, model.StatusLineData{Tasks: list, MCP: mcp})
+	out := sb.String()
+	for _, want := range []string{
+		FgTaskDone + glyphs.TaskDone + FgTaskActive + glyphs.TaskDone + FgTaskTodo + glyphs.TaskOpen,
+		"1/3",
+		"a rather long title that must never be shortened",
+		"github",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("line 2 misses %q in %q", want, out)
+		}
+	}
+	if strings.Index(out, "1/3") > strings.Index(out, "github") {
+		t.Error("the task list must lead the line, before the MCP pills")
+	}
+
+	var done strings.Builder
+	finished := model.TaskList{Items: []model.TaskItem{{ID: "1", Status: model.TaskCompleted}}}
+	(&Powerline{}).renderLine2(&done, model.StatusLineData{Tasks: finished, MCP: mcp})
+	if strings.Contains(done.String(), glyphs.Tasks) {
+		t.Error("a finished list must not be drawn")
+	}
+}

@@ -3,15 +3,51 @@ package model
 
 import "time"
 
-// Effort levels reported by Claude Code.
+// Effort levels reported by Claude Code, cheapest first.
 const (
-	// EffortHigh is the highest reasoning effort.
-	EffortHigh string = "high"
-	// EffortMedium is the default reasoning effort.
-	EffortMedium string = "medium"
 	// EffortLow is the cheapest reasoning effort.
 	EffortLow string = "low"
+	// EffortMedium is the default reasoning effort on most models.
+	EffortMedium string = "medium"
+	// EffortHigh is a raised reasoning effort.
+	EffortHigh string = "high"
+	// EffortXHigh is the effort above high.
+	EffortXHigh string = "xhigh"
+	// EffortMax is the highest reasoning effort.
+	EffortMax string = "max"
 )
+
+// effortScale lists the known levels in order. Claude Code only reports the
+// current level's name, never the scale, so the scale is pinned here from the
+// documentation; a level it does not list is reported as unknown.
+var effortScale = []string{EffortLow, EffortMedium, EffortHigh, EffortXHigh, EffortMax}
+
+// EffortSteps returns how many levels the known scale has.
+//
+// Returns:
+//   - int: number of known effort levels
+func EffortSteps() int {
+	// The scale length is the gauge length
+	return len(effortScale)
+}
+
+// EffortRank returns the position of a level on the known scale.
+//
+// Params:
+//   - level: effort level as reported
+//
+// Returns:
+//   - int: 1 for the cheapest level up to EffortSteps for the highest
+//   - bool: false when the level is not on the known scale
+func EffortRank(level string) (int, bool) {
+	// Find the level on the scale
+	for idx, known := range effortScale {
+		if known == level {
+			return idx + 1, true
+		}
+	}
+	return 0, false
+}
 
 // InputEffort is the reasoning effort of the running session.
 type InputEffort struct {

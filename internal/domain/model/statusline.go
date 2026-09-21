@@ -23,6 +23,7 @@ type StatusLineData struct {
 	MCP         MCPServers
 	Update      UpdateInfo
 	Health      ServiceHealth
+	Tasks       TaskList
 }
 
 // UpdateInfo contains information about available updates.

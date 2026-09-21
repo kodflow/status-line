@@ -69,6 +69,7 @@ func (s *StatusLineService) GenerateWithUpdate(input port.InputProvider, update 
 		terminalNfo model.TerminalInfo
 		mcpServers  model.MCPServers
 		health      model.ServiceHealth
+		taskList    model.TaskList
 	)
 
 	gather := func(fn func()) {
@@ -86,6 +87,10 @@ func (s *StatusLineService) GenerateWithUpdate(input port.InputProvider, update 
 	gather(func() { systemInfo = s.deps.System.Info() })
 	gather(func() { terminalNfo = s.deps.Terminal.Info() })
 	gather(func() { mcpServers = s.deps.MCP.Servers() })
+	// The task list is optional as well
+	if s.deps.Tasks != nil {
+		gather(func() { taskList = s.deps.Tasks.Tasks() })
+	}
 	// Service health is optional: without a provider nothing is drawn
 	if s.deps.Health != nil {
 		gather(func() { health = s.deps.Health.Health() })
@@ -124,6 +129,7 @@ func (s *StatusLineService) GenerateWithUpdate(input port.InputProvider, update 
 		FastMode:    input.IsFastMode(),
 		SessionName: input.SessionLabel(),
 		Health:      health,
+		Tasks:       taskList,
 	}
 
 	// Delegate rendering to the renderer

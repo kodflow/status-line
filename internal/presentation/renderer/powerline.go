@@ -138,6 +138,13 @@ func (r *Powerline) renderLine2(sb *strings.Builder, data model.StatusLineData) 
 	// Track if we've rendered anything
 	hasContent := false
 
+	// The task list leads the line: it is the work in progress, the rest is
+	// ambient. It is never shortened; a long title wraps rather than hides.
+	if data.Tasks.IsActive() {
+		r.renderTasksPill(sb, data.Tasks)
+		hasContent = true
+	}
+
 	// Render MCP server pills if any
 	if len(data.MCP) > 0 {
 		// Add separator space if previous content exists
@@ -155,6 +162,35 @@ func (r *Powerline) renderLine2(sb *strings.Builder, data model.StatusLineData) 
 			sb.WriteString(" ")
 		}
 		r.renderUpdatePill(sb, data.Update)
+	}
+}
+
+// renderTasksPill renders the session task list: a segmented bar with one
+// cell per task, the done/total count and the title of the task in progress.
+//
+// Params:
+//   - sb: string builder to write to
+//   - list: session task list, known to be active
+func (r *Powerline) renderTasksPill(sb *strings.Builder, list model.TaskList) {
+	sb.WriteString(" " + FgTaskTodo + glyphs.Tasks + Reset + " ")
+	// One cell per task, in creation order
+	for _, item := range list.Items {
+		switch item.Status {
+		// A finished task
+		case model.TaskCompleted:
+			sb.WriteString(FgTaskDone + glyphs.TaskDone)
+		// The task being worked on
+		case model.TaskInProgress:
+			sb.WriteString(FgTaskActive + glyphs.TaskDone)
+		// A task not started yet
+		default:
+			sb.WriteString(FgTaskTodo + glyphs.TaskOpen)
+		}
+	}
+	sb.WriteString(Reset + " " + Bold + itoa(list.Done()) + "/" + itoa(list.Total()) + Reset)
+	// Name the task in progress, in full
+	if current := list.Current(); current != "" {
+		sb.WriteString(" " + FgTaskTitle + current + Reset)
 	}
 }
 
@@ -228,6 +264,11 @@ func (r *Powerline) renderModelSegment(sb *strings.Builder, data *ModelSegmentDa
 	} else {
 		// Write model name without icon
 		sb.WriteString(bgColor + textColor + Bold + " " + data.Model.ShortName() + Reset)
+	}
+
+	// Draw the reasoning effort right after the name it applies to
+	if gauge := EffortGauge(data.Effort, textColor, GetModelTrack(fullName)); gauge != "" {
+		sb.WriteString(bgColor + textColor + Bold + " " + gauge + Reset)
 	}
 
 	// Append the fast-mode marker when it is on
