@@ -19,15 +19,15 @@ const (
 	FgBlueDark string = "\033[38;5;250m"
 	// FgCyanDark is a darker cyan for text on cyan background.
 	FgCyanDark string = "\033[38;5;23m"
-	// BgHaiku is the pale pink background for Haiku.
-	BgHaiku string = "\033[48;5;218m"
-	// BgSonnet is the pale purple background for Sonnet.
-	BgSonnet string = "\033[48;5;183m"
-	// BgOpus is the pale orange background for Opus.
-	BgOpus string = "\033[48;5;222m"
+	// BgHaiku is the powder blush background for Haiku.
+	BgHaiku string = "\033[48;5;224m"
+	// BgSonnet is the powder lavender background for Sonnet.
+	BgSonnet string = "\033[48;5;189m"
+	// BgOpus is the powder peach background for Opus.
+	BgOpus string = "\033[48;5;223m"
 	// BgFable is the mint background for Fable. The other families are all
 	// warm — orange, violet, pink — so a cool hue tells Fable apart at once.
-	BgFable string = "\033[48;5;158m"
+	BgFable string = "\033[48;5;194m"
 	// BgModelUnknown is the neutral background for an unrecognised model. It is
 	// deliberately not white: that is the OS segment's colour, and a model
 	// sharing it merges with the segment before it, separator included.
@@ -42,26 +42,32 @@ const (
 	FgBlack string = "\033[38;5;232m"
 	// FgYellow is the yellow foreground color.
 	FgYellow string = "\033[38;5;220m"
-	// FgHaiku is the pale pink foreground for Haiku pill caps.
-	FgHaiku string = "\033[38;5;218m"
-	// FgSonnet is the pale purple foreground for Sonnet pill caps.
-	FgSonnet string = "\033[38;5;183m"
-	// FgOpus is the pale orange foreground for Opus pill caps.
-	FgOpus string = "\033[38;5;222m"
+	// FgHaiku is the powder blush foreground for Haiku pill caps.
+	FgHaiku string = "\033[38;5;224m"
+	// FgSonnet is the powder lavender foreground for Sonnet pill caps.
+	FgSonnet string = "\033[38;5;189m"
+	// FgOpus is the powder peach foreground for Opus pill caps.
+	FgOpus string = "\033[38;5;223m"
 	// FgFable is the mint foreground for Fable pill caps.
-	FgFable string = "\033[38;5;158m"
+	FgFable string = "\033[38;5;194m"
 	// FgModelUnknown is the neutral foreground for an unrecognised model.
 	FgModelUnknown string = "\033[38;5;252m"
-	// FgHaikuDark is a darker pink for text on Haiku background.
-	FgHaikuDark string = "\033[38;5;89m"
-	// FgSonnetDark is a darker purple for text on Sonnet background.
-	FgSonnetDark string = "\033[38;5;56m"
-	// FgOpusDark is a darker orange for text on Opus background.
-	FgOpusDark string = "\033[38;5;58m"
-	// FgFableDark is a deep green for text on the Fable background.
-	FgFableDark string = "\033[38;5;23m"
-	// FgModelUnknownDark is the dark text on an unrecognised model background.
-	FgModelUnknownDark string = "\033[38;5;238m"
+	// Model inks are 24-bit: the 256-colour cube jumps from a deep ink at 7:1
+	// straight to one under 4.5:1, with nothing in the ground's hue between.
+	// Each ink is its ground's hue, darkened until it reads at about 5.4:1 —
+	// legible without sitting on the pill like a block of ink. The text, the
+	// quota bars and the pace cursor all take it.
+	//
+	// FgHaikuDark is the muted red ink on the Haiku background. 5.44:1.
+	FgHaikuDark string = "\033[38;2;155;52;52m"
+	// FgSonnetDark is the muted indigo ink on the Sonnet background. 5.43:1.
+	FgSonnetDark string = "\033[38;2;66;66;192m"
+	// FgOpusDark is the muted brown ink on the Opus background. 5.42:1.
+	FgOpusDark string = "\033[38;2;117;78;39m"
+	// FgFableDark is the muted green ink on the Fable background. 5.45:1.
+	FgFableDark string = "\033[38;2;38;114;38m"
+	// FgModelUnknownDark is the grey ink on an unrecognised model. 5.39:1.
+	FgModelUnknownDark string = "\033[38;5;239m"
 	// BgGreen is the pale green background for lines added.
 	BgGreen string = "\033[48;5;114m"
 	// FgGreenText is the darker green for text on green background.

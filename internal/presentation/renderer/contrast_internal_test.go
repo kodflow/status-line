@@ -6,11 +6,15 @@ import (
 	"testing"
 )
 
-// ansiToRGB resolves an xterm-256 colour escape to its RGB triple, foreground
-// (38) or background (48) alike.
+// ansiToRGB resolves an xterm-256 or 24-bit colour escape to its RGB triple,
+// foreground (38) or background (48) alike.
 func ansiToRGB(t *testing.T, esc string) (r, g, b float64) {
 	t.Helper()
 	var kind, n int
+	var tr, tg, tb int
+	if _, err := fmt.Sscanf(esc, "\033[%d;2;%d;%d;%dm", &kind, &tr, &tg, &tb); err == nil {
+		return float64(tr), float64(tg), float64(tb)
+	}
 	if _, err := fmt.Sscanf(esc, "\033[%d;5;%dm", &kind, &n); err != nil {
 		t.Fatalf("cannot parse %q", esc)
 	}
