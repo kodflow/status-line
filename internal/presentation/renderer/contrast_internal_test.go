@@ -71,7 +71,7 @@ func TestEverySegmentInkIsReadableOnItsOwnGround(t *testing.T) {
 		{name: "unknown model", bg: BgModelUnknown, fg: FgModelUnknownDark},
 		{name: "context", bg: BgContext, fg: FgContextInk},
 		{name: "path", bg: BgBlue, fg: FgBlueDark},
-		{name: "git", bg: BgCyan, fg: FgCyanDark},
+		{name: "git", bg: BgGit, fg: FgGitInk},
 		{name: "lines added", bg: BgGreen, fg: FgGreenText},
 		{name: "lines removed", bg: BgRed, fg: FgRedText},
 		{name: "mcp pill", bg: BgMCPEnabled, fg: FgMCPEnabledText},
@@ -95,8 +95,8 @@ func TestAdjacentSegmentsDifferInGround(t *testing.T) {
 	}{
 		{name: "os and context are separated by the model", left: BgContext, right: BgBlue},
 		{name: "context and path", left: BgContext, right: BgBlue},
-		{name: "path and git", left: BgBlue, right: BgCyan},
-		{name: "git and lines added", left: BgCyan, right: BgGreen},
+		{name: "path and git", left: BgBlue, right: BgGit},
+		{name: "git and lines added", left: BgGit, right: BgGreen},
 		{name: "lines added and removed", left: BgGreen, right: BgRed},
 	}
 	for _, tt := range tests {

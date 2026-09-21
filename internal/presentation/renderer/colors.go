@@ -11,14 +11,16 @@ const (
 	Bold string = "\033[1m"
 	// BgBlue is the dark ground of the path segment.
 	BgBlue string = "\033[48;5;236m"
-	// BgCyan is the pale cyan background color.
-	BgCyan string = "\033[48;5;116m"
+	// BgGit is the periwinkle ground of the git segment. It is deliberately
+	// blue rather than cyan: the context pill next to it is 152, a pale cyan,
+	// and the two read as the same colour when they share a hue family.
+	BgGit string = "\033[48;5;111m"
 	// BgWhite is the white background color.
 	BgWhite string = "\033[48;5;255m"
 	// FgBlueDark is the light ink on the path ground.
 	FgBlueDark string = "\033[38;5;250m"
-	// FgCyanDark is a darker cyan for text on cyan background.
-	FgCyanDark string = "\033[38;5;23m"
+	// FgGitInk is the deep navy ink on the git ground (8.24:1).
+	FgGitInk string = "\033[38;5;17m"
 	// BgHaiku is the powder blush background for Haiku.
 	BgHaiku string = "\033[48;5;224m"
 	// BgSonnet is the powder lavender background for Sonnet.
@@ -34,8 +36,8 @@ const (
 	BgModelUnknown string = "\033[48;5;252m"
 	// FgBlue is the path ground as a foreground, for separators.
 	FgBlue string = "\033[38;5;236m"
-	// FgCyan is the pale cyan foreground color for separators.
-	FgCyan string = "\033[38;5;116m"
+	// FgGit is the git ground as a foreground, for separators.
+	FgGit string = "\033[38;5;111m"
 	// FgWhite is the white foreground color.
 	FgWhite string = "\033[38;5;255m"
 	// FgBlack is the black foreground color.
