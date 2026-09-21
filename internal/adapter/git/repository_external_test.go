@@ -14,7 +14,7 @@ func TestNewRepository(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := git.NewRepository()
+			r := git.NewRepository("")
 			if r == nil {
 				t.Error("NewRepository() returned nil")
 			}
@@ -30,7 +30,7 @@ func TestRepository_Status(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := git.NewRepository()
+			r := git.NewRepository("")
 			status := r.Status()
 			_ = status.IsInRepo() // Just verify no panic
 		})
@@ -45,7 +45,7 @@ func TestRepository_DiffStats(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := git.NewRepository()
+			r := git.NewRepository("")
 			changes := r.DiffStats()
 			if changes.Added < 0 || changes.Removed < 0 {
 				t.Errorf("DiffStats() = {%d, %d}, want non-negative", changes.Added, changes.Removed)

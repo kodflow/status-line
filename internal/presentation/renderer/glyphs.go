@@ -28,6 +28,8 @@ type GlyphSet struct {
 	Ctx        string
 	Quota      string
 	Cost       string
+	Health     string
+	Worktree   string
 }
 
 // nerdGlyphs is the default set, drawn from the Nerd Font ranges.
@@ -47,6 +49,8 @@ var nerdGlyphs = GlyphSet{
 	Ctx:        "\uf1c0",
 	Quota:      "",
 	Cost:       "\uf155",
+	Health:     "\U000F0674",
+	Worktree:   "\uf126",
 }
 
 // textGlyphs is the fallback set: nothing outside printable ASCII, so it
@@ -67,6 +71,8 @@ var textGlyphs = GlyphSet{
 	Ctx:        "",
 	Quota:      "",
 	Cost:       "$",
+	Health:     "*",
+	Worktree:   "wt",
 }
 
 // glyphs is the active set, resolved once at startup.

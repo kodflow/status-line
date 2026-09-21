@@ -6,6 +6,7 @@ import (
 
 	"github.com/florent/status-line/internal/application"
 	"github.com/florent/status-line/internal/domain/model"
+	"github.com/florent/status-line/internal/domain/port"
 )
 
 type mockGitRepo struct{}
@@ -95,6 +96,53 @@ func TestStatusLineService_Generate(t *testing.T) {
 			result := svc.Generate(&mockInputProvider{})
 			if result != tt.want {
 				t.Errorf("Generate() = %q, want %q", result, tt.want)
+			}
+		})
+	}
+}
+
+type mockHealthProv struct{ level model.ServiceHealth }
+
+func (m *mockHealthProv) Health() model.ServiceHealth { return m.level }
+
+type capturingRenderer struct{ data model.StatusLineData }
+
+func (c *capturingRenderer) Render(data model.StatusLineData) string {
+	c.data = data
+	return ""
+}
+
+func TestGenerate_WorkDirAndHealth(t *testing.T) {
+	tests := []struct {
+		name       string
+		workDir    string
+		health     port.HealthProvider
+		wantDir    string
+		wantHealth model.ServiceHealth
+	}{
+		{name: "inferred directory wins", workDir: "/elsewhere", health: &mockHealthProv{level: model.HealthDegraded},
+			wantDir: "/elsewhere", wantHealth: model.HealthDegraded},
+		{name: "reported directory is the fallback", workDir: "", health: nil,
+			wantDir: "/workspace", wantHealth: model.HealthUnknown},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rend := &capturingRenderer{}
+			deps := application.ServiceDeps{
+				Git:      &mockGitRepo{},
+				System:   &mockSystemProv{},
+				Terminal: &mockTerminalProv{},
+				MCP:      &mockMCPProv{},
+				Usage:    &mockUsageProv{},
+				Health:   tt.health,
+				WorkDir:  tt.workDir,
+			}
+			application.NewStatusLineService(deps, rend).Generate(&mockInputProvider{})
+			if rend.data.Dir != tt.wantDir {
+				t.Errorf("Dir = %q, want %q", rend.data.Dir, tt.wantDir)
+			}
+			if rend.data.Health != tt.wantHealth {
+				t.Errorf("Health = %v, want %v", rend.data.Health, tt.wantHealth)
 			}
 		})
 	}

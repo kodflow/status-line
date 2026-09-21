@@ -74,7 +74,7 @@ func (r *Powerline) renderLine1(sb *strings.Builder, data model.StatusLineData) 
 	modelBg, _, _ := GetModelColors(data.Model.FullName())
 
 	// Render OS segment (transitions to Model segment)
-	r.renderOSSegment(sb, data.System, data.Icons.OS, modelBg)
+	r.renderOSSegment(sb, data.System, data.Icons.OS, data.Health, modelBg)
 
 	// Build the quota chain first: each segment needs to know the colour of the
 	// one that follows it to draw its separator
@@ -164,8 +164,9 @@ func (r *Powerline) renderLine2(sb *strings.Builder, data model.StatusLineData) 
 //   - sb: string builder to write to
 //   - sys: system information
 //   - showIcon: whether to show the OS icon
+//   - health: state of Claude's services, drawn beside the icon when known
 //   - nextBg: background color of the next segment
-func (r *Powerline) renderOSSegment(sb *strings.Builder, sys model.SystemInfo, showIcon bool, nextBg string) {
+func (r *Powerline) renderOSSegment(sb *strings.Builder, sys model.SystemInfo, showIcon bool, health model.ServiceHealth, nextBg string) {
 	// Write left rounded cap
 	sb.WriteString(FgWhite + LeftRound + Reset)
 	// Check if icon should be shown
@@ -177,8 +178,37 @@ func (r *Powerline) renderOSSegment(sb *strings.Builder, sys model.SystemInfo, s
 		// Write empty space without icon
 		sb.WriteString(BgWhite + FgBlack + Bold + "  " + Reset)
 	}
+	// The health glyph sits inside the same white ground, coloured by state
+	if color := healthColor(health); color != "" && !isHidden(hideHealth) {
+		sb.WriteString(BgWhite + color + glyphs.Health + " " + Reset)
+	}
 	// Write separator to next segment
 	sb.WriteString(nextBg + FgWhite + SepRight + Reset)
+}
+
+// healthColor returns the glyph colour for a service health level.
+//
+// Params:
+//   - health: aggregate state of Claude's services
+//
+// Returns:
+//   - string: foreground escape, empty when nothing should be drawn
+func healthColor(health model.ServiceHealth) string {
+	// Map each known level onto its colour
+	switch health {
+	// Every counted service is operational
+	case model.HealthOK:
+		return FgHealthOK
+	// One service is degraded
+	case model.HealthDegraded:
+		return FgHealthDegraded
+	// Two degraded services or one major outage
+	case model.HealthDown:
+		return FgHealthDown
+	// An unknown state is not drawn: a light nobody checked would mislead
+	default:
+		return ""
+	}
 }
 
 // renderModelSegment renders the AI model segment with integrated progress bar.
@@ -303,6 +333,10 @@ func (r *Powerline) renderGitSegment(sb *strings.Builder, git model.GitStatus, s
 	// Add untracked indicator if present
 	if git.Untracked > 0 {
 		sb.WriteString(" ?" + itoa(git.Untracked))
+	}
+	// Add the linked worktrees, where parallel work is going on
+	if git.Worktrees > 0 {
+		sb.WriteString(" " + glyphs.Worktree + " " + itoa(git.Worktrees))
 	}
 
 	// Write segment end with appropriate separator

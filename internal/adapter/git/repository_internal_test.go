@@ -97,3 +97,23 @@ func TestRepository_getBranch_GitAvailable(t *testing.T) {
 		})
 	}
 }
+
+func TestParseWorktrees(t *testing.T) {
+	tests := []struct {
+		name      string
+		porcelain string
+		want      int
+	}{
+		{name: "main only", porcelain: "worktree /r\nHEAD abc\nbranch refs/heads/main\n", want: 0},
+		{name: "two linked", porcelain: "worktree /r\nHEAD a\nbranch refs/heads/main\n\nworktree /r/.claude/worktrees/a\nHEAD b\nbranch refs/heads/a\n\nworktree /tmp/b\nHEAD c\ndetached\n", want: 2},
+		{name: "prunable is not counted", porcelain: "worktree /r\nHEAD a\n\nworktree /gone\nHEAD b\ndetached\nprunable gitdir file points to non-existent location\n", want: 0},
+		{name: "empty", porcelain: "", want: 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := parseWorktrees(tt.porcelain); got != tt.want {
+				t.Errorf("parseWorktrees() = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}

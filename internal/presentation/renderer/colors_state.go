@@ -68,6 +68,17 @@ const (
 	FgHueCostInk string = "\033[38;5;95m"
 )
 
+// Service health colours, drawn as the glyph on the white OS segment. Each
+// clears the 3:1 floor for graphical objects on that ground.
+const (
+	// FgHealthOK marks every counted service as operational. 3.91:1.
+	FgHealthOK string = "\033[38;5;29m"
+	// FgHealthDegraded marks one degraded service. 3.28:1.
+	FgHealthDegraded string = "\033[38;5;166m"
+	// FgHealthDown marks two degraded services or one major outage. 4.65:1.
+	FgHealthDown string = "\033[38;5;160m"
+)
+
 // MCP list colours. The servers are ambient information: they are read when
 // something is wrong, not while working, so they stay dimmed until one is.
 const (

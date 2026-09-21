@@ -107,3 +107,15 @@ func TestAdjacentSegmentsDifferInGround(t *testing.T) {
 		})
 	}
 }
+
+func TestHealthGlyphIsReadableOnTheOSGround(t *testing.T) {
+	// The health glyph is a graphical object, held to the 3:1 floor.
+	const minRatio = 3.0
+	for name, fg := range map[string]string{"ok": FgHealthOK, "degraded": FgHealthDegraded, "down": FgHealthDown} {
+		t.Run(name, func(t *testing.T) {
+			if got := contrast(t, fg, BgWhite); got < minRatio {
+				t.Errorf("contrast %.2f:1 is below the %.1f:1 floor", got, minRatio)
+			}
+		})
+	}
+}

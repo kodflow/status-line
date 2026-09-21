@@ -25,6 +25,7 @@ type Input struct {
 	Thinking      InputThinking    `json:"thinking"`
 	OutputStyle   InputOutputStyle `json:"output_style"`
 	SessionName   string           `json:"session_name"`
+	Transcript    string           `json:"transcript_path"`
 	Version       string           `json:"version"`
 	FastMode      bool             `json:"fast_mode"`
 	Exceeds200k   bool             `json:"exceeds_200k_tokens"`
@@ -101,6 +102,15 @@ func (i *Input) WorkingDir() string {
 	}
 	// Return configured directory
 	return i.Workspace.CurrentDir
+}
+
+// TranscriptPath returns the session transcript file, empty when absent.
+//
+// Returns:
+//   - string: absolute path of the JSONL transcript
+func (i *Input) TranscriptPath() string {
+	// Hand the raw value over; an absent field is an empty path
+	return i.Transcript
 }
 
 // ContextWindowSize returns the context window size.

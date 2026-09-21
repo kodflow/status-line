@@ -76,7 +76,7 @@ func TestPowerline_renderOSSegment(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &Powerline{}
 			var sb strings.Builder
-			r.renderOSSegment(&sb, model.SystemInfo{OS: model.OSLinux}, true, BgBlue)
+			r.renderOSSegment(&sb, model.SystemInfo{OS: model.OSLinux}, true, model.HealthUnknown, BgBlue)
 			if sb.Len() == 0 {
 				t.Error("renderOSSegment() produced empty output")
 			}
@@ -227,5 +227,46 @@ func TestPowerline_renderModelSegmentCursorTakesTheInk(t *testing.T) {
 				t.Errorf("cursor is not drawn in the model ink %q", ink)
 			}
 		})
+	}
+}
+
+func TestPowerline_renderOSSegmentHealth(t *testing.T) {
+	tests := []struct {
+		name   string
+		health model.ServiceHealth
+		want   string
+	}{
+		{name: "operational", health: model.HealthOK, want: FgHealthOK + glyphs.Health},
+		{name: "degraded", health: model.HealthDegraded, want: FgHealthDegraded + glyphs.Health},
+		{name: "down", health: model.HealthDown, want: FgHealthDown + glyphs.Health},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var sb strings.Builder
+			(&Powerline{}).renderOSSegment(&sb, model.SystemInfo{OS: model.OSLinux}, true, tt.health, BgBlue)
+			if !strings.Contains(sb.String(), tt.want) {
+				t.Errorf("health glyph not drawn in its colour")
+			}
+		})
+	}
+
+	t.Run("unknown draws nothing", func(t *testing.T) {
+		var sb strings.Builder
+		(&Powerline{}).renderOSSegment(&sb, model.SystemInfo{OS: model.OSLinux}, true, model.HealthUnknown, BgBlue)
+		if strings.Contains(sb.String(), glyphs.Health) {
+			t.Errorf("an unknown state must not be drawn")
+		}
+	})
+}
+
+func TestPowerline_renderGitSegmentWorktrees(t *testing.T) {
+	var with, without strings.Builder
+	(&Powerline{}).renderGitSegment(&with, model.GitStatus{Branch: "main", Worktrees: 2}, true, "")
+	(&Powerline{}).renderGitSegment(&without, model.GitStatus{Branch: "main"}, true, "")
+	if !strings.Contains(with.String(), glyphs.Worktree+" 2") {
+		t.Errorf("worktree count missing from %q", with.String())
+	}
+	if strings.Contains(without.String(), glyphs.Worktree) {
+		t.Errorf("worktree glyph drawn without any linked worktree")
 	}
 }

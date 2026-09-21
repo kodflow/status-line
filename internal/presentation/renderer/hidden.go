@@ -21,6 +21,8 @@ const (
 	hideWeekly string = "weekly"
 	// hideScoped hides the model-scoped quota pills.
 	hideScoped string = "model"
+	// hideHealth hides the service health glyph.
+	hideHealth string = "health"
 	// hideCredits hides the extra-usage credit pill.
 	hideCredits string = "credits"
 )
