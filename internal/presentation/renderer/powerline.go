@@ -338,7 +338,7 @@ func (r *Powerline) renderPathSegment(sb *strings.Builder, dir string, hasGit bo
 	// Determine separator style based on next segment
 	if hasGit {
 		// Write separator to git segment
-		sb.WriteString(BgCyan + FgBlue + SepRight + Reset)
+		sb.WriteString(BgGit + FgBlue + SepRight + Reset)
 		// Check if next segment has a colored background
 	} else if nextBg != "" {
 		// Write separator to next colored segment
@@ -367,10 +367,10 @@ func (r *Powerline) renderGitSegment(sb *strings.Builder, git model.GitStatus, s
 	// Check if icon should be shown
 	if showIcon {
 		// Write branch with icon and dark cyan text
-		sb.WriteString(BgCyan + FgCyanDark + Bold + " " + IconGitBranch + " " + git.Branch)
+		sb.WriteString(BgGit + FgGitInk + Bold + " " + IconGitBranch + " " + git.Branch)
 	} else {
 		// Write branch without icon with dark cyan text
-		sb.WriteString(BgCyan + FgCyanDark + Bold + " " + git.Branch)
+		sb.WriteString(BgGit + FgGitInk + Bold + " " + git.Branch)
 	}
 
 	// Add modified indicator if present
@@ -391,10 +391,10 @@ func (r *Powerline) renderGitSegment(sb *strings.Builder, git model.GitStatus, s
 	// Check if next segment has background
 	if nextBg != "" {
 		// Write separator to next colored segment
-		sb.WriteString(nextBg + FgCyan + SepRight + Reset)
+		sb.WriteString(nextBg + FgGit + SepRight + Reset)
 	} else {
 		// Write final separator
-		sb.WriteString(FgCyan + SepRight + Reset)
+		sb.WriteString(FgGit + SepRight + Reset)
 	}
 }
 
