@@ -40,6 +40,8 @@ make demo           # Démo avec données exemple
 L'auto-update vérifie le `.sha256` publié avec l'asset avant de remplacer le
 binaire : une somme absente, malformée ou différente annule la mise à jour.
 `STATUSLINE_GLYPHS` = `nerd` (défaut) | `text` (repli ASCII, sans Nerd Font)
+`STATUSLINE_COLORS` = `truecolor` | `256` force la profondeur de couleur ;
+absent, elle suit `COLORTERM` (`truecolor`/`24bit` → 24 bits, sinon 256)
 `STATUSLINE_HIDE` = pastilles à masquer, séparées par des virgules :
 `context`, `session`, `weekly`, `model`
 
@@ -80,7 +82,10 @@ famille de modèles ne s'affiche que si ce modèle est en cours d'utilisation.
   les échappements 24 bits `38;2;r;g;b`).
 - Pastilles modèle : fonds poudrés (Haiku 224, Sonnet 189, Opus 223, Fable
   194, inconnu 252). Encres en **24 bits** vers ~5.4:1 — le cube 256 n'a rien
-  dans ces teintes entre une encre profonde (7:1+) et une sous 4.5:1.
+  dans ces teintes entre une encre profonde (7:1+) et une sous 4.5:1. Chaque
+  encre a un repli 256 (`inkXxx256`) : la couleur du cube la plus proche en
+  CIELAB qui tient 4.5:1 (Opus saute l'olive 58, jugé sale sur la pêche).
+  Les deux jeux sont testés ; `pickInk` choisit au démarrage.
 - Le curseur de rythme `●` et les barres prennent l'encre de leur pastille :
   pas de couleur d'accent fixe (l'ancien orange 166 tombait à 2:1 sur Sonnet).
 - Contexte : fond 152, encre 24. Deux segments adjacents ne partagent jamais

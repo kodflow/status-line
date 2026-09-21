@@ -60,10 +60,14 @@ func TestEverySegmentInkIsReadableOnItsOwnGround(t *testing.T) {
 		bg   string
 		fg   string
 	}{
-		{name: "opus", bg: BgOpus, fg: FgOpusDark},
-		{name: "sonnet", bg: BgSonnet, fg: FgSonnetDark},
-		{name: "haiku", bg: BgHaiku, fg: FgHaikuDark},
-		{name: "fable", bg: BgFable, fg: FgFableDark},
+		{name: "opus", bg: BgOpus, fg: inkOpusTrue},
+		{name: "opus 256", bg: BgOpus, fg: inkOpus256},
+		{name: "sonnet", bg: BgSonnet, fg: inkSonnetTrue},
+		{name: "sonnet 256", bg: BgSonnet, fg: inkSonnet256},
+		{name: "haiku", bg: BgHaiku, fg: inkHaikuTrue},
+		{name: "haiku 256", bg: BgHaiku, fg: inkHaiku256},
+		{name: "fable", bg: BgFable, fg: inkFableTrue},
+		{name: "fable 256", bg: BgFable, fg: inkFable256},
 		{name: "unknown model", bg: BgModelUnknown, fg: FgModelUnknownDark},
 		{name: "context", bg: BgContext, fg: FgContextInk},
 		{name: "path", bg: BgBlue, fg: FgBlueDark},
