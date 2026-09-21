@@ -3,6 +3,7 @@ package renderer
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/florent/status-line/internal/domain/model"
 )
@@ -196,6 +197,34 @@ func TestPowerline_renderUpdatePill(t *testing.T) {
 			// Should produce output only if update available
 			if tt.update.Available && sb.Len() == 0 {
 				t.Error("renderUpdatePill() produced empty output for available update")
+			}
+		})
+	}
+}
+
+func TestPowerline_renderModelSegmentCursorTakesTheInk(t *testing.T) {
+	// The even-burn cursor used to be one orange for every model; on the pink
+	// and lavender grounds it measured 2.2:1 and clashed in hue. It now takes
+	// the pill's own ink, which is already held to the contrast floor.
+	now := time.Now()
+	for _, name := range []string{"Haiku 4.5", "Sonnet 5", "Opus 5", "Fable 5.1", "Mystery 1"} {
+		t.Run(name, func(t *testing.T) {
+			_, _, ink := GetModelColors(name)
+			quota := model.Limit{
+				Kind:     model.KindSession,
+				Percent:  35,
+				ResetsAt: now.Add(2 * time.Hour),
+				Window:   5 * time.Hour,
+			}
+			r := &Powerline{}
+			var sb strings.Builder
+			r.renderModelSegment(&sb, &ModelSegmentData{
+				Model:  model.ModelInfo{Name: name},
+				Quotas: []model.Limit{quota},
+				NextBg: BgBlue,
+			})
+			if !strings.Contains(sb.String(), ink+string(cursorChar)) {
+				t.Errorf("cursor is not drawn in the model ink %q", ink)
 			}
 		})
 	}

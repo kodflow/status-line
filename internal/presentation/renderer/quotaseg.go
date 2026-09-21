@@ -123,7 +123,7 @@ func renderQuotaSegment(sb *strings.Builder, seg quotaSegment, nextBg string) {
 	if limit.HasWindow() {
 		cursor = limit.CursorPosition()
 	}
-	bar := RenderProgressBarWidth(limit.Progress(), cursor, segBarWidth, FgCursorOrange, seg.bg+seg.ink+Bold)
+	bar := RenderProgressBarWidth(limit.Progress(), cursor, segBarWidth, seg.ink, seg.bg+seg.ink+Bold)
 
 	// Write the label, the bar and the consumed percentage
 	sb.WriteString(seg.bg + seg.ink + Bold + " " + QuotaLabel(limit) + " " + Reset)

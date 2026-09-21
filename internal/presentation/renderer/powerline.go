@@ -216,7 +216,7 @@ func (r *Powerline) renderModelSegment(sb *strings.Builder, data *ModelSegmentDa
 		if quota.HasWindow() {
 			cursor = quota.CursorPosition()
 		}
-		bar := RenderProgressBarWidth(quota.Progress(), cursor, segBarWidth, FgCursorOrange, bgColor+textColor)
+		bar := RenderProgressBarWidth(quota.Progress(), cursor, segBarWidth, textColor, bgColor+textColor)
 
 		// The first quota is the model's own session budget and runs straight
 		// on from its name; the rest are divided by a thin rule and named
@@ -361,7 +361,7 @@ func (r *Powerline) renderChangesSegment(sb *strings.Builder, changes model.Code
 //   - usage: weekly usage data
 func (r *Powerline) renderWeeklySegment(sb *strings.Builder, usage model.Limit) {
 	progress := usage.Progress()
-	bar := RenderProgressBarWithCursor(progress, usage.CursorPosition(), FgCursorOrange, BgWeekly+FgWeeklyText+Bold)
+	bar := RenderProgressBarWithCursor(progress, usage.CursorPosition(), FgWeeklyText, BgWeekly+FgWeeklyText+Bold)
 
 	// Write segment content
 	sb.WriteString(BgWeekly + FgWeeklyText + Bold + " " + IconWeekly + " " + bar + " " + itoa(progress.Percent) + "% " + Reset)

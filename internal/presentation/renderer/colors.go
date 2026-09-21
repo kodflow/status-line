@@ -76,8 +76,6 @@ const (
 	FgRedSep string = "\033[38;5;174m"
 	// ColorGray is the gray foreground for incomplete progress.
 	ColorGray string = "\033[38;5;245m"
-	// FgCursorOrange is the dark orange foreground for burn-rate cursor.
-	FgCursorOrange string = "\033[38;5;166m"
 	// FgGreenDone is the green foreground for done tasks in segmented bar.
 	FgGreenDone string = "\033[38;5;34m"
 	// FgYellowWip is the yellow/orange foreground for WIP indicator.
