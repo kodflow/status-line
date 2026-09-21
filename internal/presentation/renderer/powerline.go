@@ -144,6 +144,12 @@ func (r *Powerline) renderLine2(sb *strings.Builder, data model.StatusLineData) 
 		r.renderTasksPill(sb, data.Tasks)
 		hasContent = true
 	}
+	// The running subagents sit right after the task list: both are the work
+	// under way, the rest of the line is ambient
+	if data.Subagents > 0 {
+		sb.WriteString(" " + FgTaskTodo + glyphs.Subagents + Reset + " " + Bold + itoa(data.Subagents) + Reset)
+		hasContent = true
+	}
 
 	// Render MCP server pills if any
 	if len(data.MCP) > 0 {

@@ -32,6 +32,7 @@ type GlyphSet struct {
 	Tasks     string
 	TaskOpen  string
 	TaskDone  string
+	Subagents string
 }
 
 // nerdGlyphs is the default set, drawn from the Nerd Font ranges.
@@ -55,6 +56,7 @@ var nerdGlyphs = GlyphSet{
 	Tasks:     "\U000F0134",
 	TaskOpen:  "\u25a1",
 	TaskDone:  "\u25a0",
+	Subagents: "\U000F06A9",
 }
 
 // textGlyphs is the fallback set: nothing outside printable ASCII, so it
@@ -79,6 +81,7 @@ var textGlyphs = GlyphSet{
 	Tasks:     "tasks",
 	TaskOpen:  "-",
 	TaskDone:  "#",
+	Subagents: "agents",
 }
 
 // glyphs is the active set, resolved once at startup.
