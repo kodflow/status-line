@@ -1,4 +1,4 @@
-<!-- updated: 2026-05-01T16:30:00Z -->
+<!-- updated: 2026-09-21T12:00:00Z -->
 # Status Line
 
 CLI Go pour afficher une status line Powerline personnalisée dans Claude Code.
@@ -72,6 +72,19 @@ famille de modèles ne s'affiche que si ce modèle est en cours d'utilisation.
 | coût / credits | Coût cumulé de la session, solde de crédits |
 
 **Ligne ambiante:** pills MCP, notification de mise à jour.
+
+## Palette
+
+- Fonds pâles (xterm-256), encre sombre de la même teinte : chaque couple
+  encre/fond tient **≥ 4.5:1** (`contrast_internal_test.go`, qui lit aussi
+  les échappements 24 bits `38;2;r;g;b`).
+- Pastilles modèle : fonds poudrés (Haiku 224, Sonnet 189, Opus 223, Fable
+  194, inconnu 252). Encres en **24 bits** vers ~5.4:1 — le cube 256 n'a rien
+  dans ces teintes entre une encre profonde (7:1+) et une sous 4.5:1.
+- Le curseur de rythme `●` et les barres prennent l'encre de leur pastille :
+  pas de couleur d'accent fixe (l'ancien orange 166 tombait à 2:1 sur Sonnet).
+- Contexte : fond 152, encre 24. Deux segments adjacents ne partagent jamais
+  un fond proche (`TestAdjacentSegmentsDifferInGround`).
 
 ## Quotas : d'où viennent les chiffres
 
