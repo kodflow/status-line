@@ -86,12 +86,15 @@ const (
 	FgMCPEnabled string = "\033[38;5;116m"
 	// FgMCPEnabledText is the dark teal for text on enabled MCP background.
 	FgMCPEnabledText string = "\033[38;5;23m"
-	// BgMCPDisabled is the pale gray background for disabled MCP servers.
-	BgMCPDisabled string = "\033[48;5;250m"
-	// FgMCPDisabled is the pale gray foreground for disabled MCP pill caps.
-	FgMCPDisabled string = "\033[38;5;250m"
-	// FgMCPDisabledText is the dark gray for text on disabled MCP background.
-	FgMCPDisabledText string = "\033[38;5;240m"
+	// BgMCPLabel is the dark teal ground of the MCP label and of a server
+	// being called.
+	BgMCPLabel string = "\033[48;5;23m"
+	// FgMCPMuted is the gray ink of a disabled server inside the MCP pill.
+	// 240 only reaches 4.31:1 on the teal; 239 clears 4.5:1 (5.05:1).
+	FgMCPMuted string = "\033[38;5;239m"
+	// StrikeMCP crosses out a disabled server; terminals without it keep
+	// the gray alone.
+	StrikeMCP string = "\033[9m"
 	// BgWeekly is the pale gray background for weekly usage segment.
 	BgWeekly string = "\033[48;5;252m"
 	// FgWeekly is the pale gray foreground for weekly usage separator.

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/florent/status-line/internal/domain/port"
 )
@@ -26,10 +27,14 @@ var _ port.ActivityProvider = (*Provider)(nil)
 type Provider struct {
 	dir       string
 	sessionID string
+	once      sync.Once
+	entry     sessionFile
+	found     bool
 }
 
 // sessionFile is the part of a registry entry the status line reads.
 type sessionFile struct {
+	PID       int    `json:"pid"`
 	SessionID string `json:"sessionId"`
 	Status    string `json:"status"`
 }
@@ -56,19 +61,60 @@ func NewProvider(sessionID string) *Provider {
 
 // Working reports whether the session is busy on a turn.
 //
-// The registry holds one file per live session; the first one naming this
-// session decides. Files mid-write or malformed are skipped, never fatal.
-//
 // Returns:
 //   - bool: true when the session's entry says busy
 func (p *Provider) Working() bool {
-	// Without an id or a registry no entry can be this session's
-	if p.dir == "" || p.sessionID == "" {
+	entry, ok := p.lookup()
+	// Without an entry the session cannot be seen working
+	if !ok {
 		return false
 	}
+	return entry.Status == busyStatus
+}
+
+// PID returns the process id of the host running this session.
+//
+// Returns:
+//   - int: pid named by the session's entry, 0 when there is none
+func (p *Provider) PID() int {
+	entry, ok := p.lookup()
+	// No entry, or one without a usable pid, names no process
+	if !ok || entry.PID <= 0 {
+		return 0
+	}
+	return entry.PID
+}
+
+// lookup finds this session's registry entry, scanning the registry once.
+//
+// The registry holds one file per live session; the first one naming this
+// session decides. Files mid-write or malformed are skipped, never fatal.
+// Several adapters ask concurrently, hence the once.
+//
+// Returns:
+//   - sessionFile: the session's entry
+//   - bool: whether an entry was found
+func (p *Provider) lookup() (sessionFile, bool) {
+	p.once.Do(func() {
+		p.entry, p.found = p.scan()
+	})
+	return p.entry, p.found
+}
+
+// scan reads the registry for this session's entry.
+//
+// Returns:
+//   - sessionFile: the session's entry
+//   - bool: whether an entry was found
+func (p *Provider) scan() (sessionFile, bool) {
+	// Without an id or a registry no entry can be this session's
+	if p.dir == "" || p.sessionID == "" {
+		return sessionFile{}, false
+	}
 	paths, err := filepath.Glob(filepath.Join(p.dir, "*.json"))
+	// A broken pattern cannot happen with a fixed suffix; stay quiet anyway
 	if err != nil {
-		return false
+		return sessionFile{}, false
 	}
 	needle := []byte(p.sessionID)
 	// Stop at the first entry that is this session's
@@ -83,7 +129,7 @@ func (p *Provider) Working() bool {
 		if json.Unmarshal(data, &entry) != nil || entry.SessionID != p.sessionID {
 			continue
 		}
-		return entry.Status == busyStatus
+		return entry, true
 	}
-	return false
+	return sessionFile{}, false
 }

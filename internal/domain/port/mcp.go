@@ -12,3 +12,13 @@ type MCPProvider interface {
 	//   - model.MCPServers: list of MCP server configurations
 	Servers() model.MCPServers
 }
+
+// MCPCallsProvider reads which MCP servers are being called right now.
+type MCPCallsProvider interface {
+	// Busy returns the tool-name keys (mcp__<key>__<tool>) of the servers
+	// with a call in flight or one that ended a moment ago.
+	//
+	// Returns:
+	//   - []string: distinct keys, sorted
+	Busy() []string
+}

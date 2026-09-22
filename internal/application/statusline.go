@@ -87,7 +87,7 @@ func (s *StatusLineService) GenerateWithUpdate(input port.InputProvider, update 
 	gather(func() { gitChanges = s.deps.Git.DiffStats() })
 	gather(func() { systemInfo = s.deps.System.Info() })
 	gather(func() { terminalNfo = s.deps.Terminal.Info() })
-	gather(func() { mcpServers = s.deps.MCP.Servers() })
+	gather(func() { mcpServers = s.deps.MCP.Servers().WithBusy(busyServers(s.deps.MCPCalls)) })
 	// The task list is optional as well
 	if s.deps.Tasks != nil {
 		gather(func() { taskBoard = s.deps.Tasks.Board() })
@@ -140,4 +140,19 @@ func (s *StatusLineService) GenerateWithUpdate(input port.InputProvider, update 
 
 	// Delegate rendering to the renderer
 	return s.renderer.Render(data)
+}
+
+// busyServers asks which MCP servers are being called, when anyone can tell.
+//
+// Params:
+//   - calls: optional provider
+//
+// Returns:
+//   - []string: tool-name keys of the busy servers, nil without a provider
+func busyServers(calls port.MCPCallsProvider) []string {
+	// Lighting servers up is optional
+	if calls == nil {
+		return nil
+	}
+	return calls.Busy()
 }

@@ -176,3 +176,26 @@ func TestGenerate_Tasks(t *testing.T) {
 		t.Error("Working = false, want the activity provider's answer")
 	}
 }
+
+type listMCPProv struct{ servers model.MCPServers }
+
+func (m *listMCPProv) Servers() model.MCPServers { return m.servers }
+
+type mockCallsProv struct{ busy []string }
+
+func (m *mockCallsProv) Busy() []string { return m.busy }
+
+func TestGenerate_MCPBusy(t *testing.T) {
+	rend := &capturingRenderer{}
+	deps := application.ServiceDeps{
+		Git: &mockGitRepo{}, System: &mockSystemProv{}, Terminal: &mockTerminalProv{},
+		MCP:      &listMCPProv{servers: model.MCPServers{{Name: "github", Enabled: true}, {Name: "tasks", Enabled: true, Plugin: "kodflow-hooks"}}},
+		MCPCalls: &mockCallsProv{busy: []string{"plugin_kodflow-hooks_tasks", "surprise"}},
+		Usage:    &mockUsageProv{},
+	}
+	application.NewStatusLineService(deps, rend).Generate(&mockInputProvider{})
+	got := rend.data.MCP
+	if len(got) != 3 || got[0].Busy || !got[1].Busy || got[2].Name != "surprise" || !got[2].Busy {
+		t.Errorf("MCP = %+v, want tasks and the unknown surprise busy", got)
+	}
+}

@@ -4,11 +4,12 @@ package activity
 import (
 	"bytes"
 	"encoding/json"
-	"io"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/florent/status-line/internal/adapter/transcript"
 )
 
 // Transcript scanning constants.
@@ -85,7 +86,7 @@ func Dir(transcriptPath, fallback string) string {
 	return fallback
 }
 
-// readTail reads the end of a file, starting at a line boundary.
+// readTail reads the end of the transcript, starting at a line boundary.
 //
 // Params:
 //   - path: file to read
@@ -94,27 +95,7 @@ func Dir(transcriptPath, fallback string) string {
 //   - []byte: the last complete lines
 //   - error: any error opening or reading the file
 func readTail(path string) ([]byte, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = f.Close() }()
-	info, err := f.Stat()
-	if err != nil {
-		return nil, err
-	}
-	offset := max(info.Size()-tailSize, 0)
-	data, err := io.ReadAll(io.NewSectionReader(f, offset, info.Size()-offset))
-	if err != nil {
-		return nil, err
-	}
-	// Drop the partial first line when reading from the middle of the file
-	if offset > 0 {
-		if idx := bytes.IndexByte(data, '\n'); idx >= 0 {
-			data = data[idx+1:]
-		}
-	}
-	return data, nil
+	return transcript.Tail(path, tailSize)
 }
 
 // lineDir extracts the most recent working location from one transcript line.
