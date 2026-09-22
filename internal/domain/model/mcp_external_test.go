@@ -62,3 +62,30 @@ func TestToolKey(t *testing.T) {
 		t.Errorf("ToolKey = %q", got)
 	}
 }
+
+func TestMCPServersWithSource(t *testing.T) {
+	servers := model.MCPServers{{Name: "a"}, {Name: "b", Source: model.MCPSourceUser}}
+	got := servers.WithSource(model.MCPSourcePlugin)
+	for _, s := range got {
+		if s.Source != model.MCPSourcePlugin {
+			t.Errorf("%s: Source = %q, want plugin", s.Name, s.Source)
+		}
+	}
+	if len(model.MCPServers(nil).WithSource(model.MCPSourceCLI)) != 0 {
+		t.Error("an empty list stays empty")
+	}
+	// An unknown server added by WithBusy carries no scope
+	busy := model.MCPServers{{Name: "a", Enabled: true, Source: model.MCPSourceCLI}}.WithBusy([]string{"ghost"})
+	if busy[1].Source != model.MCPSourceUnknown {
+		t.Errorf("ghost: Source = %q, want unknown", busy[1].Source)
+	}
+}
+
+func TestMCPSourcesOrder(t *testing.T) {
+	want := []model.MCPSource{"managed", "cli", "local", "project", "user", "plugin"}
+	for i, src := range model.MCPSources {
+		if src != want[i] {
+			t.Errorf("MCPSources[%d] = %q, want %q", i, src, want[i])
+		}
+	}
+}

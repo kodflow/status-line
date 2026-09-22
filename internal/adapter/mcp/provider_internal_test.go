@@ -479,3 +479,26 @@ func TestConvertServers(t *testing.T) {
 		t.Errorf("convertServers = %q", names(got))
 	}
 }
+
+func TestServersSourceTags(t *testing.T) {
+	f, p := newFixture(t)
+	everywhere(t, f, p, false)
+	want := map[string]model.MCPSource{
+		"managed": model.MCPSourceManaged,
+		"cli":     model.MCPSourceCLI,
+		"dup":     model.MCPSourceCLI,
+		"local":   model.MCPSourceLocal,
+		"project": model.MCPSourceProject,
+		"user":    model.MCPSourceUser,
+		"plugin":  model.MCPSourcePlugin,
+	}
+	got := p.Servers()
+	if len(got) != len(want) {
+		t.Fatalf("Servers() = %q, want %d servers", names(got), len(want))
+	}
+	for _, s := range got {
+		if s.Source != want[s.Name] {
+			t.Errorf("%s: Source = %q, want %q (the scope that won the name)", s.Name, s.Source, want[s.Name])
+		}
+	}
+}
