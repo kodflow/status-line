@@ -1,7 +1,6 @@
 package renderer
 
 import (
-	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -77,7 +76,7 @@ func TestPowerline_renderOSSegment(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &Powerline{}
 			var sb strings.Builder
-			r.renderOSSegment(&sb, model.SystemInfo{OS: model.OSLinux}, true, model.HealthUnknown, 0, BgBlue)
+			r.renderOSSegment(&sb, model.SystemInfo{OS: model.OSLinux}, true, model.HealthUnknown, nil, 0, BgBlue)
 			if sb.Len() == 0 {
 				t.Error("renderOSSegment() produced empty output")
 			}
@@ -120,7 +119,7 @@ func TestPowerline_renderPathSegment(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &Powerline{}
 			var sb strings.Builder
-			r.renderPathSegment(&sb, "/workspace", true, true, "")
+			r.renderPathSegment(&sb, "/workspace", true, true, "", 0)
 			if sb.Len() == 0 {
 				t.Error("renderPathSegment() produced empty output")
 			}
@@ -140,7 +139,7 @@ func TestPowerline_renderGitSegment(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &Powerline{}
 			var sb strings.Builder
-			r.renderGitSegment(&sb, tt.git, true, "")
+			r.renderGitSegment(&sb, tt.git, true, "", 0)
 			_ = sb.String() // Just verify no panic
 		})
 	}
@@ -164,95 +163,6 @@ func TestPowerline_renderChangesSegment(t *testing.T) {
 	}
 }
 
-func TestPowerline_renderMCPPill(t *testing.T) {
-	strip := func(s string) string {
-		return regexp.MustCompile("\033\\[[0-9;]*m").ReplaceAllString(s, "")
-	}
-	head := " " + LeftRound + " MCP " + glyphs.MCPArrow
-	tests := []struct {
-		name    string
-		servers model.MCPServers
-		want    string
-	}{
-		{name: "empty draws nothing", servers: model.MCPServers{}, want: ""},
-		{
-			name: "enabled sorted case-insensitively",
-			servers: model.MCPServers{
-				{Name: "tasks", Enabled: true}, {Name: "GitKraken", Enabled: true},
-				{Name: "codacy", Enabled: true}, {Name: "github", Enabled: true},
-			},
-			want: head + " codacy \u00b7 github \u00b7 GitKraken \u00b7 tasks " + RightRound,
-		},
-		{
-			name: "disabled after enabled",
-			servers: model.MCPServers{
-				{Name: "zeta", Enabled: false}, {Name: "beta", Enabled: true}, {Name: "Alpha", Enabled: false},
-			},
-			want: head + " beta \u00b7 Alpha \u00b7 zeta " + RightRound,
-		},
-		{
-			name:    "only disabled",
-			servers: model.MCPServers{{Name: "off", Enabled: false}},
-			want:    head + " off " + RightRound,
-		},
-		{
-			name:    "a busy server keeps its place",
-			servers: model.MCPServers{{Name: "b", Enabled: true, Busy: true}, {Name: "a", Enabled: true}, {Name: "c", Busy: true}},
-			want:    head + " a \u00b7 b \u00b7 c " + RightRound,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var sb strings.Builder
-			(&Powerline{}).renderMCPPill(&sb, tt.servers)
-			if got := strip(sb.String()); got != tt.want {
-				t.Errorf("pill = %q, want %q", got, tt.want)
-			}
-			if tt.want != "" && strings.Count(sb.String(), LeftRound) != 1 {
-				t.Errorf("want one pill, got %q", sb.String())
-			}
-		})
-	}
-}
-
-func TestPowerline_renderMCPPillStyling(t *testing.T) {
-	var sb strings.Builder
-	(&Powerline{}).renderMCPPill(&sb, model.MCPServers{
-		{Name: "on", Enabled: true}, {Name: "down", Enabled: false}, {Name: "lit", Enabled: true, Busy: true},
-	})
-	out := sb.String()
-	label := " " + FgMCPEnabledText + LeftRound + Reset + BgMCPLabel + FgWhite + Bold + " MCP " + Reset
-	if !strings.HasPrefix(out, label+BgMCPEnabled+FgMCPEnabledText+glyphs.MCPArrow+" ") {
-		t.Errorf("the pill opens with the white label on dark teal, then the arrow, got %q", out)
-	}
-	if !strings.Contains(out, FgMCPEnabledText+"on"+Reset+BgMCPEnabled) {
-		t.Errorf("an enabled server at rest is ink 23 on the light teal, got %q", out)
-	}
-	if !strings.Contains(out, FgMCPMuted+StrikeMCP+"down"+Reset+BgMCPEnabled) {
-		t.Errorf("a disabled server is muted and crossed out on the teal, got %q", out)
-	}
-	if !strings.Contains(out, BgMCPLabel+FgWhite+Bold+"lit"+Reset+BgMCPEnabled) {
-		t.Errorf("a server being called is a bold white chip on dark teal, got %q", out)
-	}
-	if strings.Contains(out, StrikeMCP+"on") || strings.Contains(out, BgMCPLabel+FgWhite+Bold+"on") {
-		t.Errorf("an enabled idle server is neither crossed out nor lit, got %q", out)
-	}
-	if !strings.HasSuffix(out, " "+Reset+FgMCPEnabled+RightRound+Reset) {
-		t.Errorf("the pill closes with a light teal cap, got %q", out)
-	}
-}
-
-func TestPowerline_renderMCPPillTextGlyphs(t *testing.T) {
-	saved := glyphs
-	t.Cleanup(func() { glyphs = saved })
-	glyphs = textGlyphs
-	var sb strings.Builder
-	(&Powerline{}).renderMCPPill(&sb, model.MCPServers{{Name: "x", Enabled: true}})
-	if !strings.Contains(sb.String(), " MCP "+Reset+BgMCPEnabled+FgMCPEnabledText+">") {
-		t.Errorf("text glyphs: want the MCP label then '>', got %q", sb.String())
-	}
-}
-
 func TestPowerline_renderLine2MCPBeforeUpdate(t *testing.T) {
 	var sb strings.Builder
 	(&Powerline{}).renderLine2(&sb, model.StatusLineData{
@@ -261,11 +171,11 @@ func TestPowerline_renderLine2MCPBeforeUpdate(t *testing.T) {
 		Update: model.UpdateInfo{Available: true, Version: "v9.9.9"},
 	})
 	out := sb.String()
-	epic, pill, update := strings.Index(out, "SDK status-line"), strings.Index(out, "github"), strings.Index(out, "v9.9.9")
+	epic, pill, update := strings.Index(out, "SDK status-line"), strings.Index(out, glyphs.MCP+" 2"), strings.Index(out, "v9.9.9")
 	if epic < 0 || pill < 0 || update < 0 || !(epic < pill && pill < update) {
 		t.Errorf("want epic, then MCP, then update; got %q", out)
 	}
-	if strings.Count(out, FgMCPEnabledText+LeftRound) != 1 {
+	if strings.Count(out, FgMCPEnabled+LeftRound) != 1 {
 		t.Errorf("want a single MCP pill, got %q", out)
 	}
 }
@@ -332,7 +242,7 @@ func TestPowerline_renderOSSegmentHealth(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var sb strings.Builder
-			(&Powerline{}).renderOSSegment(&sb, model.SystemInfo{OS: model.OSLinux}, true, tt.health, 0, BgBlue)
+			(&Powerline{}).renderOSSegment(&sb, model.SystemInfo{OS: model.OSLinux}, true, tt.health, nil, 0, BgBlue)
 			if !strings.Contains(sb.String(), tt.want) {
 				t.Errorf("health glyph not drawn in its colour")
 			}
@@ -341,7 +251,7 @@ func TestPowerline_renderOSSegmentHealth(t *testing.T) {
 
 	t.Run("unknown draws nothing", func(t *testing.T) {
 		var sb strings.Builder
-		(&Powerline{}).renderOSSegment(&sb, model.SystemInfo{OS: model.OSLinux}, true, model.HealthUnknown, 0, BgBlue)
+		(&Powerline{}).renderOSSegment(&sb, model.SystemInfo{OS: model.OSLinux}, true, model.HealthUnknown, nil, 0, BgBlue)
 		if strings.Contains(sb.String(), glyphs.Health) {
 			t.Errorf("an unknown state must not be drawn")
 		}
@@ -350,8 +260,8 @@ func TestPowerline_renderOSSegmentHealth(t *testing.T) {
 
 func TestPowerline_renderGitSegmentWorktrees(t *testing.T) {
 	var with, without strings.Builder
-	(&Powerline{}).renderGitSegment(&with, model.GitStatus{Branch: "main", Worktrees: 2}, true, "")
-	(&Powerline{}).renderGitSegment(&without, model.GitStatus{Branch: "main"}, true, "")
+	(&Powerline{}).renderGitSegment(&with, model.GitStatus{Branch: "main", Worktrees: 2}, true, "", 0)
+	(&Powerline{}).renderGitSegment(&without, model.GitStatus{Branch: "main"}, true, "", 0)
 	if !strings.Contains(with.String(), glyphs.Worktree+" 2") {
 		t.Errorf("worktree count missing from %q", with.String())
 	}
@@ -389,7 +299,7 @@ func TestPowerline_renderLine2EpicsLeadTheLine(t *testing.T) {
 		Tasks: model.TaskBoard{Epics: []model.Epic{sampleEpic(), other}}, MCP: mcp,
 	})
 	out := sb.String()
-	first, second, pill := strings.Index(out, "SDK status-line 2/5"), strings.Index(out, "ktn-linter 0/1"), strings.Index(out, "github")
+	first, second, pill := strings.Index(out, "SDK status-line 2/5"), strings.Index(out, "ktn-linter 0/1"), strings.Index(out, glyphs.MCP+" 1")
 	if first < 0 || second < 0 || pill < 0 || !(first < second && second < pill) {
 		t.Errorf("want the epics in board order, then MCP; got %q", out)
 	}
@@ -560,7 +470,7 @@ func TestPowerline_subagentsPlacement(t *testing.T) {
 	}
 
 	var line1 strings.Builder
-	(&Powerline{}).renderOSSegment(&line1, model.SystemInfo{OS: model.OSLinux}, true, model.HealthOK, 3, BgBlue)
+	(&Powerline{}).renderOSSegment(&line1, model.SystemInfo{OS: model.OSLinux}, true, model.HealthOK, nil, 3, BgBlue)
 	health, agents := strings.Index(line1.String(), glyphs.Health), strings.Index(line1.String(), BgWhite+FgBlack+Bold+glyphs.Subagents+" 3 ")
 	if health < 0 || agents < 0 || agents < health {
 		t.Errorf("unattributed subagents follow the health glyph in the OS segment, got %q", line1.String())
@@ -572,7 +482,7 @@ func TestPowerline_subagentsPlacement(t *testing.T) {
 	}
 
 	var none strings.Builder
-	(&Powerline{}).renderOSSegment(&none, model.SystemInfo{OS: model.OSLinux}, true, model.HealthOK, 0, BgBlue)
+	(&Powerline{}).renderOSSegment(&none, model.SystemInfo{OS: model.OSLinux}, true, model.HealthOK, nil, 0, BgBlue)
 	if strings.Contains(none.String(), glyphs.Subagents) {
 		t.Error("no unattributed subagent must draw nothing on line 1")
 	}

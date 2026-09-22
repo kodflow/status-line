@@ -80,7 +80,7 @@ One adapter per external concern. Each implements one port from
 | `git`          | `GitRepository`       | `git` CLI (status, diff stats)                  |
 | `mcp`          | `MCPDetector`         | managed, host `--mcp-config` (/proc), `~/.claude.json`, project `.mcp.json`, plugin `.mcp.json` |
 | `system`       | `SystemInfoProvider`  | `runtime.GOOS`, `/.dockerenv`                   |
-| `terminal`     | `TerminalDetector`    | `golang.org/x/term` (width, color depth)        |
+| `terminal`     | `TerminalDetector`    | `COLUMNS` set by the host (width, default 120)   |
 | `updater`      | `Updater`             | GitHub Releases API                             |
 | `usage`        | `UsageProvider`       | Anthropic OAuth API (`five_hour.utilization`)   |
 
@@ -88,7 +88,7 @@ One adapter per external concern. Each implements one port from
 
 Pure rendering layer. Takes a fully-built domain model, returns an
 ANSI string. Knows about Powerline glyphs, color codes, segment
-collapsing rules (responds to `TerminalInfo.Width`), and pill styling
+condensing rules (line one fits `TerminalInfo.Width`, see `fit.go`), and pill styling
 (model badge, progress bar, burn-rate cursor).
 
 ## Data Flow
@@ -99,7 +99,7 @@ collapsing rules (responds to `TerminalInfo.Width`), and pill styling
    - `git.Status()`, `git.DiffStats()` for line 1.
    - `mcp.ActiveServers()` for line 2.
    - `usage.SessionAndWeekly()` for the burn-rate bars.
-   - `terminal.Width()` for collapse decisions.
+   - `terminal.Info()` (`COLUMNS`) for line-one condensing.
 4. Per-port errors are dropped; the corresponding segment is omitted.
 5. Renderer composes the two-line output as a single ANSI string.
 6. `stdout` ← rendered string. Exit 0.
@@ -107,8 +107,7 @@ collapsing rules (responds to `TerminalInfo.Width`), and pill styling
 ## Technology Stack
 
 - **Language** — Go 1.25.5, toolchain 1.26.
-- **Direct deps** — `golang.org/x/term` (terminal width/colors),
-  `golang.org/x/sys` (transitive).
+- **Direct deps** — none beyond the standard library.
 - **Build** — `make build` → `bin/status-line`. Cross-compiled binaries
   ship via GitHub Releases (`.github/workflows/release.yml`).
 - **Testing** — stdlib `testing`. Convention: `*_test.go` in the same

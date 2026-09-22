@@ -2,7 +2,6 @@
 package renderer
 
 import (
-	"sort"
 	"strings"
 	"time"
 
@@ -57,33 +56,64 @@ func (r *Powerline) Render(data model.StatusLineData) string {
 //   - sb: string builder to write to
 //   - data: status line data
 func (r *Powerline) renderCompact(sb *strings.Builder, data model.StatusLineData) {
-	// Line one carries everything the session is: identity, quotas, repository.
-	// Line two carries only what is ambient — the MCP servers and an update
-	// notice — as the original status line did.
+	// Line one carries everything the session is: identity, MCP servers,
+	// quotas, repository. Line two carries the epics, the MCP pill when it
+	// is asked there, and an update notice.
 	r.renderLine1(sb, data)
 	sb.WriteString("\n" + LineGap())
-	r.renderLine2(sb, data)
+	r.renderLine2With(sb, data, mcpOnLine2)
 	sb.WriteString("\n")
 }
 
-// renderLine1 renders the first line with OS, Model, Weekly, Path, Git, and Changes segments.
+// renderLine1 renders the first line, condensed to the terminal width.
+//
+// The line is drawn whole first; while it is wider than the terminal
+// allows, it is drawn again one degradation step further (fitLevels). The
+// MCP indicator inside the OS segment is part of every level, never given
+// up. The second line is never condensed: a long task title wraps instead.
 //
 // Params:
 //   - sb: string builder to write to
 //   - data: status line data
 func (r *Powerline) renderLine1(sb *strings.Builder, data model.StatusLineData) {
+	line, _, _ := fitLine1(lineBudget(data.Terminal.Width), func(buf *strings.Builder, fit lineFit) {
+		r.renderLine1Fit(buf, data, fit)
+	})
+	sb.WriteString(line)
+}
+
+// renderLine1Fit renders the first line with OS, Model, quota, Path, Git and
+// Changes segments, giving up what fit says.
+//
+// Params:
+//   - sb: string builder to write to
+//   - data: status line data
+//   - fit: what to leave out
+func (r *Powerline) renderLine1Fit(sb *strings.Builder, data model.StatusLineData, fit lineFit) {
 	// Get model background color for OS segment transition (use FullName for color detection)
 	modelBg, _, _ := GetModelColors(data.Model.FullName())
 
 	// Render OS segment (transitions to Model segment)
-	r.renderOSSegment(sb, data.System, data.Icons.OS, data.Health, data.Tasks.Unattributed, modelBg)
+	var mcp model.MCPServers
+	// The MCP indicator lives in the OS segment unless asked onto line two
+	if !mcpOnLine2 {
+		mcp = data.MCP
+	}
+	r.renderOSSegment(sb, data.System, data.Icons.OS, data.Health, mcp, data.Tasks.Unattributed, modelBg)
 
 	// Build the quota chain first: each segment needs to know the colour of the
 	// one that follows it to draw its separator
 	segments := quotaSegments(data)
 
+	// Whatever ends the quota chain hands over to the path, or straight to
+	// the branch when the path gave way
+	afterQuotas := BgBlue
+	if fit.dropPath() && data.Git.IsInRepo() {
+		afterQuotas = BgGit
+	}
+
 	// The model segment carries the account quotas that apply to this model
-	modelNextBg := BgBlue
+	modelNextBg := afterQuotas
 	// Hand over to the first remaining segment when there is one
 	if len(segments) > 0 {
 		modelNextBg = segments[0].bg
@@ -97,19 +127,33 @@ func (r *Powerline) renderLine1(sb *strings.Builder, data model.StatusLineData) 
 		Effort:   data.Effort,
 		FastMode: data.FastMode,
 		Quotas:   modelQuotas(data),
+		Fit:      fit,
 	}
+	// The smallest levels leave the model its name alone
+	modelData.ShowIcon = modelData.ShowIcon && !fit.dropModelIcon()
 	r.renderModelSegment(sb, modelData)
 
 	// Chain every quota, each handing over to the next and the last to the path
 	for idx, seg := range segments {
-		nextBg := BgBlue
+		nextBg := afterQuotas
 		// Hand over to the next quota when there is one
 		if idx+1 < len(segments) {
 			nextBg = segments[idx+1].bg
 		}
-		renderQuotaSegment(sb, seg, nextBg)
+		renderQuotaSegment(sb, seg, nextBg, fit)
 	}
 
+	r.renderRepoSegments(sb, data, fit)
+}
+
+// renderRepoSegments renders where the session works: path, git and
+// changes, giving up what fit says.
+//
+// Params:
+//   - sb: string builder to write to
+//   - data: status line data
+//   - fit: what to leave out
+func (r *Powerline) renderRepoSegments(sb *strings.Builder, data model.StatusLineData, fit lineFit) {
 	// Determine what follows git segment (or path if no git)
 	changesNextBg := ""
 	// Determine next segment background color based on changes
@@ -122,21 +166,42 @@ func (r *Powerline) renderLine1(sb *strings.Builder, data model.StatusLineData) 
 		changesNextBg = BgRed
 	}
 
-	// Render path segment (pass changesNextBg for case when no git)
-	r.renderPathSegment(sb, data.Dir, data.Git.IsInRepo(), data.Icons.Path, changesNextBg)
+	// A line too narrow for the changes leaves them to the git counters
+	changes := data.Changes
+	if fit.dropChanges() {
+		changes = model.CodeChanges{}
+		changesNextBg = ""
+	}
+
+	// Render path segment (pass changesNextBg for case when no git); only
+	// the tightest level gives it up, and only when the branch stays
+	if !fit.dropPath() || !data.Git.IsInRepo() {
+		r.renderPathSegment(sb, data.Dir, data.Git.IsInRepo(), data.Icons.Path, changesNextBg, fit.pathMax())
+	}
 
 	// Render git segment if in repo
-	r.renderGitSegment(sb, data.Git, data.Icons.Git, changesNextBg)
+	r.renderGitSegment(sb, data.Git, data.Icons.Git, changesNextBg, fit.branchMax())
 	// Render code changes if any
-	r.renderChangesSegment(sb, data.Changes)
+	r.renderChangesSegment(sb, changes)
 }
 
-// renderLine2 renders the second line with dynamic pills (MCP, Update).
+// renderLine2 renders the second line with the MCP pill on it.
 //
 // Params:
 //   - sb: string builder to write to
 //   - data: status line data
 func (r *Powerline) renderLine2(sb *strings.Builder, data model.StatusLineData) {
+	r.renderLine2With(sb, data, true)
+}
+
+// renderLine2With renders the second line with dynamic pills (epics, MCP,
+// Update).
+//
+// Params:
+//   - sb: string builder to write to
+//   - data: status line data
+//   - withMCP: whether the MCP pill goes on this line
+func (r *Powerline) renderLine2With(sb *strings.Builder, data model.StatusLineData, withMCP bool) {
 	// Track if we've rendered anything
 	hasContent := false
 
@@ -147,8 +212,9 @@ func (r *Powerline) renderLine2(sb *strings.Builder, data model.StatusLineData) 
 		hasContent = true
 	}
 
-	// One MCP pill sums up every server, after the epics
-	if len(data.MCP) > 0 {
+	// One MCP pill sums up every server, after the epics, unless line one
+	// already carries it
+	if withMCP && len(data.MCP) > 0 {
 		// Add separator space if previous content exists
 		if hasContent {
 			sb.WriteString(" ")
@@ -251,9 +317,10 @@ func pulseOn() bool {
 //   - sys: system information
 //   - showIcon: whether to show the OS icon
 //   - health: state of Claude's services, drawn beside the icon when known
+//   - mcp: MCP servers to sum up after the health glyph, nil for none
 //   - subagents: running subagents tied to no epic on line 2
 //   - nextBg: background color of the next segment
-func (r *Powerline) renderOSSegment(sb *strings.Builder, sys model.SystemInfo, showIcon bool, health model.ServiceHealth, subagents int, nextBg string) {
+func (r *Powerline) renderOSSegment(sb *strings.Builder, sys model.SystemInfo, showIcon bool, health model.ServiceHealth, mcp model.MCPServers, subagents int, nextBg string) {
 	// Write left rounded cap
 	sb.WriteString(FgWhite + LeftRound + Reset)
 	// Check if icon should be shown
@@ -269,6 +336,8 @@ func (r *Powerline) renderOSSegment(sb *strings.Builder, sys model.SystemInfo, s
 	if color := healthColor(health); color != "" && !isHidden(hideHealth) {
 		sb.WriteString(BgWhite + color + glyphs.Health + " " + Reset)
 	}
+	// The MCP servers the session can reach, between health and subagents
+	writeMCPInline(sb, summarizeMCP(mcp))
 	// Subagents working for no epic on show belong to the session as a whole
 	if subagents > 0 {
 		sb.WriteString(BgWhite + FgBlack + Bold + glyphs.Subagents + " " + itoa(subagents) + " " + Reset)
@@ -337,24 +406,28 @@ func (r *Powerline) renderModelSegment(sb *strings.Builder, data *ModelSegmentDa
 	// read as one group and are drawn as one, divided by a thin rule rather
 	// than by a new segment.
 	for idx, quota := range data.Quotas {
-		cursor := noCursor
-		// Place the even-burn cursor only when the window makes it meaningful
-		if quota.HasWindow() {
-			cursor = quota.CursorPosition()
-		}
-		bar := RenderProgressBarWidth(quota.Progress(), cursor, segBarWidth, textColor, bgColor+textColor)
-
 		// The first quota is the model's own session budget and runs straight
 		// on from its name; the rest are divided by a thin rule and named
 		if idx == 0 {
 			sb.WriteString(bgColor + textColor + " " + Reset)
 		} else {
 			sb.WriteString(bgColor + textColor + " " + glyphs.Divider + Reset)
-			sb.WriteString(bgColor + textColor + Bold + " " + QuotaLabel(quota) + " " + Reset)
+			sb.WriteString(bgColor + textColor + Bold + " " + data.Fit.quotaLabel(quota) + " " + Reset)
 		}
-		sb.WriteString(bgColor + textColor + bar + Bold + " " + itoa(quota.Percent) + "%" + Reset)
+		// The bar goes when the line is too narrow; the figure stays
+		if data.Fit.dropBar(quota.Kind) {
+			sb.WriteString(bgColor + textColor + Bold + itoa(quota.Percent) + "%" + Reset)
+		} else {
+			cursor := noCursor
+			// Place the even-burn cursor only when the window makes it meaningful
+			if quota.HasWindow() {
+				cursor = quota.CursorPosition()
+			}
+			bar := RenderProgressBarWidth(quota.Progress(), cursor, segBarWidth, textColor, bgColor+textColor)
+			sb.WriteString(bgColor + textColor + bar + Bold + " " + itoa(quota.Percent) + "%" + Reset)
+		}
 		// Append the countdown to the refill, which the bar cannot say
-		if quota.HasWindow() {
+		if quota.HasWindow() && !data.Fit.dropCountdown(quota.Kind) {
 			sb.WriteString(bgColor + textColor + " " + glyphs.Reset + FormatDuration(quota.Remaining()) + Reset)
 		}
 	}
@@ -373,8 +446,9 @@ func (r *Powerline) renderModelSegment(sb *strings.Builder, data *ModelSegmentDa
 //   - hasGit: whether git segment follows
 //   - showIcon: whether to show the folder icon
 //   - nextBg: background color of next segment if no git
-func (r *Powerline) renderPathSegment(sb *strings.Builder, dir string, hasGit bool, showIcon bool, nextBg string) {
-	truncated := TruncatePath(dir, defaultMaxPath)
+//   - maxPath: path budget, 0 for the default one
+func (r *Powerline) renderPathSegment(sb *strings.Builder, dir string, hasGit bool, showIcon bool, nextBg string, maxPath int) {
+	truncated := TruncatePath(dir, maxPath)
 	// Check if icon should be shown
 	if showIcon {
 		// Write path with folder icon and dark blue text
@@ -406,7 +480,8 @@ func (r *Powerline) renderPathSegment(sb *strings.Builder, dir string, hasGit bo
 //   - git: git status information
 //   - showIcon: whether to show the git branch icon
 //   - nextBg: background color of next segment for separator
-func (r *Powerline) renderGitSegment(sb *strings.Builder, git model.GitStatus, showIcon bool, nextBg string) {
+//   - maxBranch: branch budget in runes, 0 for no limit
+func (r *Powerline) renderGitSegment(sb *strings.Builder, git model.GitStatus, showIcon bool, nextBg string, maxBranch int) {
 	// Skip if not in a git repository
 	if !git.IsInRepo() {
 		// Return early if not in repo
@@ -416,10 +491,10 @@ func (r *Powerline) renderGitSegment(sb *strings.Builder, git model.GitStatus, s
 	// Check if icon should be shown
 	if showIcon {
 		// Write branch with icon and dark cyan text
-		sb.WriteString(BgGit + FgGitInk + Bold + " " + IconGitBranch + " " + git.Branch)
+		sb.WriteString(BgGit + FgGitInk + Bold + " " + IconGitBranch + " " + TruncateBranch(git.Branch, maxBranch))
 	} else {
 		// Write branch without icon with dark cyan text
-		sb.WriteString(BgGit + FgGitInk + Bold + " " + git.Branch)
+		sb.WriteString(BgGit + FgGitInk + Bold + " " + TruncateBranch(git.Branch, maxBranch))
 	}
 
 	// Add modified indicator if present
@@ -498,108 +573,6 @@ func (r *Powerline) renderWeeklySegment(sb *strings.Builder, usage model.Limit) 
 
 	// Write separator to path segment
 	sb.WriteString(BgBlue + FgWeekly + SepRight + Reset)
-}
-
-// mcpLabel names the MCP pill.
-const mcpLabel string = "MCP"
-
-// renderMCPPill renders every MCP server in one two-part pill.
-//
-// Left, the bold white label on dark teal; an arrow hands over to the light
-// teal list: enabled servers, then the disabled ones crossed out in gray,
-// each group sorted case-insensitively and divided by a middle dot. A server
-// being called lights up as a dark teal chip with bold white ink, the
-// label's own colours. No server, no pill.
-//
-// Params:
-//   - sb: string builder to write to
-//   - servers: list of MCP servers
-func (r *Powerline) renderMCPPill(sb *strings.Builder, servers model.MCPServers) {
-	// Nothing configured draws nothing
-	if len(servers) == 0 {
-		return
-	}
-	on, off := splitMCPServers(servers)
-
-	sb.WriteString(" " + FgMCPEnabledText + LeftRound + Reset)
-	sb.WriteString(BgMCPLabel + FgWhite + Bold + " " + mcpLabel + " " + Reset)
-	sb.WriteString(BgMCPEnabled + FgMCPEnabledText + glyphs.MCPArrow)
-	// Enabled servers in the pill's own ink
-	for idx, srv := range on {
-		// The arrow opens the list, a dot divides the rest
-		if idx == 0 {
-			sb.WriteString(" ")
-		} else {
-			sb.WriteString(FgMCPEnabledText + mcpSeparator)
-		}
-		writeMCPName(sb, srv, FgMCPEnabledText)
-	}
-	// Disabled servers follow, muted and crossed out
-	for idx, srv := range off {
-		// The first one continues the list, or opens it when none is on
-		if idx == 0 && len(on) == 0 {
-			sb.WriteString(" ")
-		} else {
-			sb.WriteString(FgMCPMuted + mcpSeparator)
-		}
-		writeMCPName(sb, srv, FgMCPMuted+StrikeMCP)
-	}
-	sb.WriteString(" " + Reset)
-	sb.WriteString(FgMCPEnabled + RightRound + Reset)
-}
-
-// writeMCPName writes one server name inside the pill's list.
-//
-// Params:
-//   - sb: string builder to write to
-//   - srv: server to write
-//   - ink: style of a server at rest
-func writeMCPName(sb *strings.Builder, srv model.MCPServer, ink string) {
-	// A server being called pops out as a chip in the label's colours
-	if srv.Busy {
-		sb.WriteString(BgMCPLabel + FgWhite + Bold + srv.Name + Reset + BgMCPEnabled)
-		return
-	}
-	sb.WriteString(ink + srv.Name + Reset + BgMCPEnabled)
-}
-
-// splitMCPServers sorts the server names into enabled and disabled.
-//
-// Params:
-//   - servers: servers to split
-//
-// Returns:
-//   - model.MCPServers: enabled servers, sorted case-insensitively
-//   - model.MCPServers: disabled servers, sorted case-insensitively
-func splitMCPServers(servers model.MCPServers) (model.MCPServers, model.MCPServers) {
-	var on, off model.MCPServers
-	// File each server by its state
-	for _, s := range servers {
-		// Enabled servers lead the pill; a call does not move a server
-		if s.Enabled {
-			on = append(on, s)
-		} else {
-			off = append(off, s)
-		}
-	}
-	sortFold(on)
-	sortFold(off)
-	return on, off
-}
-
-// sortFold sorts servers by name case-insensitively, ties broken by bytes.
-//
-// Params:
-//   - servers: servers to sort in place
-func sortFold(servers model.MCPServers) {
-	sort.Slice(servers, func(i, j int) bool {
-		a, b := strings.ToLower(servers[i].Name), strings.ToLower(servers[j].Name)
-		// Equal when folded: fall back to the exact bytes for stability
-		if a == b {
-			return servers[i].Name < servers[j].Name
-		}
-		return a < b
-	})
 }
 
 // renderUpdatePill renders the update notification pill.

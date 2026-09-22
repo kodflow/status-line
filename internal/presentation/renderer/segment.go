@@ -23,4 +23,5 @@ type ModelSegmentData struct {
 	Effort   string
 	FastMode bool
 	Quotas   []model.Limit
+	Fit      lineFit
 }

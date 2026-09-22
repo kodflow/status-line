@@ -3,19 +3,59 @@ package model
 
 import "strings"
 
+// MCPSource names the configuration scope that declared an MCP server.
+type MCPSource string
+
+// Configuration scopes, strongest first. The pill only shows totals; the
+// scope is kept for whoever needs to tell where a server comes from.
+const (
+	// MCPSourceUnknown is a server nobody declared: a call to it was seen
+	// in the transcript but no configuration names it.
+	MCPSourceUnknown MCPSource = ""
+	// MCPSourceManaged is the enterprise managed-mcp.json.
+	MCPSourceManaged MCPSource = "managed"
+	// MCPSourceCLI is the host's --mcp-config command line.
+	MCPSourceCLI MCPSource = "cli"
+	// MCPSourceLocal is projects[<dir>].mcpServers in the global config.
+	MCPSourceLocal MCPSource = "local"
+	// MCPSourceProject is the project's .mcp.json.
+	MCPSourceProject MCPSource = "project"
+	// MCPSourceUser is mcpServers in the global config.
+	MCPSourceUser MCPSource = "user"
+	// MCPSourcePlugin is an enabled plugin's .mcp.json.
+	MCPSourcePlugin MCPSource = "plugin"
+)
+
 // MCPServer represents an MCP server configuration.
 // It holds the server name, its enabled status, for a server a plugin
-// provides the plugin's name, and whether a call to it is under way.
+// provides the plugin's name, the scope that declared it, and whether a
+// call to it is under way.
 type MCPServer struct {
 	Name    string
 	Enabled bool
 	Plugin  string
+	Source  MCPSource
 	Busy    bool
 }
 
 // MCPServers is a list of MCP server configurations.
 // It represents all configured MCP servers.
 type MCPServers []MCPServer
+
+// WithSource tags every server with the scope that declared it.
+//
+// Params:
+//   - src: scope to record
+//
+// Returns:
+//   - MCPServers: the same slice, tagged in place
+func (s MCPServers) WithSource(src MCPSource) MCPServers {
+	// Tag in place: each source slice is built fresh for one call
+	for i := range s {
+		s[i].Source = src
+	}
+	return s
+}
 
 // pluginToolPrefix opens the tool-name key of a plugin-provided server:
 // plugin_<plugin>_<server>.

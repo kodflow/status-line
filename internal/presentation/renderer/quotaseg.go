@@ -116,25 +116,48 @@ func segmentColors(limit model.Limit) (bg, cap, ink string) {
 //   - sb: string builder to write to
 //   - seg: quota segment to render
 //   - nextBg: background of the segment that follows
-func renderQuotaSegment(sb *strings.Builder, seg quotaSegment, nextBg string) {
+//   - fit: what the line gives up to fit the terminal
+func renderQuotaSegment(sb *strings.Builder, seg quotaSegment, nextBg string, fit lineFit) {
 	limit := seg.limit
-	cursor := noCursor
-	// Place the even-burn cursor only when the window makes it meaningful
-	if limit.HasWindow() {
-		cursor = limit.CursorPosition()
-	}
-	bar := RenderProgressBarWidth(limit.Progress(), cursor, segBarWidth, seg.ink, seg.bg+seg.ink+Bold)
+	// Without its bar, a quota is its icon and its figure
+	if fit.dropBar(limit.Kind) {
+		sb.WriteString(seg.bg + seg.ink + Bold + " " + compactLabel(limit) + " " + strconv.Itoa(limit.Percent) + "%" + Reset)
+	} else {
+		cursor := noCursor
+		// Place the even-burn cursor only when the window makes it meaningful
+		if limit.HasWindow() {
+			cursor = limit.CursorPosition()
+		}
+		bar := RenderProgressBarWidth(limit.Progress(), cursor, segBarWidth, seg.ink, seg.bg+seg.ink+Bold)
 
-	// Write the label, the bar and the consumed percentage
-	sb.WriteString(seg.bg + seg.ink + Bold + " " + QuotaLabel(limit) + " " + Reset)
-	sb.WriteString(seg.bg + seg.ink + Bold + bar + Reset)
-	sb.WriteString(seg.bg + seg.ink + Bold + " " + strconv.Itoa(limit.Percent) + "%" + Reset)
+		// Write the label, the bar and the consumed percentage
+		sb.WriteString(seg.bg + seg.ink + Bold + " " + QuotaLabel(limit) + " " + Reset)
+		sb.WriteString(seg.bg + seg.ink + Bold + bar + Reset)
+		sb.WriteString(seg.bg + seg.ink + Bold + " " + strconv.Itoa(limit.Percent) + "%" + Reset)
+	}
 	// Append the countdown to the refill, which is what the bar cannot say
-	if limit.HasWindow() {
+	if limit.HasWindow() && !fit.dropCountdown(limit.Kind) {
 		sb.WriteString(seg.bg + seg.ink + " " + glyphs.Reset + FormatDuration(limit.Remaining()) + Reset)
 	}
 	sb.WriteString(seg.bg + " " + Reset)
 
 	// Write the separator into whatever follows
 	sb.WriteString(nextBg + seg.cap + SepRight + Reset)
+}
+
+// compactLabel names a chained quota that lost its bar: the context window
+// keeps only its icon, which the figure beside it explains; without a glyph
+// set the name stays, or the figure would stand unexplained.
+//
+// Params:
+//   - limit: quota to label
+//
+// Returns:
+//   - string: icon alone, or the full label
+func compactLabel(limit model.Limit) string {
+	// Only the context window has an icon that says enough on its own
+	if limit.Kind == model.KindContext && glyphs.Ctx != "" {
+		return glyphs.Ctx
+	}
+	return QuotaLabel(limit)
 }

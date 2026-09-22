@@ -1,4 +1,4 @@
-<!-- updated: 2026-09-22T15:00:00Z -->
+<!-- updated: 2026-09-22T18:00:00Z -->
 # Status Line
 
 CLI Go pour afficher une status line Powerline personnalisée dans Claude Code.
@@ -18,7 +18,7 @@ internal/
 │   ├── mcpcalls/            # Serveurs MCP appelés en ce moment (transcripts)
 │   ├── sessionstate/        # Session occupée + pid hôte (<config>/sessions/<pid>.json)
 │   ├── system/              # Info système (OS, Docker)
-│   ├── terminal/            # Info terminal (largeur, couleurs)
+│   ├── terminal/            # Largeur du terminal (COLUMNS)
 │   ├── transcript/          # Lecture de la fin d'un transcript JSONL
 │   ├── updater/             # Auto-update binaire (GitHub releases)
 │   └── usage/               # Usage API Anthropic (OAuth, burn-rate)
@@ -33,7 +33,14 @@ make build          # Compile le binaire → bin/status-line
 make test           # Lance les tests (go test ./...)
 make lint           # Vérifie le code (ktn-linter)
 make demo           # Démo avec données exemple
+go run ./demo/widths [-light] [cols…]  # session chargée à 200…60 colonnes
 ```
+
+Tout go test / go build / go vet passe par `~/.local/bin/lourd <cmd>` (slice
+systemd plafonnée, partagée entre agents).
+
+`demo/` = outil de dev (`demo/sample` = état réaliste) ; il utilise le vrai
+renderer.
 
 ## Affichage
 
@@ -45,6 +52,9 @@ binaire : une somme absente, malformée ou différente annule la mise à jour.
 `STATUSLINE_GLYPHS` = `nerd` (défaut) | `text` (repli ASCII, sans Nerd Font)
 `STATUSLINE_COLORS` = `truecolor` | `256` force la profondeur de couleur ;
 absent, elle suit `COLORTERM` (`truecolor`/`24bit` → 24 bits, sinon 256)
+`STATUSLINE_MCP_LINE` = `2` sort les serveurs MCP du segment OS vers une
+pastille en ligne 2 (défaut : dans le segment OS de la ligne 1)
+`STATUSLINE_WEIGHTS` = poids de condensation de la ligne 1 (voir plus bas)
 `STATUSLINE_HIDE` = pastilles à masquer, séparées par des virgules :
 `context`, `session`, `weekly`, `model`, `credits`, `health`
 
@@ -55,7 +65,7 @@ symbole Unicode générique retombe sur une autre police et devient illisible.
 
 | Segment | Description |
 |---------|-------------|
-| OS | Icône système + étincelles 󰙴 = état de Claude (vert/orange/rouge), puis `󰚩 N` sous-agents hors épic affiché |
+| OS | Icône système + étincelles 󰙴 = état de Claude (vert/orange/rouge), puis `󰒍 N` serveurs MCP, puis `󰚩 N` sous-agents hors épic affiché |
 | Model | Pill colorée (Haiku/Sonnet/Opus/Fable) + jauge d'effort + fast mode |
 | Path | Répertoire où la session travaille réellement (voir ci-dessous) |
 | Git | Branche + modifiés/non-trackés + nombre de worktrees liés (hors prunable) |
@@ -76,8 +86,53 @@ famille de modèles ne s'affiche que si ce modèle est en cours d'utilisation.
 | *modèle* | Quota 7j scopé par famille de modèle (`limits[]`) |
 | coût / credits | Coût cumulé de la session, solde de crédits |
 
-**Ligne 2 :** une pastille par épic ouvert mène la ligne, puis **une**
-pastille MCP, puis la mise à jour. Aucune troncature : un titre long passe à la
+**Largeur (ligne 1 seulement)** : `adapter/terminal` lit `COLUMNS` (posé
+par l'hôte pour la commande de status line) ; absent, non entier, ≤ 0 ou
+> 10000 → 120. Pas de `/dev/tty` ni d'exec. Budget = `COLUMNS − 4`
+(`lineMargin` : l'hôte rembourre la ligne, et une ligne pile au bord passe à
+la ligne au moindre désaccord sur un glyphe). Largeur visible
+(`VisibleWidth`, `width.go`) : échappements CSI/OSC ignorés, glyphes Nerd
+Font (PUA) = 1 cellule, blocs larges CJK/emoji = 2 (petite table), marques
+combinantes = 0.
+
+**Politique de condensation** (`condensePolicy`, `fit.go`, une ligne par
+segment : paliers du plus riche au plus maigre, chacun lisible seul, et un
+poids — plus il est bas, plus tôt le segment cède) :
+
+| Segment | Poids | Paliers |
+|---------|-------|---------|
+| context | 10 | barre + libellé + % → icône + % |
+| scoped | 20 | barre + libellé + % + rebours → libellé + % + rebours → libellé + % → initiale + % |
+| weekly | 30 | idem scoped |
+| session | 40 | barre + % + rebours → % + rebours → % |
+| path | 50 | 30 → 20 → dernier élément → caché (dans un dépôt seulement) |
+| branch | 60 | entière → 20 → 12 → 8 runes (`…`, compteurs `!3 ?1` toujours gardés) |
+| changes | 240 | affichés → cachés |
+| model | 255 | icône + nom → nom (la jauge d'effort reste) |
+| OS | — | ne rétrécit jamais (icône, santé, MCP, sous-agents) |
+
+Passes : l'étape n d'un segment de poids w a le rang (n−1)·100 + w ; la passe
+n baisse d'un palier chaque segment qui en a encore un, poids croissant ; un
+poids > 100 retient un segment pour une passe ultérieure (changes, model).
+Ordre par défaut = celui de l'utilisateur : barres (context, scoped, weekly,
+session), chemin et branche à 20, rebours (scoped, weekly, session), chemin
+au dernier élément et branche à 12, initiales, changements, chemin caché,
+icône du modèle, branche à 8. `STATUSLINE_WEIGHTS=context=10,weekly=30,…`
+remplace des poids (noms ci-dessus, entiers 0-999 ; entrée inconnue ou
+malformée ignorée). Les états successifs (`fitLevels`, 18 : la ligne pleine + 17 étapes) sont cumulatifs et
+de largeur décroissante, donc le premier qui tient est trouvé par
+bissection — même résultat qu'une marche pas à pas qui remesure après chaque
+étape : 1 rendu si la ligne tient, 6 au plus sinon. Aucun état ne tient →
+le dernier. Largeur 0 (tests) = pas de contrainte. `renderer.Condensed`
+dit quels segments ont cédé (utilisé par `demo/widths`).
+
+L'indicateur MCP du segment OS (≈ 4-7 cellules) est dessiné à chaque
+état : jamais abandonné, jamais déplacé, compté dans le budget. Les deux
+derniers paliers (icône du modèle, branche à 8) existent pour lui : la
+session chargée de `demo/widths` tient alors en 76 cellules à 80 colonnes.
+
+**Ligne 2 :** une pastille par épic ouvert mène la ligne, puis la pastille
+MCP si `STATUSLINE_MCP_LINE=2`, puis la mise à jour. Aucune troncature : un titre long passe à la
 ligne plutôt que d'être coupé.
 
 ## Serveurs MCP
@@ -107,11 +162,20 @@ Désactivé = `"disabled": true`, ou listé dans `projects[<dir>].disabledMcpSer
 (nom nu ou `plugin:<plugin>:<serveur>`) ; `disabledMcpjsonServers` vise
 `.mcp.json`. Tout fichier illisible ou malformé est ignoré ; pas d'exec.
 
-**Pastille (variante 9)** : à gauche le libellé `MCP` gras, blanc 255 sur
-sarcelle foncée 23 (capuchon gauche en 23) ; une flèche `\ue0b0` (texte : `>`)
-passe à la liste sur sarcelle claire 116, encre 23 : serveurs actifs séparés par
-` · `, triés sans casse ; les désactivés suivent, barrés, encre 239 (240 ne tient
-que 4.31:1 sur 116). Capuchon droit en 116. Aucun serveur, aucune pastille.
+**Indicateur (défaut)** : dans le segment OS de la ligne 1, sur son fond
+blanc 255, après l'étincelle de santé et avant `󰚩 N` : glyphe MCP
+`\U000F048D` (󰒍, présent dans MesloLGS NF — `fc-list ":charset=f048d"`)
+en sarcelle 23 gras (6.46:1), puis le **total** des serveurs actifs en encre
+OS 232 gras : `󰒍 7` (glyphes texte : `MCP 7`). Aucun détail par portée, pas
+de capuchons. Des serveurs désactivés ajoutent `·N`, gris 241 (5.26:1 ; 242
+ne tient que 4.53, 244 tombe à 3.4), N barré. Aucun serveur, rien.
+
+**Pastille (ligne 2, `STATUSLINE_MCP_LINE=2`)** : même contenu, pastille à
+capuchons arrondis 116, encre 23 gras sur 116 ; `·N` en 239 (240 ne tient
+que 4.31:1 sur 116).
+
+L'adaptateur garde la portée (`MCPServer.Source`, `WithSource`, posée sur
+chaque source avant la fusion) : donnée utile, non affichée.
 
 **Appels en cours** (`adapter/mcpcalls`, sans hook) : 128 Ko de fin de
 `transcript_path` et des transcripts des sous-agents en cours
@@ -121,9 +185,12 @@ il reste allumé 2 s après le `timestamp` du résultat (la ligne se redessine
 chaque seconde, un appel court ne se verrait jamais). Un appel sans résultat
 depuis 30 min est tenu pour perdu. Clé → serveur (`model.WithBusy`) :
 nom normalisé (`[^A-Za-z0-9_-]` → `_`), `plugin_<plugin>_<serveur>` → serveur ;
-une clé inconnue est ajoutée, allumée. Un serveur allumé = pastille dans la
-pastille aux couleurs du libellé (255 gras sur 23, 7.5:1) ; il ne change pas
-de place. Lecture de queue partagée avec `activity` : `adapter/transcript`.
+une clé inconnue est ajoutée, allumée, sans portée, comptée active. Un appel
+en vol (ou dans les 2 s) allume l'indicateur : glyphe et nombre deviennent
+une puce 255 gras sur 23 (7.5:1), sur exactement les mêmes cellules (la
+ligne ne bouge pas) ; `·N` reste, gris sur blanc. En pastille de ligne 2,
+toute la pastille s'allume (capuchons 23) et `·N` passe en 116 sur 23
+(4.54:1). Lecture de queue partagée avec `activity` : `adapter/transcript`.
 
 ## Effort
 

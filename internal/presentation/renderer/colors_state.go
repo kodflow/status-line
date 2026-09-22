@@ -116,6 +116,3 @@ var (
 	// FgEpicTrack is a cell pending or waiting on the user.
 	FgEpicTrack string = pickInk(epicTrackTrue, epicTrack256)
 )
-
-// mcpSeparator divides two server names inside the MCP pill.
-const mcpSeparator string = " \u00b7 "

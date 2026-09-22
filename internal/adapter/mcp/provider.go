@@ -99,16 +99,19 @@ func (p *Provider) Servers() model.MCPServers {
 	local := global.Projects[p.projectDir]
 	cli := p.readCommandLine()
 
-	sources := []model.MCPServers{p.readManagedConfig(), cli.servers}
+	sources := []model.MCPServers{
+		p.readManagedConfig().WithSource(model.MCPSourceManaged),
+		cli.servers.WithSource(model.MCPSourceCLI),
+	}
 	// Strict mode ignores every configured scope but the managed one
 	if !cli.strict {
 		project := p.readProjectConfig()
 		markDisabled(project, local.DisabledMcpjsonServers)
 		sources = append(sources,
-			convertServers(local.MCPServers, ""),
-			project,
-			convertServers(global.MCPServers, ""),
-			p.readPluginServers(),
+			convertServers(local.MCPServers, "").WithSource(model.MCPSourceLocal),
+			project.WithSource(model.MCPSourceProject),
+			convertServers(global.MCPServers, "").WithSource(model.MCPSourceUser),
+			p.readPluginServers().WithSource(model.MCPSourcePlugin),
 		)
 	}
 

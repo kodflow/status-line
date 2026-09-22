@@ -71,7 +71,18 @@ Configure in your Claude Code settings to use as the status line provider.
 
 Line one carries everything about the session: the model with its own rate
 limits beside it, the context window, then where you are. Line two carries the
-open epics, then one MCP pill listing every server the session can reach.
+open epics, then the update notice. The MCP servers show in the OS segment that opens
+line one (`󰒍 7`: the number of enabled servers); `STATUSLINE_MCP_LINE=2`
+moves them to a pill on line two.
+
+Line one fits the terminal: the host gives the status line its width in
+`COLUMNS` (120 when absent). Each segment has levels, from richest to leanest,
+and a weight; a line too wide lowers segments one level at a time, lightest
+first, every segment once before any twice. By default: the context, scoped,
+weekly and session bars, the path and branch to 20, the countdowns, the path
+to its last element and the branch to 12, quota names to their initial, the
+changes, the path, the model icon, the branch to 8. The OS segment never
+shrinks. Line two is never shortened.
 
 Each bar marks where an even burn would sit right now (`●`). The fill behind
 that mark means room to spare; ahead of it means the quota runs out before it
@@ -79,9 +90,9 @@ refills.
 
 A quota scoped to one model family shows only while that model is in use.
 dashboard:
-  [OS] [Opus 5 ●] [/path] [git branch !2 ?1] [+50] [-10]
+  [OS 󰙴 󰒍 7 ·1] [Opus 5 ●] [/path] [git branch !2 ?1] [+50] [-10]
   [ctx ██░░ 10% 103k/1M] [session ██░│░ 15% ▸33% ⟳2h46] [⛁ 95% ⟳47m] [$1.83]
-  [MCP  codacy · github · tasks] [ v0.4.0]
+  [ v0.4.0]
 ```
 
 ### Segments
@@ -94,7 +105,7 @@ dashboard:
 | Path | Current working directory |
 | Git | Branch name, modified (!), untracked (?) |
 | Changes | Lines added (+) and removed (-) |
-| MCP | One pill: `MCP` label, then enabled servers sorted, disabled ones crossed out after them; a server being called (read from the transcripts) lights up for the call and 2 s after. Sources: managed, `--mcp-config` of the running session (Linux), local, project, user, enabled plugins |
+| MCP | Inside the OS segment, after the health sparkle: MCP glyph and the number of enabled servers (`MCP 7` without a Nerd Font); disabled servers add a muted, crossed `·N`; glyph and count light up as a dark teal chip while a call is in flight (read from the transcripts) and 2 s after. Sources: managed, `--mcp-config` of the running session (Linux), local, project, user, enabled plugins. `STATUSLINE_MCP_LINE=2` shows it as a pill on line two instead |
 | Update | Shows version when update is downloading |
 
 ## Environment Variables
@@ -108,6 +119,8 @@ dashboard:
 | `STATUSLINE_LINE_GAP` | Blank lines between the two rows (0-3) | `0` |
 | `STATUSLINE_GLYPHS` | `nerd` or `text` (no Nerd Font required) | `nerd` |
 | `STATUSLINE_HIDE` | Comma-separated segments to leave out: `context`, `session`, `weekly`, `model` | — |
+| `STATUSLINE_WEIGHTS` | Line-one condensing weights, e.g. `context=10,weekly=30` (lower shrinks first; segments: context, scoped, weekly, session, path, branch, changes, model) | built-in policy |
+| `STATUSLINE_MCP_LINE` | `2` shows the MCP servers as a pill on line two instead of inside the OS segment | OS segment |
 
 ## Auto-Update
 

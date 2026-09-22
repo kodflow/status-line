@@ -78,8 +78,12 @@ func TestEverySegmentInkIsReadableOnItsOwnGround(t *testing.T) {
 		{name: "lines added", bg: BgGreen, fg: FgGreenText},
 		{name: "lines removed", bg: BgRed, fg: FgRedText},
 		{name: "mcp pill", bg: BgMCPEnabled, fg: FgMCPEnabledText},
-		{name: "mcp pill, disabled server", bg: BgMCPEnabled, fg: FgMCPMuted},
-		{name: "mcp label and server being called", bg: BgMCPLabel, fg: FgWhite},
+		{name: "mcp pill, disabled count", bg: BgMCPEnabled, fg: FgMCPMuted},
+		{name: "mcp pill during a call", bg: BgMCPLabel, fg: FgWhite},
+		{name: "mcp pill during a call, disabled count", bg: BgMCPLabel, fg: FgMCPEnabled},
+		{name: "mcp glyph in the os segment", bg: BgWhite, fg: FgMCPOnWhite},
+		{name: "mcp count in the os segment", bg: BgWhite, fg: FgBlack},
+		{name: "mcp disabled count in the os segment", bg: BgWhite, fg: FgMCPMutedOnWhite},
 		{name: "epic pill", bg: BgEpic, fg: FgEpicInk},
 	}
 	for _, tt := range tests {
@@ -101,6 +105,7 @@ func TestAdjacentSegmentsDifferInGround(t *testing.T) {
 	}{
 		{name: "os and context are separated by the model", left: BgContext, right: BgBlue},
 		{name: "context and path", left: BgContext, right: BgBlue},
+		{name: "context and git, the path given up", left: BgContext, right: BgGit},
 		{name: "path and git", left: BgBlue, right: BgGit},
 		{name: "git and lines added", left: BgGit, right: BgGreen},
 		{name: "lines added and removed", left: BgGreen, right: BgRed},
