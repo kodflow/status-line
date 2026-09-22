@@ -136,7 +136,7 @@ func renderQuotaSegment(sb *strings.Builder, seg quotaSegment, nextBg string, fi
 		sb.WriteString(seg.bg + seg.ink + Bold + " " + strconv.Itoa(limit.Percent) + "%" + Reset)
 	}
 	// Append the countdown to the refill, which is what the bar cannot say
-	if limit.HasWindow() && !fit.dropCountdowns {
+	if limit.HasWindow() && !fit.dropCountdown(limit.Kind) {
 		sb.WriteString(seg.bg + seg.ink + " " + glyphs.Reset + FormatDuration(limit.Remaining()) + Reset)
 	}
 	sb.WriteString(seg.bg + " " + Reset)

@@ -56,6 +56,10 @@ func main() {
 		fmt.Printf("── COLUMNS=%d  visible=%d  render=%s\n", w, renderer.VisibleWidth(line1), took)
 		fmt.Println(line1)
 		fmt.Println(ansi.ReplaceAllString(line1, ""))
+		// Say which segments gave way, and how far
+		if shrunk := renderer.Condensed(data); len(shrunk) > 0 {
+			fmt.Println("   condensed: " + strings.Join(shrunk, " | "))
+		}
 		// Line two only carries something when the MCP pill is asked there
 		if line2 != "" {
 			fmt.Println("   line 2: " + ansi.ReplaceAllString(line2, ""))

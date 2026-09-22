@@ -108,7 +108,7 @@ func (r *Powerline) renderLine1Fit(sb *strings.Builder, data model.StatusLineDat
 	// Whatever ends the quota chain hands over to the path, or straight to
 	// the branch when the path gave way
 	afterQuotas := BgBlue
-	if fit.dropPath && data.Git.IsInRepo() {
+	if fit.dropPath() && data.Git.IsInRepo() {
 		afterQuotas = BgGit
 	}
 
@@ -130,7 +130,7 @@ func (r *Powerline) renderLine1Fit(sb *strings.Builder, data model.StatusLineDat
 		Fit:      fit,
 	}
 	// The smallest levels leave the model its name alone
-	modelData.ShowIcon = modelData.ShowIcon && !fit.dropModelIcon
+	modelData.ShowIcon = modelData.ShowIcon && !fit.dropModelIcon()
 	r.renderModelSegment(sb, modelData)
 
 	// Chain every quota, each handing over to the next and the last to the path
@@ -157,19 +157,19 @@ func (r *Powerline) renderLine1Fit(sb *strings.Builder, data model.StatusLineDat
 
 	// A line too narrow for the changes leaves them to the git counters
 	changes := data.Changes
-	if fit.dropChanges {
+	if fit.dropChanges() {
 		changes = model.CodeChanges{}
 		changesNextBg = ""
 	}
 
 	// Render path segment (pass changesNextBg for case when no git); only
 	// the tightest level gives it up, and only when the branch stays
-	if !fit.dropPath || !data.Git.IsInRepo() {
-		r.renderPathSegment(sb, data.Dir, data.Git.IsInRepo(), data.Icons.Path, changesNextBg, fit.pathMax)
+	if !fit.dropPath() || !data.Git.IsInRepo() {
+		r.renderPathSegment(sb, data.Dir, data.Git.IsInRepo(), data.Icons.Path, changesNextBg, fit.pathMax())
 	}
 
 	// Render git segment if in repo
-	r.renderGitSegment(sb, data.Git, data.Icons.Git, changesNextBg, fit.branchMax)
+	r.renderGitSegment(sb, data.Git, data.Icons.Git, changesNextBg, fit.branchMax())
 	// Render code changes if any
 	r.renderChangesSegment(sb, changes)
 }
@@ -416,7 +416,7 @@ func (r *Powerline) renderModelSegment(sb *strings.Builder, data *ModelSegmentDa
 			sb.WriteString(bgColor + textColor + bar + Bold + " " + itoa(quota.Percent) + "%" + Reset)
 		}
 		// Append the countdown to the refill, which the bar cannot say
-		if quota.HasWindow() && !data.Fit.dropCountdowns {
+		if quota.HasWindow() && !data.Fit.dropCountdown(quota.Kind) {
 			sb.WriteString(bgColor + textColor + " " + glyphs.Reset + FormatDuration(quota.Remaining()) + Reset)
 		}
 	}

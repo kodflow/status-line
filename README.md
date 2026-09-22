@@ -76,11 +76,13 @@ line one (`󰒍 7`: the number of enabled servers); `STATUSLINE_MCP_LINE=2`
 moves them to a pill on line two.
 
 Line one fits the terminal: the host gives the status line its width in
-`COLUMNS` (120 when absent). A line too wide gives up, one step at a time, the
-context bar, the model-scoped bar, the weekly bar, the session bar, then
-shortens the path and the branch and drops the countdowns; at 80 columns it
-finally shortens quota names to their initial and drops the changes and the
-path. Line two is never shortened.
+`COLUMNS` (120 when absent). Each segment has levels, from richest to leanest,
+and a weight; a line too wide lowers segments one level at a time, lightest
+first, every segment once before any twice. By default: the context, scoped,
+weekly and session bars, the path and branch to 20, the countdowns, the path
+to its last element and the branch to 12, quota names to their initial, the
+changes, the path, the model icon, the branch to 8. The OS segment never
+shrinks. Line two is never shortened.
 
 Each bar marks where an even burn would sit right now (`●`). The fill behind
 that mark means room to spare; ahead of it means the quota runs out before it
@@ -117,6 +119,7 @@ dashboard:
 | `STATUSLINE_LINE_GAP` | Blank lines between the two rows (0-3) | `0` |
 | `STATUSLINE_GLYPHS` | `nerd` or `text` (no Nerd Font required) | `nerd` |
 | `STATUSLINE_HIDE` | Comma-separated segments to leave out: `context`, `session`, `weekly`, `model` | — |
+| `STATUSLINE_WEIGHTS` | Line-one condensing weights, e.g. `context=10,weekly=30` (lower shrinks first; segments: context, scoped, weekly, session, path, branch, changes, model) | built-in policy |
 | `STATUSLINE_MCP_LINE` | `2` shows the MCP servers as a pill on line two instead of inside the OS segment | OS segment |
 
 ## Auto-Update

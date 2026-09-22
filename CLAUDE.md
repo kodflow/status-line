@@ -54,6 +54,7 @@ binaire : une somme absente, malformée ou différente annule la mise à jour.
 absent, elle suit `COLORTERM` (`truecolor`/`24bit` → 24 bits, sinon 256)
 `STATUSLINE_MCP_LINE` = `2` sort les serveurs MCP du segment OS vers une
 pastille en ligne 2 (défaut : dans le segment OS de la ligne 1)
+`STATUSLINE_WEIGHTS` = poids de condensation de la ligne 1 (voir plus bas)
 `STATUSLINE_HIDE` = pastilles à masquer, séparées par des virgules :
 `context`, `session`, `weekly`, `model`, `credits`, `health`
 
@@ -92,24 +93,43 @@ par l'hôte pour la commande de status line) ; absent, non entier, ≤ 0 ou
 la ligne au moindre désaccord sur un glyphe). Largeur visible
 (`VisibleWidth`, `width.go`) : échappements CSI/OSC ignorés, glyphes Nerd
 Font (PUA) = 1 cellule, blocs larges CJK/emoji = 2 (petite table), marques
-combinantes = 0. `fit.go` : niveaux cumulatifs, dans l'ordre voulu par
-l'utilisateur — 1 barre du contexte (reste icône + %), 2 barre du quota
-scopé (libellé + % + compte à rebours), 3 barre hebdo, 4 barre session
-(% seul), 5 chemin à 20, 6 branche à 20 runes (début gardé + `…`),
-7 comptes à rebours — puis, pour tenir en 80 colonnes : 8 chemin à son
-dernier élément et branche à 12, 9 noms de quota à l'initiale (`W`, `O`),
-10 sans les changements (+/−), 11 sans le chemin (la branche reste ; hors
-dépôt, jamais), 12 sans l'icône du modèle, 13 branche à 8 runes. Le premier niveau qui tient gagne, trouvé par bissection
-(largeurs décroissantes le long des niveaux, testé) : 1 rendu si la ligne
-tient, 5 au plus sinon (~20 µs vs ~80 µs sur i5-3210M). Aucun niveau ne
-tient → le dernier. Largeur 0 (tests) = pas de contrainte. Une ligne
-complète fait ~240 cellules, ~120 après l'étape 7, ~75 après la 11.
+combinantes = 0.
+
+**Politique de condensation** (`condensePolicy`, `fit.go`, une ligne par
+segment : paliers du plus riche au plus maigre, chacun lisible seul, et un
+poids — plus il est bas, plus tôt le segment cède) :
+
+| Segment | Poids | Paliers |
+|---------|-------|---------|
+| context | 10 | barre + libellé + % → icône + % |
+| scoped | 20 | barre + libellé + % + rebours → libellé + % + rebours → libellé + % → initiale + % |
+| weekly | 30 | idem scoped |
+| session | 40 | barre + % + rebours → % + rebours → % |
+| path | 50 | 30 → 20 → dernier élément → caché (dans un dépôt seulement) |
+| branch | 60 | entière → 20 → 12 → 8 runes (`…`, compteurs `!3 ?1` toujours gardés) |
+| changes | 240 | affichés → cachés |
+| model | 255 | icône + nom → nom (la jauge d'effort reste) |
+| OS | — | ne rétrécit jamais (icône, santé, MCP, sous-agents) |
+
+Passes : l'étape n d'un segment de poids w a le rang (n−1)·100 + w ; la passe
+n baisse d'un palier chaque segment qui en a encore un, poids croissant ; un
+poids > 100 retient un segment pour une passe ultérieure (changes, model).
+Ordre par défaut = celui de l'utilisateur : barres (context, scoped, weekly,
+session), chemin et branche à 20, rebours (scoped, weekly, session), chemin
+au dernier élément et branche à 12, initiales, changements, chemin caché,
+icône du modèle, branche à 8. `STATUSLINE_WEIGHTS=context=10,weekly=30,…`
+remplace des poids (noms ci-dessus, entiers 0-999 ; entrée inconnue ou
+malformée ignorée). Les états successifs (`fitLevels`, 18 : la ligne pleine + 17 étapes) sont cumulatifs et
+de largeur décroissante, donc le premier qui tient est trouvé par
+bissection — même résultat qu'une marche pas à pas qui remesure après chaque
+étape : 1 rendu si la ligne tient, 6 au plus sinon. Aucun état ne tient →
+le dernier. Largeur 0 (tests) = pas de contrainte. `renderer.Condensed`
+dit quels segments ont cédé (utilisé par `demo/widths`).
 
 L'indicateur MCP du segment OS (≈ 4-7 cellules) est dessiné à chaque
-niveau : jamais abandonné, jamais déplacé, compté dans le budget. Les deux
-derniers niveaux existent pour lui : 12 sans l'icône du modèle (le nom
-reste), 13 branche à 8 runes — la session chargée de `demo/widths` tient
-alors en 76 cellules à 80 colonnes.
+état : jamais abandonné, jamais déplacé, compté dans le budget. Les deux
+derniers paliers (icône du modèle, branche à 8) existent pour lui : la
+session chargée de `demo/widths` tient alors en 76 cellules à 80 colonnes.
 
 **Ligne 2 :** une pastille par épic ouvert mène la ligne, puis la pastille
 MCP si `STATUSLINE_MCP_LINE=2`, puis la mise à jour. Aucune troncature : un titre long passe à la

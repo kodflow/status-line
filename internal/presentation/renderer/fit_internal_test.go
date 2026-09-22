@@ -41,36 +41,207 @@ func line1At(data model.StatusLineData, fit lineFit) string {
 	return stripSGR(sb.String())
 }
 
-func TestFitLevelsOrder(t *testing.T) {
-	// Each level gives up exactly one more thing, in the user's order
-	want := []lineFit{
-		{},
-		{dropCtxBar: true},
-		{dropCtxBar: true, dropScopedBar: true},
-		{dropCtxBar: true, dropScopedBar: true, dropWeeklyBar: true},
-		{dropCtxBar: true, dropScopedBar: true, dropWeeklyBar: true, dropSessionBar: true},
+// describeSteps names each step in the order it is taken.
+func describeSteps(steps []fitStep) []string {
+	out := make([]string, 0, len(steps))
+	for _, st := range steps {
+		out = append(out, st.Describe())
 	}
-	all := want[4]
-	all.pathMax = fitPathMax
-	want = append(want, all)
-	all.branchMax = fitBranchMax
-	want = append(want, all)
-	all.dropCountdowns = true
-	want = append(want, all)
-	all.pathMax, all.branchMax = tightPathMax, tightBranchMax
-	want = append(want, all)
-	all.shortNames = true
-	want = append(want, all)
-	all.dropChanges = true
-	want = append(want, all)
-	all.dropPath = true
-	want = append(want, all)
-	all.dropModelIcon = true
-	want = append(want, all)
-	all.branchMax = tightestBranchMax
-	want = append(want, all)
-	if !reflect.DeepEqual(fitLevels, want) {
-		t.Fatalf("fitLevels =\n%+v\nwant\n%+v", fitLevels, want)
+	return out
+}
+
+func TestFitStepsFollowTheUsersOrder(t *testing.T) {
+	want := []string{
+		"context: icon + %",
+		"scoped: label + % + countdown",
+		"weekly: label + % + countdown",
+		"session: % + countdown",
+		"path: 20 cells",
+		"branch: 20 runes",
+		"scoped: label + %",
+		"weekly: label + %",
+		"session: %",
+		"path: last element",
+		"branch: 12 runes",
+		"scoped: initial + %",
+		"weekly: initial + %",
+		"changes: hidden",
+		"path: hidden (inside a repository)",
+		"model: name",
+		"branch: 8 runes",
+	}
+	if got := describeSteps(fitSteps); !reflect.DeepEqual(got, want) {
+		t.Errorf("steps =\n%q\nwant\n%q", got, want)
+	}
+	if len(fitLevels) != len(fitSteps)+1 || fitLevels[0] != (lineFit{}) {
+		t.Errorf("fitLevels starts at the full line and adds one state per step")
+	}
+}
+
+func TestFitPassesLowerEverySegmentOnceBeforeTwice(t *testing.T) {
+	// With every weight inside the first pass, all first steps come before
+	// any second step, and within a pass the lighter segment goes first
+	var weights [segCount]int
+	for id := range weights {
+		weights[id] = 90 - 10*id
+	}
+	steps, levels := buildFitLevels(weights)
+	for i := 1; i < len(steps); i++ {
+		prev, cur := steps[i-1], steps[i]
+		if cur.level < prev.level {
+			t.Errorf("step %d (%s) is a lower pass than step %d (%s)", i, cur.Describe(), i-1, prev.Describe())
+		}
+		if cur.level == prev.level && weights[cur.seg] < weights[prev.seg] {
+			t.Errorf("step %d (%s) should come before %s: lower weight", i, cur.Describe(), prev.Describe())
+		}
+	}
+	if steps[0].seg != segModel {
+		t.Errorf("the lightest segment shrinks first, got %s", steps[0].Describe())
+	}
+	// Each state differs from the previous one by exactly one level
+	for i := 1; i < len(levels); i++ {
+		diff := 0
+		for id := range levels[i] {
+			diff += levels[i][id] - levels[i-1][id]
+		}
+		if diff != 1 {
+			t.Errorf("state %d moves %d levels, want 1", i, diff)
+		}
+	}
+}
+
+func TestWeightsFromEnv(t *testing.T) {
+	def := weightsFromEnv("")
+	for id, pol := range condensePolicy {
+		if def[id] != pol.weight {
+			t.Errorf("%s: default weight %d, want %d", pol.name, def[id], pol.weight)
+		}
+	}
+	got := weightsFromEnv(" context=95 , weekly=5,bogus=1,path=-1,branch=1000,session=x,model,changes=7=8,scoped=0")
+	want := def
+	want[segContext], want[segWeekly], want[segScoped] = 95, 5, 0
+	if got != want {
+		t.Errorf("weightsFromEnv = %v, want %v (bad entries ignored)", got, want)
+	}
+}
+
+func TestWeightOverrideReordersTheSteps(t *testing.T) {
+	w := weightsFromEnv("context=65,weekly=5")
+	steps, _ := buildFitLevels(w)
+	got := describeSteps(steps)[:6]
+	want := []string{
+		"weekly: label + % + countdown",
+		"scoped: label + % + countdown",
+		"session: % + countdown",
+		"path: 20 cells",
+		"branch: 20 runes",
+		"context: icon + %",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("first pass = %q, want %q", got, want)
+	}
+}
+
+func TestSegmentLadders(t *testing.T) {
+	data := busyLine(0)
+	at := func(seg segID, level int) string {
+		var fit lineFit
+		fit[seg] = level
+		return line1At(data, fit)
+	}
+	bar := func(line, after string) bool {
+		// A bar sits right before the percentage: heavy or light rules
+		i := strings.Index(line, after)
+		return i > 0 && strings.ContainsAny(line[max(0, i-12):i], "\u2501\u2500")
+	}
+	tests := []struct {
+		seg   segID
+		level int
+		check func(string) bool
+		what  string
+	}{
+		{segContext, 0, func(l string) bool { return strings.Contains(l, nameContext) && bar(l, " 42%") }, "bar + label + %"},
+		{segContext, 1, func(l string) bool {
+			return !strings.Contains(l, nameContext) && strings.Contains(l, glyphs.Ctx+" 42%")
+		}, "icon + %"},
+		{segScoped, 0, func(l string) bool { return bar(l, " 48%") }, "bar"},
+		{segScoped, 1, func(l string) bool { return strings.Contains(l, "Opus 48% "+glyphs.Reset) }, "label + % + countdown"},
+		{segScoped, 2, func(l string) bool { return strings.Contains(l, "Opus 48% ") && strings.Count(l, glyphs.Reset) == 2 }, "label + %"},
+		{segScoped, 3, func(l string) bool { return strings.Contains(l, " O 48%") }, "initial + %"},
+		{segWeekly, 1, func(l string) bool { return strings.Contains(l, "Weekly 61% "+glyphs.Reset) }, "label + % + countdown"},
+		{segWeekly, 2, func(l string) bool { return strings.Contains(l, "Weekly 61% ") && strings.Count(l, glyphs.Reset) == 2 }, "label + %"},
+		{segWeekly, 3, func(l string) bool { return strings.Contains(l, " W 61%") }, "initial + %"},
+		{segSession, 0, func(l string) bool { return bar(l, " 34%") }, "bar + % + countdown"},
+		{segSession, 1, func(l string) bool { return strings.Contains(l, " 34% "+glyphs.Reset) && !bar(l, " 34%") }, "% + countdown"},
+		{segSession, 2, func(l string) bool { return strings.Contains(l, " 34% ") && strings.Count(l, glyphs.Reset) == 2 }, "%"},
+		{segPath, 0, func(l string) bool { return strings.Contains(l, "presentation/renderer") }, "default budget"},
+		{segPath, 1, func(l string) bool { return strings.Contains(l, " .../renderer ") }, "20 cells"},
+		{segPath, 3, func(l string) bool { return !strings.Contains(l, "renderer") && strings.Contains(l, "feat/") }, "hidden, branch kept"},
+		{segBranch, 1, func(l string) bool { return strings.Contains(l, " feat/adaptive-line-\u2026 !3 ?1") }, "20 runes, counts kept"},
+		{segBranch, 2, func(l string) bool { return strings.Contains(l, " feat/adapti\u2026 !3 ?1") }, "12 runes"},
+		{segBranch, 3, func(l string) bool { return strings.Contains(l, " feat/ad\u2026 !3 ?1") }, "8 runes"},
+		{segChanges, 1, func(l string) bool { return !strings.Contains(l, "+12") && !strings.Contains(l, "-3") }, "hidden"},
+		{segModel, 1, func(l string) bool {
+			return !strings.Contains(l, IconModel) && strings.Contains(l, " Opus 5 "+glyphs.EffortOn)
+		}, "name, gauge kept"},
+	}
+	for _, tt := range tests {
+		if line := at(tt.seg, tt.level); !tt.check(line) {
+			t.Errorf("%s level %d: %s, got %q", condensePolicy[tt.seg].name, tt.level, tt.what, line)
+		}
+	}
+	// No step along the default order widens the line (the bisection
+	// relies on it); a step can be a no-op, as the path to its last element
+	// when 20 cells already left only that
+	first := VisibleWidth(line1At(data, fitLevels[0]))
+	prev := first
+	for i := 1; i < len(fitLevels); i++ {
+		w := VisibleWidth(line1At(data, fitLevels[i]))
+		if w > prev {
+			t.Errorf("after %s the line is %d wide, wider than %d", fitSteps[i-1].Describe(), w, prev)
+		}
+		prev = w
+	}
+	if prev >= first-100 {
+		t.Errorf("the whole ladder takes the busy line from %d to %d cells only", first, prev)
+	}
+}
+
+func TestOSSegmentNeverShrinks(t *testing.T) {
+	withMCPLine(t, false)
+	data := busyLine(0)
+	data.MCP = servers(7, 1)
+	data.Tasks.Unattributed = 2
+	os := func(fit lineFit) string {
+		line := line1At(data, fit)
+		head, _, _ := strings.Cut(line, SepRight)
+		return head
+	}
+	full := os(fitLevels[0])
+	if !strings.Contains(full, glyphs.MCP+" 7") || !strings.Contains(full, glyphs.Subagents+" 2") {
+		t.Fatalf("the OS segment carries MCP and subagents, got %q", full)
+	}
+	for i, fit := range fitLevels {
+		if got := os(fit); got != full {
+			t.Errorf("state %d changes the OS segment: %q, want %q", i, got, full)
+		}
+	}
+}
+
+func TestCondensed(t *testing.T) {
+	if got := Condensed(busyLine(1000)); len(got) != 0 {
+		t.Errorf("a wide terminal condenses nothing, got %q", got)
+	}
+	light := busyLine(80)
+	light.Limits.Scoped = nil
+	for _, entry := range Condensed(light) {
+		if strings.HasPrefix(entry, "scoped:") {
+			t.Errorf("an absent segment is not reported, got %q", entry)
+		}
+	}
+	got := Condensed(busyLine(160))
+	if len(got) == 0 || got[0] != "context: icon + %" {
+		t.Errorf("at 160 the context shrinks first, got %q", got)
 	}
 }
 
@@ -113,63 +284,6 @@ func TestLineBudget(t *testing.T) {
 		if got := lineBudget(width); got != want {
 			t.Errorf("lineBudget(%d) = %d, want %d", width, got, want)
 		}
-	}
-}
-
-func TestLine1EachStep(t *testing.T) {
-	data := busyLine(0)
-	bar := func(line, after string) bool {
-		// A bar sits right before the percentage: heavy or light rules
-		i := strings.Index(line, after)
-		return i > 0 && strings.ContainsAny(line[:i], "━─")
-	}
-	full := line1At(data, fitLevels[0])
-	if !strings.Contains(full, nameContext) || !bar(full, " 42%") {
-		t.Errorf("level 0 draws the context bar and name, got %q", full)
-	}
-	tests := []struct {
-		level int
-		check func(string) bool
-		what  string
-	}{
-		{1, func(l string) bool {
-			return !strings.Contains(l, nameContext) && strings.Contains(l, glyphs.Ctx+" 42%")
-		}, "context is icon + percentage"},
-		{1, func(l string) bool { return bar(l, "Opus 48%") || strings.Contains(l, "Opus ━") }, "the scoped bar is still there"},
-		{2, func(l string) bool { return strings.Contains(l, "Opus 48%") }, "the scoped quota is label + percentage"},
-		{2, func(l string) bool { return strings.Count(l, glyphs.Reset) == 3 }, "the countdowns stay"},
-		{3, func(l string) bool { return strings.Contains(l, "Weekly 61%") }, "the weekly quota is label + percentage"},
-		{3, func(l string) bool { return !strings.Contains(l, "Opus 5 ") || bar(l, "34%") }, "the session bar is still there"},
-		{4, func(l string) bool { return strings.Contains(l, glyphs.EffortOn) && !strings.ContainsAny(l, "━─") }, "no bar is left"},
-		{4, func(l string) bool { return strings.Contains(l, "presentation/renderer") }, "the path keeps its default budget"},
-		{5, func(l string) bool { return strings.Contains(l, " .../renderer ") }, "the path is shortened"},
-		{5, func(l string) bool { return strings.Contains(l, "terminal-width") }, "the branch is whole"},
-		{6, func(l string) bool { return strings.Contains(l, " feat/adaptive-line-… ") }, "the branch keeps 20 runes"},
-		{6, func(l string) bool { return strings.Count(l, glyphs.Reset) == 3 }, "the countdowns stay"},
-		{7, func(l string) bool { return !strings.Contains(l, glyphs.Reset) }, "the countdowns are gone"},
-		{8, func(l string) bool { return strings.Contains(l, " feat/adapti… ") }, "the branch keeps 12 runes"},
-		{9, func(l string) bool { return strings.Contains(l, " W 61%") && strings.Contains(l, " O 48%") }, "quota names are initials"},
-		{9, func(l string) bool { return strings.Contains(l, "+12") }, "the changes stay"},
-		{10, func(l string) bool { return !strings.Contains(l, "+12") && !strings.Contains(l, "-3") }, "the changes are gone"},
-		{10, func(l string) bool { return strings.Contains(l, "renderer") }, "the path stays"},
-		{11, func(l string) bool { return !strings.Contains(l, "renderer") && strings.Contains(l, "feat/") }, "the path is gone, the branch stays"},
-		{11, func(l string) bool { return strings.Contains(l, IconModel+" Opus 5") }, "the model icon stays"},
-		{12, func(l string) bool { return !strings.Contains(l, IconModel) && strings.Contains(l, " Opus 5") }, "the model icon is gone, the name stays"},
-		{13, func(l string) bool { return strings.Contains(l, " feat/ad\u2026 ") }, "the branch keeps 8 runes"},
-	}
-	for _, tt := range tests {
-		if line := line1At(data, fitLevels[tt.level]); !tt.check(line) {
-			t.Errorf("level %d: %s, got %q", tt.level, tt.what, line)
-		}
-	}
-	// Every level is narrower than the one before it
-	prev := VisibleWidth(full)
-	for level := 1; level < len(fitLevels); level++ {
-		w := VisibleWidth(line1At(data, fitLevels[level]))
-		if w >= prev {
-			t.Errorf("level %d is %d wide, not narrower than %d", level, w, prev)
-		}
-		prev = w
 	}
 }
 
@@ -243,7 +357,9 @@ func TestLineFitQuotaLabel(t *testing.T) {
 	weekly := model.Limit{Kind: model.KindWeekly}
 	scoped := model.Limit{Kind: model.KindScoped, Label: "fable"}
 	session := model.Limit{Kind: model.KindSession}
-	long, short := lineFit{}, lineFit{shortNames: true}
+	var short lineFit
+	short[segWeekly], short[segScoped] = 3, 3
+	long := lineFit{}
 	if got := long.quotaLabel(weekly); got != QuotaLabel(weekly) {
 		t.Errorf("full weekly label = %q", got)
 	}
@@ -253,6 +369,7 @@ func TestLineFitQuotaLabel(t *testing.T) {
 	if got, want := short.quotaLabel(scoped), Labelled(glyphs.Quota, "F"); got != want {
 		t.Errorf("short scoped label = %q, want %q", got, want)
 	}
+	short[segSession] = 2
 	if got := short.quotaLabel(session); got != QuotaLabel(session) {
 		t.Errorf("session label is never shortened, got %q", got)
 	}

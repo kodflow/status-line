@@ -2,6 +2,9 @@
 package renderer
 
 import (
+	"os"
+	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/florent/status-line/internal/domain/model"
@@ -14,88 +17,198 @@ const (
 	// it; a line that ends exactly at the edge wraps on the slightest
 	// disagreement about a glyph's width.
 	lineMargin int = 4
-	// fitPathMax is the path budget once the path has to give way.
-	fitPathMax int = 20
-	// fitBranchMax is the branch budget, in runes, once it has to give way.
-	fitBranchMax int = 20
-	// tightPathMax leaves the path its last element only: TruncatePath
-	// never cuts below ".../<last>".
-	tightPathMax int = 1
-	// tightBranchMax is the branch budget of the tight levels.
-	tightBranchMax int = 12
-	// tightestBranchMax is the branch budget of the last level.
-	tightestBranchMax int = 8
+	// passStride separates two passes in the order of the steps: level n
+	// of a segment of weight w shrinks at (n-1)*passStride + w. A weight
+	// above passStride holds a segment back to a later pass.
+	passStride int = 100
+	// maxWeight bounds a weight given in STATUSLINE_WEIGHTS.
+	maxWeight int = 999
+	// weightsEnv names the variable overriding the default weights.
+	weightsEnv string = "STATUSLINE_WEIGHTS"
 	// branchEllipsis ends a shortened branch name.
-	branchEllipsis string = "…"
+	branchEllipsis string = "\u2026"
 )
 
-// lineFit says how much line one gives up to fit the terminal. The zero
-// value draws everything.
-type lineFit struct {
-	// dropCtxBar draws the context window as its icon and percentage.
-	dropCtxBar bool
-	// dropScopedBar draws a model-scoped quota as label and percentage.
-	dropScopedBar bool
-	// dropWeeklyBar draws the weekly quota as label and percentage.
-	dropWeeklyBar bool
-	// dropSessionBar draws the session quota as its percentage.
-	dropSessionBar bool
-	// pathMax is the path budget, 0 for the default one.
-	pathMax int
-	// branchMax is the branch budget in runes, 0 for no limit.
-	branchMax int
-	// dropCountdowns leaves out the time to each refill.
-	dropCountdowns bool
-	// shortNames names the weekly and scoped quotas by their initial.
-	shortNames bool
-	// dropChanges leaves out the added/removed lines, which the git
-	// counters already hint at.
-	dropChanges bool
-	// dropPath leaves out the directory; the branch still says where.
-	dropPath bool
-	// dropModelIcon leaves the model its name alone.
-	dropModelIcon bool
+// segID names a line-one segment that can shrink. The OS segment (OS
+// icon, health, MCP, subagents) is not one: it never shrinks.
+type segID int
+
+// Shrinkable segments of line one.
+const (
+	segContext segID = iota
+	segScoped
+	segWeekly
+	segSession
+	segPath
+	segBranch
+	segChanges
+	segModel
+	segCount
+)
+
+// segPolicy is how one segment condenses: its levels, richest first, each
+// meaningful on its own, and its weight — the lower, the sooner it shrinks.
+type segPolicy struct {
+	name   string
+	weight int
+	levels []string
 }
 
-// fitLevels are the degradation steps, each one giving up what the
-// previous gave up and one thing more, in the order the user ranked them:
-// the bars first (context, scoped, weekly, session), then the path, the
-// branch and the countdowns. A full line is about 240 cells, and those
-// steps bring it to about 120; the last ones, beyond that list, are what
-// still has to go for 80 columns: the path to its last element and the
-// branch to 12 runes, quota names to their initial, the changes, the path,
-// the model icon, and the branch down to 8 runes.
-var fitLevels = buildFitLevels()
+// Path and branch budgets per level.
+var (
+	// pathBudgets is the path budget per level; 1 leaves ".../<last>",
+	// the last level hides the path (only inside a repository).
+	pathBudgets = [...]int{0, 20, 1, 0}
+	// branchBudgets is the branch budget in runes per level, 0 = whole.
+	branchBudgets = [...]int{0, 20, 12, 8}
+)
 
-// buildFitLevels accumulates the degradation steps.
+// condensePolicy is the condensing policy of line one, one row per segment.
+//
+// The condenser works in passes: pass n lowers every segment that still has
+// an n-th step by one level, lowest weight first, and stops as soon as the
+// line fits. With the default weights the steps run in the order the user
+// set: the bars (context, scoped, weekly, session), the path and branch to
+// 20, the countdowns, the path to its last element and the branch to 12,
+// the quota names to their initial; then changes (240), the hidden path,
+// the model icon (255) and the branch to 8, held back to the third pass by
+// their weight. STATUSLINE_WEIGHTS=name=weight,… overrides weights.
+var condensePolicy = [segCount]segPolicy{
+	segContext: {name: "context", weight: 10, levels: []string{"bar + label + %", "icon + %"}},
+	segScoped:  {name: "scoped", weight: 20, levels: []string{"bar + label + % + countdown", "label + % + countdown", "label + %", "initial + %"}},
+	segWeekly:  {name: "weekly", weight: 30, levels: []string{"bar + label + % + countdown", "label + % + countdown", "label + %", "initial + %"}},
+	segSession: {name: "session", weight: 40, levels: []string{"bar + % + countdown", "% + countdown", "%"}},
+	segPath:    {name: "path", weight: 50, levels: []string{"30 cells", "20 cells", "last element", "hidden (inside a repository)"}},
+	segBranch:  {name: "branch", weight: 60, levels: []string{"whole", "20 runes", "12 runes", "8 runes"}},
+	segChanges: {name: "changes", weight: 240, levels: []string{"shown", "hidden"}},
+	segModel:   {name: "model", weight: 255, levels: []string{"icon + name", "name"}},
+}
+
+// lineFit is the level of every shrinkable segment; the zero value draws
+// everything at its richest.
+type lineFit [segCount]int
+
+// fitStep lowers one segment to one level.
+type fitStep struct {
+	seg   segID
+	level int
+}
+
+// Describe names the step for people: "context: icon + %".
 //
 // Returns:
-//   - []lineFit: levels from the full line to the tightest one
-func buildFitLevels() []lineFit {
-	steps := []func(*lineFit){
-		func(f *lineFit) { f.dropCtxBar = true },
-		func(f *lineFit) { f.dropScopedBar = true },
-		func(f *lineFit) { f.dropWeeklyBar = true },
-		func(f *lineFit) { f.dropSessionBar = true },
-		func(f *lineFit) { f.pathMax = fitPathMax },
-		func(f *lineFit) { f.branchMax = fitBranchMax },
-		func(f *lineFit) { f.dropCountdowns = true },
-		func(f *lineFit) { f.pathMax, f.branchMax = tightPathMax, tightBranchMax },
-		func(f *lineFit) { f.shortNames = true },
-		func(f *lineFit) { f.dropChanges = true },
-		func(f *lineFit) { f.dropPath = true },
-		func(f *lineFit) { f.dropModelIcon = true },
-		func(f *lineFit) { f.branchMax = tightestBranchMax },
+//   - string: segment name and the level it reaches
+func (s fitStep) Describe() string {
+	pol := condensePolicy[s.seg]
+	return pol.name + ": " + pol.levels[s.level]
+}
+
+// fitSteps and fitLevels are resolved once, from the policy and the
+// weights in the environment.
+var fitSteps, fitLevels = buildFitLevels(weightsFromEnv(os.Getenv(weightsEnv)))
+
+// weightsFromEnv reads STATUSLINE_WEIGHTS over the default weights.
+//
+// Entries are "name=weight", comma-separated; a weight is an integer from
+// 0 to 999. An unknown name, a malformed entry or a weight out of range is
+// ignored, the rest applies.
+//
+// Params:
+//   - value: raw variable value
+//
+// Returns:
+//   - [segCount]int: weight per segment
+func weightsFromEnv(value string) [segCount]int {
+	var weights [segCount]int
+	// Start from the policy
+	for id, pol := range condensePolicy {
+		weights[id] = pol.weight
 	}
-	levels := make([]lineFit, 0, len(steps)+1)
+	// Apply each well-formed entry
+	for _, entry := range strings.Split(value, ",") {
+		name, raw, found := strings.Cut(strings.TrimSpace(entry), "=")
+		weight, err := strconv.Atoi(raw)
+		// A malformed entry changes nothing
+		if !found || err != nil || weight < 0 || weight > maxWeight {
+			continue
+		}
+		// Only a known segment takes a weight
+		for id, pol := range condensePolicy {
+			// Names are matched exactly
+			if pol.name == name {
+				weights[id] = weight
+			}
+		}
+	}
+	return weights
+}
+
+// buildFitLevels orders every step of every segment and accumulates them.
+//
+// Step n of a segment of weight w is ranked (n-1)*passStride + w: all the
+// first steps come before the second ones, and so on, lowest weight first
+// within a pass; ties keep the policy order.
+//
+// Params:
+//   - weights: weight per segment
+//
+// Returns:
+//   - []fitStep: steps in the order they are taken
+//   - []lineFit: the full line, then the state after each step
+func buildFitLevels(weights [segCount]int) ([]fitStep, []lineFit) {
+	type ranked struct {
+		step fitStep
+		rank int
+	}
+	var all []ranked
+	// One step per level below the richest
+	for id, pol := range condensePolicy {
+		for level := 1; level < len(pol.levels); level++ {
+			all = append(all, ranked{step: fitStep{seg: segID(id), level: level}, rank: (level-1)*passStride + weights[id]})
+		}
+	}
+	sort.SliceStable(all, func(i, j int) bool { return all[i].rank < all[j].rank })
+
+	steps := make([]fitStep, 0, len(all))
+	levels := make([]lineFit, 0, len(all)+1)
 	var fit lineFit
 	levels = append(levels, fit)
-	// Each level is the previous one plus one step
-	for _, step := range steps {
-		step(&fit)
+	// Each state is the previous one with one segment a level lower
+	for _, r := range all {
+		fit[r.step.seg] = r.step.level
+		steps = append(steps, r.step)
 		levels = append(levels, fit)
 	}
-	return levels
+	return steps, levels
+}
+
+// quotaSeg maps a quota kind onto its segment.
+//
+// Params:
+//   - kind: quota kind
+//
+// Returns:
+//   - segID: its segment
+//   - bool: false for a kind that never shrinks
+func quotaSeg(kind model.LimitKind) (segID, bool) {
+	// Each quota kind is a segment of its own
+	switch kind {
+	// The conversation window
+	case model.KindContext:
+		return segContext, true
+	// The quota scoped to the model in use
+	case model.KindScoped:
+		return segScoped, true
+	// The plan-wide weekly quota
+	case model.KindWeekly:
+		return segWeekly, true
+	// The session quota beside the model name
+	case model.KindSession:
+		return segSession, true
+	// Any other kind is drawn whole
+	default:
+		return 0, false
+	}
 }
 
 // dropBar reports whether a quota of this kind loses its bar.
@@ -104,26 +217,127 @@ func buildFitLevels() []lineFit {
 //   - kind: quota kind
 //
 // Returns:
-//   - bool: true when the bar is left out
+//   - bool: true from the first level on
 func (f lineFit) dropBar(kind model.LimitKind) bool {
-	// Each kind has its own step
-	switch kind {
-	// The context window goes first
-	case model.KindContext:
-		return f.dropCtxBar
-	// Then the quota scoped to the model in use
-	case model.KindScoped:
-		return f.dropScopedBar
-	// Then the plan-wide weekly quota
-	case model.KindWeekly:
-		return f.dropWeeklyBar
-	// The session quota beside the model name goes last
-	case model.KindSession:
-		return f.dropSessionBar
-	// Any other kind keeps its bar
-	default:
-		return false
+	seg, ok := quotaSeg(kind)
+	return ok && f[seg] >= 1
+}
+
+// dropCountdown reports whether a quota of this kind loses its countdown.
+//
+// Params:
+//   - kind: quota kind
+//
+// Returns:
+//   - bool: true from the second level on
+func (f lineFit) dropCountdown(kind model.LimitKind) bool {
+	seg, ok := quotaSeg(kind)
+	return ok && seg != segContext && f[seg] >= 2
+}
+
+// shortName reports whether a quota of this kind is named by its initial.
+//
+// Params:
+//   - kind: quota kind
+//
+// Returns:
+//   - bool: true at the third level, for the weekly and scoped quotas
+func (f lineFit) shortName(kind model.LimitKind) bool {
+	seg, ok := quotaSeg(kind)
+	return ok && (seg == segScoped || seg == segWeekly) && f[seg] >= 3
+}
+
+// pathMax returns the path budget, 0 for the default one.
+//
+// Returns:
+//   - int: budget for TruncatePath
+func (f lineFit) pathMax() int {
+	return pathBudgets[f[segPath]]
+}
+
+// dropPath reports whether the path is hidden (inside a repository).
+//
+// Returns:
+//   - bool: true at the last path level
+func (f lineFit) dropPath() bool {
+	return f[segPath] == len(pathBudgets)-1
+}
+
+// branchMax returns the branch budget in runes, 0 for the whole name.
+//
+// Returns:
+//   - int: budget for TruncateBranch
+func (f lineFit) branchMax() int {
+	return branchBudgets[f[segBranch]]
+}
+
+// dropChanges reports whether the added/removed lines are hidden.
+//
+// Returns:
+//   - bool: true from the first level on
+func (f lineFit) dropChanges() bool {
+	return f[segChanges] >= 1
+}
+
+// dropModelIcon reports whether the model loses its icon.
+//
+// Returns:
+//   - bool: true from the first level on
+func (f lineFit) dropModelIcon() bool {
+	return f[segModel] >= 1
+}
+
+// presentSegments tells which shrinkable segments the data draws, so a
+// report does not name a step that had nothing to shrink.
+//
+// Params:
+//   - data: status line data
+//
+// Returns:
+//   - [segCount]bool: true for each segment on show
+func presentSegments(data model.StatusLineData) [segCount]bool {
+	var present [segCount]bool
+	// Quotas: the chained context and the ones inside the model segment
+	for _, seg := range quotaSegments(data) {
+		present[segContext] = present[segContext] || seg.limit.Kind == model.KindContext
 	}
+	for _, q := range modelQuotas(data) {
+		// Mark the segment each quota belongs to
+		if seg, ok := quotaSeg(q.Kind); ok {
+			present[seg] = true
+		}
+	}
+	present[segPath] = data.Dir != ""
+	present[segBranch] = data.Git.IsInRepo()
+	present[segChanges] = data.Changes.HasChanges()
+	present[segModel] = data.Icons.Model
+	return present
+}
+
+// Condensed describes where line one stands after fitting the data:
+// "context: icon + %", one entry per segment that shrank, in policy order.
+//
+// Params:
+//   - data: status line data, with the terminal width
+//
+// Returns:
+//   - []string: shrunken segments and their level, empty for a full line
+func Condensed(data model.StatusLineData) []string {
+	_, level, _ := fitLine1(lineBudget(data.Terminal.Width), func(sb *strings.Builder, fit lineFit) {
+		(&Powerline{}).renderLine1Fit(sb, data, fit)
+	})
+	fit := fitLevels[level]
+	present := presentSegments(data)
+	var out []string
+	// Name every segment on show below its richest level
+	for id, lvl := range fit {
+		// A segment at its richest, or not drawn at all, says nothing
+		if lvl == 0 || !present[id] {
+			continue
+		}
+		out = append(out, fitStep{seg: segID(id), level: lvl}.Describe())
+	}
+	return out
 }
 
 // lineBudget returns the columns line one may take.
@@ -143,8 +357,9 @@ func lineBudget(width int) int {
 
 // fitLine1 renders line one at the first level that fits the budget.
 //
-// Every level only gives up more than the one before it, so the widths
-// never grow along the levels and the first level that fits is found by
+// Every state only gives up more than the one before it, so the widths
+// never grow along them; the result is the one a step-by-step walk that
+// re-measures after each step would reach, and the first level that fits is found by
 // bisection: the full line first (the usual case, one render), then at
 // most four more renders over the remaining levels.
 //
@@ -197,7 +412,7 @@ func fitLine1(budget int, render func(*strings.Builder, lineFit)) (string, int, 
 //   - string: full label, or its initial once names have to give way
 func (f lineFit) quotaLabel(limit model.Limit) string {
 	// The full label reads best whenever there is room for it
-	if !f.shortNames {
+	if !f.shortName(limit.Kind) {
 		return QuotaLabel(limit)
 	}
 	name := nameWeekly
