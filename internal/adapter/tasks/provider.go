@@ -1,8 +1,10 @@
-// Package tasks reads the session task list and the running subagents.
+// Package tasks reads the session's epics, tasks and running subagents.
 package tasks
 
 import (
 	"encoding/json"
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -56,11 +58,27 @@ type taskFile struct {
 	Agent   string `json:"agent"`
 	Subject string `json:"subject"`
 	Status  string `json:"status"`
+	Epic    int    `json:"epic"`
+	Created int64  `json:"created"`
+	Updated int64  `json:"updated"`
+}
+
+// epicFile is one epic of the tasks MCP file.
+type epicFile struct {
+	ID      int    `json:"id"`
+	Agent   string `json:"agent"`
+	Title   string `json:"title"`
+	Touched int64  `json:"touched"`
 }
 
 // sessionTasks is the tasks MCP file.
 type sessionTasks struct {
 	Tasks []taskFile `json:"tasks"`
+	// Epics is a list since version 2, a map of each agent's current epic in
+	// version 1: it is decoded by readEpics.
+	Epics json.RawMessage `json:"epics"`
+	// Active maps each agent to the epic it is focused on (version 2).
+	Active map[string]int `json:"active"`
 }
 
 // sessionAgents is the running-agents file.
@@ -68,7 +86,15 @@ type sessionAgents struct {
 	Agents map[string]struct {
 		Started int64  `json:"started"`
 		Stopped *int64 `json:"stopped"`
+		// Epic is the main agent's active epic when the subagent started.
+		Epic int `json:"epic"`
 	} `json:"agents"`
+}
+
+// openEpic is an epic to show, with the time used to order it.
+type openEpic struct {
+	epic    model.Epic
+	touched int64
 }
 
 // NewProvider locates the task stores of a session.
@@ -104,74 +130,216 @@ func NewProvider(sessionID string) *Provider {
 	return p
 }
 
-// Tasks returns the main agent's task list, in creation order.
+// Board returns the main agent's open epics and the running subagents.
+//
+// The tasks MCP file wins whenever it exists; without it the built-in list is
+// drawn as the tasks filed under no epic.
 //
 // Returns:
-//   - model.TaskList: current list, empty when there is none
-func (p *Provider) Tasks() model.TaskList {
-	// The MCP list wins whenever the main agent has one
-	if list := p.mcpTasks(); list.Total() > 0 {
-		return list
+//   - model.TaskBoard: open epics in display order, subagents attributed
+func (p *Provider) Board() model.TaskBoard {
+	epics, found := p.mcpEpics()
+	// No MCP file: the built-in list, if it is still open, is the only pill
+	if !found {
+		if list := p.builtinTasks(); list.IsActive() {
+			epics = []model.Epic{{ID: model.NoEpic, Active: true, Tasks: list}}
+		}
 	}
-	return p.builtinTasks()
+	board := model.TaskBoard{Epics: epics}
+	p.attributeSubagents(&board)
+	return board
 }
 
-// Subagents returns how many subagents of the session are running.
+// attributeSubagents counts the running subagents into the epic each was
+// started for, and those whose epic is not shown into Unattributed.
 //
-// Returns:
-//   - int: subagents started and not stopped, stale ones excluded
-func (p *Provider) Subagents() int {
+// Params:
+//   - board: board whose epics receive the counts
+func (p *Provider) attributeSubagents(board *model.TaskBoard) {
 	// No session located, nothing to count
 	if p.sessionDir == "" {
-		return 0
+		return
 	}
 	data, err := os.ReadFile(filepath.Join(p.sessionDir, "agents.json"))
 	// No registry yet means no subagent has started
 	if err != nil {
-		return 0
+		return
 	}
 	var reg sessionAgents
 	// A registry mid-write reads as empty until the next redraw
 	if err := json.Unmarshal(data, &reg); err != nil {
-		return 0
+		return
 	}
-	cutoff := p.now().Add(-staleAgent).Unix()
-	running := 0
-	// Count the agents still running, forgetting any whose stop was lost
-	for _, agent := range reg.Agents {
-		if agent.Stopped == nil && agent.Started >= cutoff {
-			running++
+	shown := make(map[int]int, len(board.Epics))
+	// Only real epics take subagents: those started with none go to line 1
+	for idx, epic := range board.Epics {
+		if epic.ID != model.NoEpic {
+			shown[epic.ID] = idx
 		}
 	}
-	return running
+	cutoff := p.now().Add(-staleAgent).Unix()
+	// Count the agents still running, forgetting any whose stop was lost
+	for _, agent := range reg.Agents {
+		if agent.Stopped != nil || agent.Started < cutoff {
+			continue
+		}
+		// The epic's own pill when it is drawn, the OS segment otherwise
+		if idx, ok := shown[agent.Epic]; ok {
+			board.Epics[idx].Subagents++
+		} else {
+			board.Unattributed++
+		}
+	}
 }
 
-// mcpTasks reads the main agent's entries from the tasks MCP file.
+// mcpEpics reads the main agent's open epics from the tasks MCP file.
 //
 // Returns:
-//   - model.TaskList: the main agent's tasks, empty when the file is absent
-func (p *Provider) mcpTasks() model.TaskList {
+//   - []model.Epic: open epics, the active one first, then the most recently
+//     touched
+//   - bool: false when the file does not exist
+func (p *Provider) mcpEpics() ([]model.Epic, bool) {
 	// No session located, nothing to read
 	if p.sessionDir == "" {
-		return model.TaskList{}
+		return nil, false
 	}
 	data, err := os.ReadFile(filepath.Join(p.sessionDir, "tasks.json"))
-	if err != nil {
-		return model.TaskList{}
+	// Only a missing file hands over to the built-in list
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, false
 	}
 	var file sessionTasks
-	if err := json.Unmarshal(data, &file); err != nil {
-		return model.TaskList{}
+	// An unreadable file draws nothing rather than a list from elsewhere
+	if err != nil || json.Unmarshal(data, &file) != nil {
+		return nil, true
 	}
-	items := make([]model.TaskItem, 0, len(file.Tasks))
-	// Subagents keep their own lists; only the main agent's is shown
-	for _, task := range file.Tasks {
+	epics, active := readEpics(file, p.now().Unix())
+	known := make(map[int]epicFile, len(epics))
+	// The main agent's epics only: subagents keep their own lists; an epic
+	// with no agent is the main agent's, as a task with none is
+	for _, epic := range epics {
+		if epic.Agent == "" || epic.Agent == mainAgent {
+			known[epic.ID] = epic
+		}
+	}
+	// An active id naming no epic of the main agent leaves none active
+	if _, ok := known[active]; !ok {
+		active = model.NoEpic
+	}
+	byEpic, noEpicTouched := groupTasks(file.Tasks, known)
+	open := make([]openEpic, 0, len(known)+1)
+	// An epic is open while a task remains, or while it is focused and empty
+	for id, epic := range known {
+		list := model.TaskList{Items: sortByID(byEpic[id])}
+		if list.IsActive() || (id == active && list.Total() == 0) {
+			open = append(open, openEpic{
+				epic:    model.Epic{ID: id, Title: epic.Title, Active: id == active, Tasks: list},
+				touched: epic.Touched,
+			})
+		}
+	}
+	// The tasks filed under no epic are one more pill, active when none is
+	if list := (model.TaskList{Items: sortByID(byEpic[model.NoEpic])}); list.IsActive() {
+		open = append(open, openEpic{
+			epic:    model.Epic{ID: model.NoEpic, Active: active == model.NoEpic, Tasks: list},
+			touched: noEpicTouched,
+		})
+	}
+	return orderEpics(open), true
+}
+
+// readEpics decodes the epics of either file version.
+//
+// Version 1 kept a map of each agent's current epic and no active map; it is
+// read as a list whose epics were all touched now, each agent focused on its
+// own.
+//
+// Params:
+//   - file: decoded tasks MCP file
+//   - now: Unix time given to epics that carry none
+//
+// Returns:
+//   - []epicFile: every epic of the file
+//   - int: the main agent's active epic, NoEpic when none
+func readEpics(file sessionTasks, now int64) ([]epicFile, int) {
+	var list []epicFile
+	// Version 2: a list, focus in its own map
+	if json.Unmarshal(file.Epics, &list) == nil {
+		return list, file.Active[mainAgent]
+	}
+	var current map[string]struct {
+		ID    int    `json:"id"`
+		Title string `json:"title"`
+	}
+	// Neither shape: no epic at all
+	if json.Unmarshal(file.Epics, &current) != nil {
+		return nil, file.Active[mainAgent]
+	}
+	list = make([]epicFile, 0, len(current))
+	// Version 1: each agent's current epic is the one it is focused on
+	for agent, epic := range current {
+		list = append(list, epicFile{ID: epic.ID, Agent: agent, Title: epic.Title, Touched: now})
+	}
+	return list, current[mainAgent].ID
+}
+
+// groupTasks sorts the main agent's tasks into their epics.
+//
+// Params:
+//   - tasks: every task of the file
+//   - known: the main agent's epics by id
+//
+// Returns:
+//   - map[int][]model.TaskItem: tasks by epic id; a task naming an epic not
+//     on file is left out
+//   - int64: last time a task filed under no epic changed
+func groupTasks(tasks []taskFile, known map[int]epicFile) (map[int][]model.TaskItem, int64) {
+	byEpic := make(map[int][]model.TaskItem)
+	var touched int64
+	// Subagents keep their own lists; only the main agent's are shown
+	for _, task := range tasks {
 		if task.Agent != "" && task.Agent != mainAgent {
 			continue
 		}
-		items = append(items, model.TaskItem{ID: task.ID, Subject: task.Subject, Status: task.Status})
+		// A task of an epic no longer on file belongs to a finished subject:
+		// a version 1 file kept only each agent's current epic
+		if _, ok := known[task.Epic]; !ok && task.Epic != model.NoEpic {
+			continue
+		}
+		// The tasks under no epic are ordered by their own last change
+		if task.Epic == model.NoEpic {
+			touched = max(touched, task.Created, task.Updated)
+		}
+		byEpic[task.Epic] = append(byEpic[task.Epic], model.TaskItem{ID: task.ID, Subject: task.Subject, Status: task.Status})
 	}
-	return model.TaskList{Items: sortByID(items)}
+	return byEpic, touched
+}
+
+// orderEpics puts the active epic first, then the others by last change.
+//
+// Params:
+//   - open: open epics, in any order
+//
+// Returns:
+//   - []model.Epic: the epics in display order
+func orderEpics(open []openEpic) []model.Epic {
+	// Focus first, then recency, then the newer epic on a tie
+	sort.SliceStable(open, func(i, j int) bool {
+		a, b := open[i], open[j]
+		if a.epic.Active != b.epic.Active {
+			return a.epic.Active
+		}
+		if a.touched != b.touched {
+			return a.touched > b.touched
+		}
+		return a.epic.ID > b.epic.ID
+	})
+	epics := make([]model.Epic, 0, len(open))
+	// Keep only the view the renderer needs
+	for _, item := range open {
+		epics = append(epics, item.epic)
+	}
+	return epics
 }
 
 // builtinTasks reads the built-in tools' one-file-per-task list.

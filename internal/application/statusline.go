@@ -69,8 +69,8 @@ func (s *StatusLineService) GenerateWithUpdate(input port.InputProvider, update 
 		terminalNfo model.TerminalInfo
 		mcpServers  model.MCPServers
 		health      model.ServiceHealth
-		taskList    model.TaskList
-		subagents   int
+		taskBoard   model.TaskBoard
+		working     bool
 	)
 
 	gather := func(fn func()) {
@@ -90,8 +90,11 @@ func (s *StatusLineService) GenerateWithUpdate(input port.InputProvider, update 
 	gather(func() { mcpServers = s.deps.MCP.Servers() })
 	// The task list is optional as well
 	if s.deps.Tasks != nil {
-		gather(func() { taskList = s.deps.Tasks.Tasks() })
-		gather(func() { subagents = s.deps.Tasks.Subagents() })
+		gather(func() { taskBoard = s.deps.Tasks.Board() })
+	}
+	// Whether the session is working only decides how much the board shows
+	if s.deps.Activity != nil {
+		gather(func() { working = s.deps.Activity.Working() })
 	}
 	// Service health is optional: without a provider nothing is drawn
 	if s.deps.Health != nil {
@@ -131,8 +134,8 @@ func (s *StatusLineService) GenerateWithUpdate(input port.InputProvider, update 
 		FastMode:    input.IsFastMode(),
 		SessionName: input.SessionLabel(),
 		Health:      health,
-		Tasks:       taskList,
-		Subagents:   subagents,
+		Tasks:       taskBoard,
+		Working:     working,
 	}
 
 	// Delegate rendering to the renderer

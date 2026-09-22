@@ -13,6 +13,7 @@ type ServiceDeps struct {
 	Usage    port.UsageProvider
 	Health   port.HealthProvider
 	Tasks    port.TasksProvider
+	Activity port.ActivityProvider
 	// WorkDir is the directory the session is working in, as inferred from
 	// its recent tool calls; empty means the directory Claude Code reported.
 	WorkDir string

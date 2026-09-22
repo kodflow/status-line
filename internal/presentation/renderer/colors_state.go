@@ -79,20 +79,42 @@ const (
 	FgHealthDown string = "\033[38;5;160m"
 )
 
-// Task list colours, on the ambient line: finished, started, not started,
-// then the pill's own marks and the current task's title.
+// Epic pill colours: a mauve ground with its deep plum ink, like the other
+// pills. The cells are graphical objects held to 3:1 on the ground; the track
+// of the cells not under way only has to stay visible.
 const (
-	// FgTaskDone is a completed task in the segmented bar.
-	FgTaskDone string = "\033[38;5;29m"
-	// FgTaskActive is the task being worked on.
-	FgTaskActive string = "\033[38;5;172m"
-	// FgTaskActivePulse is the bright frame of the task being worked on; the
-	// bold is closed by the Reset that follows the started cells.
-	FgTaskActivePulse string = "\033[1;38;5;214m"
-	// FgTaskTodo is a task not started yet.
-	FgTaskTodo string = "\033[38;5;245m"
-	// FgTaskTitle is the title of the task being worked on.
-	FgTaskTitle string = "\033[38;5;250m"
+	// BgEpic is the mauve ground of an epic pill.
+	BgEpic string = "\033[48;5;182m"
+	// FgEpic draws the pill's rounded caps in the ground colour.
+	FgEpic string = "\033[38;5;182m"
+	// FgEpicInk is the plum ink of the label and the done cells. 6.66:1.
+	FgEpicInk string = "\033[38;5;53m"
+
+	// epicActiveTrue is the amber of the cell under way, #82480b. 3.82:1.
+	epicActiveTrue string = "\033[38;2;130;72;11m"
+	// epicActive256 is its cube fallback, #875f00. 3.00:1.
+	epicActive256 string = "\033[38;5;94m"
+	// epicPulseTrue is the bright frame of the cell under way, #9e5204, bold;
+	// the bold is closed by the Reset that follows the cell. 3.00:1.
+	epicPulseTrue string = "\033[1;38;2;158;82;4m"
+	// epicPulse256 is its cube fallback: the same 94, bold. The cube has no
+	// brighter amber that holds 3:1 on the mauve (130 falls to 2.47:1), so
+	// only the weight pulses there.
+	epicPulse256 string = "\033[1;38;5;94m"
+	// epicTrackTrue is the pale track of the cells not under way, #b48cb4.
+	epicTrackTrue string = "\033[38;2;180;140;180m"
+	// epicTrack256 is its cube fallback, #af87af.
+	epicTrack256 string = "\033[38;5;139m"
+)
+
+// Epic cell inks for the active colour depth.
+var (
+	// FgEpicActive is the cell under way.
+	FgEpicActive string = pickInk(epicActiveTrue, epicActive256)
+	// FgEpicPulse is the bright frame of the cell under way.
+	FgEpicPulse string = pickInk(epicPulseTrue, epicPulse256)
+	// FgEpicTrack is a cell pending or waiting on the user.
+	FgEpicTrack string = pickInk(epicTrackTrue, epicTrack256)
 )
 
 // MCP list colours. The servers are ambient information: they are read when

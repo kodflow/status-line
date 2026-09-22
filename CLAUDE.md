@@ -1,4 +1,4 @@
-<!-- updated: 2026-09-21T12:00:00Z -->
+<!-- updated: 2026-09-22T12:00:00Z -->
 # Status Line
 
 CLI Go pour afficher une status line Powerline personnalisée dans Claude Code.
@@ -15,6 +15,7 @@ internal/
 ├── adapter/                 # Adaptateurs externes
 │   ├── git/                 # Git status + diff stats
 │   ├── mcp/                 # Détection serveurs MCP (config files)
+│   ├── sessionstate/        # Session occupée ? (<config>/sessions/<pid>.json)
 │   ├── system/              # Info système (OS, Docker)
 │   ├── terminal/            # Info terminal (largeur, couleurs)
 │   ├── updater/             # Auto-update binaire (GitHub releases)
@@ -52,7 +53,7 @@ symbole Unicode générique retombe sur une autre police et devient illisible.
 
 | Segment | Description |
 |---------|-------------|
-| OS | Icône système + étincelles 󰙴 = état de Claude (vert/orange/rouge) |
+| OS | Icône système + étincelles 󰙴 = état de Claude (vert/orange/rouge), puis `󰚩 N` sous-agents hors épic affiché |
 | Model | Pill colorée (Haiku/Sonnet/Opus/Fable) + jauge d'effort + fast mode |
 | Path | Répertoire où la session travaille réellement (voir ci-dessous) |
 | Git | Branche + modifiés/non-trackés + nombre de worktrees liés (hors prunable) |
@@ -75,7 +76,7 @@ famille de modèles ne s'affiche que si ce modèle est en cours d'utilisation.
 
 **Ligne ambiante:** pills MCP, notification de mise à jour.
 
-**Ligne 2 :** la liste de tâches de la session mène la ligne, puis les pills
+**Ligne 2 :** une pastille par épic ouvert mène la ligne, puis les pills
 MCP. Aucune troncature : un titre long passe à la ligne plutôt que d'être coupé.
 
 ## Effort
@@ -87,24 +88,52 @@ l'encre de la pastille, les autres un disque dans sa teinte pâle
 (`GetModelTrack`). Un niveau hors échelle s'écrit en clair (`· ultra`), jamais
 sur une jauge fausse.
 
-## Tâches et sous-agents
+## Tâches, épics et sous-agents
 
 `adapter/tasks` lit deux sources, par session :
 
-1. **MCP tasks de `kodflow-hooks`** (prioritaire) : `<config>/kodflow/sessions/<session_id>/tasks.json`.
-   Chaque tâche porte son `agent` (injecté par le hook PreToolUse) ; seules
-   celles de `main` sont affichées. `agents.json` à côté = sous-agents lancés
-   (hooks SubagentStart/Stop) ; un agent sans stop depuis 12 h est ignoré.
-2. **Outils natifs** (repli) : `<config>/tasks/<liste>/<n>.json`, liste =
-   `CLAUDE_CODE_TASK_LIST_ID` sinon `session-` + 8 premiers caractères.
+1. **MCP tasks de `kodflow-hooks`** (prioritaire dès que le fichier existe) :
+   `<config>/kodflow/sessions/<session_id>/tasks.json`. v2 = liste `epics`
+   (`id`, `agent`, `title` ≤ 20, `touched`) + `active` (agent → épic) ; un
+   fichier v1 (`epics` en dict agent → épic courant) est converti à la
+   lecture (`touched` = maintenant, `active[agent]` = son épic). Seules les
+   tâches de `main` comptent ; `epic: 0` = hors épic ; une tâche d'un épic
+   absent du fichier (épic fini, v1) est ignorée. Un fichier illisible
+   n'affiche rien — il ne rebascule pas sur la source native.
+2. **Outils natifs** (repli, fichier MCP absent) : `<config>/tasks/<liste>/<n>.json`,
+   liste = `CLAUDE_CODE_TASK_LIST_ID` sinon `session-` + 8 premiers caractères,
+   rendue comme la pastille `Tâches`.
 
-Ligne 2 : barre segmentée **triée** (fait, puis en cours, puis à faire — elle
-se remplit par la gauche quel que soit l'ordre des ids), `fait/total`, titre en
-cours, puis `󰚩 N` sous-agents actifs, puis les MCP. Une liste terminée n'est
-plus dessinée. Les cases en cours **pulsent** : une seconde sur deux (horloge
-murale, `clockNow`) elles passent de 172 à 214 gras. Cela suppose
-`statusLine.refreshInterval: 1` — le minimum de l'hôte, qui ne redessine pas
-plus vite ; le clignotement ANSI (SGR 5) est filtré et ne sert à rien.
+**Épic ouvert** = au moins une tâche non terminée, ou l'épic actif encore
+vide (il disparaît dès que le focus passe ailleurs). Un épic fini n'est plus
+dessiné ; une tâche ajoutée à un épic fini le rouvre. `active.main` à 0,
+absent ou pointant nulle part = aucun épic actif : la pastille `Tâches`
+(tâches `epic: 0`) devient l'active. Ordre : l'actif, puis par `touched`
+décroissant (`Tâches` : dernier `created`/`updated` de ses tâches).
+
+**Pastilles (ligne 2)** : fond mauve 182, capuchons arrondis, encre prune 53.
+
+- *Repliée* : `titre fait/total` (+ `󰚩 N`).
+- *Dépliée* — seulement l'épic actif, seulement **pendant que la session
+  travaille** : `titre fait/total cases titre-de-tâche` (+ `󰚩 N`). Cases
+  triées : fait ■ encre 53, en cours ■ ambre `#82480b` qui **pulse** en
+  `#9e5204` gras les secondes paires (horloge murale, `clockNow`), le reste
+  (à faire, en attente) □ sur la piste pâle `#b48cb4`. Titre = la tâche en
+  cours, sinon la première en attente de l'utilisateur, sinon la prochaine.
+  Replis 256 : 94, 94 gras (le cube n'a pas d'ambre plus clair qui tienne
+  3:1 sur le mauve — 130 tombe à 2.47:1), 139.
+- Le pulse suppose `statusLine.refreshInterval: 1` — le minimum de l'hôte ;
+  le clignotement ANSI (SGR 5) est filtré et ne sert à rien.
+
+**Session occupée** : `adapter/sessionstate` lit `<config>/sessions/*.json`
+(écrits par l'hôte) ; le premier dont `sessionId` = le `session_id` de stdin
+décide : `status == "busy"`. Fichiers illisibles ignorés, pas d'exec.
+
+**Sous-agents** : `agents.json` (hooks SubagentStart/Stop), `epic` = l'épic
+actif de `main` au démarrage (absent = 0). En cours = pas de `stop` et
+démarré il y a < 12 h. Un sous-agent dont l'épic est affiché va dans sa
+pastille ; les autres (épic 0 ou épic non affiché) vont en **ligne 1**, dans
+le segment OS après le glyphe de santé : `󰚩 N`.
 
 ## Répertoire actif
 

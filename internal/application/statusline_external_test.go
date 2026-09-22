@@ -148,23 +148,31 @@ func TestGenerate_WorkDirAndHealth(t *testing.T) {
 	}
 }
 
-type mockTasksProv struct{ list model.TaskList }
+type mockTasksProv struct{ board model.TaskBoard }
 
-func (m *mockTasksProv) Tasks() model.TaskList { return m.list }
-func (m *mockTasksProv) Subagents() int        { return 2 }
+func (m *mockTasksProv) Board() model.TaskBoard { return m.board }
+
+type mockActivityProv struct{ working bool }
+
+func (m *mockActivityProv) Working() bool { return m.working }
 
 func TestGenerate_Tasks(t *testing.T) {
 	rend := &capturingRenderer{}
 	list := model.TaskList{Items: []model.TaskItem{{ID: "1", Subject: "x", Status: model.TaskPending}}}
+	board := model.TaskBoard{Epics: []model.Epic{{ID: 1, Title: "SDK", Active: true, Tasks: list}}, Unattributed: 2}
 	deps := application.ServiceDeps{
 		Git: &mockGitRepo{}, System: &mockSystemProv{}, Terminal: &mockTerminalProv{},
-		MCP: &mockMCPProv{}, Usage: &mockUsageProv{}, Tasks: &mockTasksProv{list: list},
+		MCP: &mockMCPProv{}, Usage: &mockUsageProv{}, Tasks: &mockTasksProv{board: board},
+		Activity: &mockActivityProv{working: true},
 	}
 	application.NewStatusLineService(deps, rend).Generate(&mockInputProvider{})
-	if rend.data.Tasks.Total() != 1 {
-		t.Errorf("Tasks.Total() = %d, want 1", rend.data.Tasks.Total())
+	if len(rend.data.Tasks.Epics) != 1 || rend.data.Tasks.Epics[0].Tasks.Total() != 1 {
+		t.Errorf("Tasks = %+v, want the one epic", rend.data.Tasks)
 	}
-	if rend.data.Subagents != 2 {
-		t.Errorf("Subagents = %d, want 2", rend.data.Subagents)
+	if rend.data.Tasks.Unattributed != 2 {
+		t.Errorf("Unattributed = %d, want 2", rend.data.Tasks.Unattributed)
+	}
+	if !rend.data.Working {
+		t.Error("Working = false, want the activity provider's answer")
 	}
 }
