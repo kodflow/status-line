@@ -80,12 +80,3 @@ func TestMCPServersWithSource(t *testing.T) {
 		t.Errorf("ghost: Source = %q, want unknown", busy[1].Source)
 	}
 }
-
-func TestMCPSourcesOrder(t *testing.T) {
-	want := []model.MCPSource{"managed", "cli", "local", "project", "user", "plugin"}
-	for i, src := range model.MCPSources {
-		if src != want[i] {
-			t.Errorf("MCPSources[%d] = %q, want %q", i, src, want[i])
-		}
-	}
-}

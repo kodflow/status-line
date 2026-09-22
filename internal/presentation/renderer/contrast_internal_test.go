@@ -78,8 +78,9 @@ func TestEverySegmentInkIsReadableOnItsOwnGround(t *testing.T) {
 		{name: "lines added", bg: BgGreen, fg: FgGreenText},
 		{name: "lines removed", bg: BgRed, fg: FgRedText},
 		{name: "mcp pill", bg: BgMCPEnabled, fg: FgMCPEnabledText},
-		{name: "mcp pill, disabled server", bg: BgMCPEnabled, fg: FgMCPMuted},
-		{name: "mcp label and server being called", bg: BgMCPLabel, fg: FgWhite},
+		{name: "mcp pill, disabled count", bg: BgMCPEnabled, fg: FgMCPMuted},
+		{name: "mcp pill during a call", bg: BgMCPLabel, fg: FgWhite},
+		{name: "mcp pill during a call, disabled count", bg: BgMCPLabel, fg: FgMCPEnabled},
 		{name: "epic pill", bg: BgEpic, fg: FgEpicInk},
 	}
 	for _, tt := range tests {

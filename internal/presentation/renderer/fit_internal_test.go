@@ -91,7 +91,10 @@ func TestFitLine1PicksTheFirstLevelThatFits(t *testing.T) {
 		{budget: 1, level: len(fitLevels) - 1},
 	}
 	for _, tt := range tests {
-		line, level := fitLine1(tt.budget, render)
+		line, level, fits := fitLine1(tt.budget, render)
+		if want := tt.budget != 1; fits != want {
+			t.Errorf("budget %d: fits = %v, want %v", tt.budget, fits, want)
+		}
 		if level != tt.level {
 			t.Errorf("budget %d: level %d, want %d", tt.budget, level, tt.level)
 		}
@@ -269,10 +272,13 @@ func BenchmarkRenderLine1(b *testing.B) {
 		{name: "no-width", width: 0},
 		{name: "fits-first", width: 1000},
 		{name: "cols-120", width: 120},
-		{name: "cols-80", width: 80},
+		{name: "cols-100", width: 100},
+		{name: "cols-80-pill-moves", width: 80},
 		{name: "overflows-all", width: 20},
 	} {
 		data := busyLine(bc.width)
+		// The MCP pill closes line one, or moves when there is no room
+		data.MCP = servers(7, 1)
 		b.Run(bc.name, func(b *testing.B) {
 			for b.Loop() {
 				var sb strings.Builder

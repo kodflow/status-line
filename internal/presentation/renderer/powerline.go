@@ -56,12 +56,13 @@ func (r *Powerline) Render(data model.StatusLineData) string {
 //   - sb: string builder to write to
 //   - data: status line data
 func (r *Powerline) renderCompact(sb *strings.Builder, data model.StatusLineData) {
-	// Line one carries everything the session is: identity, quotas, repository.
-	// Line two carries only what is ambient — the MCP servers and an update
-	// notice — as the original status line did.
-	r.renderLine1(sb, data)
+	// Line one carries everything the session is: identity, quotas,
+	// repository, and by default the MCP pill at its end. Line two carries
+	// the epics, the MCP pill when it is asked there or when line one has
+	// no room left for it, and an update notice.
+	mcpOnLine1 := r.renderLine1(sb, data)
 	sb.WriteString("\n" + LineGap())
-	r.renderLine2(sb, data)
+	r.renderLine2With(sb, data, !mcpOnLine1)
 	sb.WriteString("\n")
 }
 
@@ -69,16 +70,38 @@ func (r *Powerline) renderCompact(sb *strings.Builder, data model.StatusLineData
 //
 // The line is drawn whole first; while it is wider than the terminal
 // allows, it is drawn again one degradation step further (fitLevels). The
-// second line is never condensed: a long task title wraps instead.
+// MCP pill closes the line and is never given up: when even the tightest
+// level cannot hold it, it moves to line two instead. The second line is
+// never condensed: a long task title wraps instead.
 //
 // Params:
 //   - sb: string builder to write to
 //   - data: status line data
-func (r *Powerline) renderLine1(sb *strings.Builder, data model.StatusLineData) {
-	line, _ := fitLine1(lineBudget(data.Terminal.Width), func(buf *strings.Builder, fit lineFit) {
+//
+// Returns:
+//   - bool: true when the MCP pill was drawn on this line
+func (r *Powerline) renderLine1(sb *strings.Builder, data model.StatusLineData) bool {
+	budget := lineBudget(data.Terminal.Width)
+	pill := ""
+	// The pill closes line one unless it is asked to stay on line two
+	if !mcpOnLine2 {
+		pill = r.mcpPill(data.MCP)
+	}
+	line, _, fits := fitLine1(budget, func(buf *strings.Builder, fit lineFit) {
+		r.renderLine1Fit(buf, data, fit)
+		buf.WriteString(pill)
+	})
+	// No pill, or a line that holds it: done
+	if pill == "" || fits {
+		sb.WriteString(line)
+		return pill != ""
+	}
+	// Even the tightest line cannot hold the pill: it goes to line two
+	line, _, _ = fitLine1(budget, func(buf *strings.Builder, fit lineFit) {
 		r.renderLine1Fit(buf, data, fit)
 	})
 	sb.WriteString(line)
+	return false
 }
 
 // renderLine1Fit renders the first line with OS, Model, quota, Path, Git and
@@ -166,12 +189,23 @@ func (r *Powerline) renderLine1Fit(sb *strings.Builder, data model.StatusLineDat
 	r.renderChangesSegment(sb, changes)
 }
 
-// renderLine2 renders the second line with dynamic pills (MCP, Update).
+// renderLine2 renders the second line with the MCP pill on it.
 //
 // Params:
 //   - sb: string builder to write to
 //   - data: status line data
 func (r *Powerline) renderLine2(sb *strings.Builder, data model.StatusLineData) {
+	r.renderLine2With(sb, data, true)
+}
+
+// renderLine2With renders the second line with dynamic pills (epics, MCP,
+// Update).
+//
+// Params:
+//   - sb: string builder to write to
+//   - data: status line data
+//   - withMCP: whether the MCP pill goes on this line
+func (r *Powerline) renderLine2With(sb *strings.Builder, data model.StatusLineData, withMCP bool) {
 	// Track if we've rendered anything
 	hasContent := false
 
@@ -182,8 +216,9 @@ func (r *Powerline) renderLine2(sb *strings.Builder, data model.StatusLineData) 
 		hasContent = true
 	}
 
-	// One MCP pill sums up every server, after the epics
-	if len(data.MCP) > 0 {
+	// One MCP pill sums up every server, after the epics, unless line one
+	// already carries it
+	if withMCP && len(data.MCP) > 0 {
 		// Add separator space if previous content exists
 		if hasContent {
 			sb.WriteString(" ")

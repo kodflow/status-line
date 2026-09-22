@@ -171,11 +171,11 @@ func TestPowerline_renderLine2MCPBeforeUpdate(t *testing.T) {
 		Update: model.UpdateInfo{Available: true, Version: "v9.9.9"},
 	})
 	out := sb.String()
-	epic, pill, update := strings.Index(out, "SDK status-line"), strings.Index(out, "github"), strings.Index(out, "v9.9.9")
+	epic, pill, update := strings.Index(out, "SDK status-line"), strings.Index(out, glyphs.MCP+" 2"), strings.Index(out, "v9.9.9")
 	if epic < 0 || pill < 0 || update < 0 || !(epic < pill && pill < update) {
 		t.Errorf("want epic, then MCP, then update; got %q", out)
 	}
-	if strings.Count(out, FgMCPEnabledText+LeftRound) != 1 {
+	if strings.Count(out, FgMCPEnabled+LeftRound) != 1 {
 		t.Errorf("want a single MCP pill, got %q", out)
 	}
 }
@@ -299,7 +299,7 @@ func TestPowerline_renderLine2EpicsLeadTheLine(t *testing.T) {
 		Tasks: model.TaskBoard{Epics: []model.Epic{sampleEpic(), other}}, MCP: mcp,
 	})
 	out := sb.String()
-	first, second, pill := strings.Index(out, "SDK status-line 2/5"), strings.Index(out, "ktn-linter 0/1"), strings.Index(out, "github")
+	first, second, pill := strings.Index(out, "SDK status-line 2/5"), strings.Index(out, "ktn-linter 0/1"), strings.Index(out, glyphs.MCP+" 1")
 	if first < 0 || second < 0 || pill < 0 || !(first < second && second < pill) {
 		t.Errorf("want the epics in board order, then MCP; got %q", out)
 	}

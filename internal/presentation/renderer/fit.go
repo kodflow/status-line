@@ -148,7 +148,8 @@ func lineBudget(width int) int {
 // Returns:
 //   - string: the rendered line
 //   - int: the level chosen, len(fitLevels)-1 when even the last overflows
-func fitLine1(budget int, render func(*strings.Builder, lineFit)) (string, int) {
+//   - bool: false when even the last level overflows
+func fitLine1(budget int, render func(*strings.Builder, lineFit)) (string, int, bool) {
 	draw := func(level int) string {
 		var sb strings.Builder
 		render(&sb, fitLevels[level])
@@ -157,7 +158,7 @@ func fitLine1(budget int, render func(*strings.Builder, lineFit)) (string, int) 
 	full := draw(0)
 	// No budget, or a full line that fits, needs no search
 	if budget <= 0 || VisibleWidth(full) <= budget {
-		return full, 0
+		return full, 0, true
 	}
 	last := len(fitLevels) - 1
 	best, bestLine := last, ""
@@ -175,9 +176,9 @@ func fitLine1(budget int, render func(*strings.Builder, lineFit)) (string, int) 
 	}
 	// Nothing fits: keep the tightest line, the host wraps what is left
 	if bestLine == "" {
-		bestLine = draw(last)
+		return draw(last), last, false
 	}
-	return bestLine, best
+	return bestLine, best, true
 }
 
 // quotaLabel names a quota inside the model segment.

@@ -2,6 +2,7 @@
 package renderer
 
 import (
+	"os"
 	"strings"
 
 	"github.com/florent/status-line/internal/domain/model"
@@ -9,164 +10,88 @@ import (
 
 // MCP pill constants.
 const (
-	// mcpLabel names the MCP pill.
-	mcpLabel string = "MCP"
-	// mcpOffLabel names the count of disabled servers.
-	mcpOffLabel string = "off"
-	// mcpUnknownPrefix marks a server called but declared by no scope.
-	mcpUnknownPrefix string = "+"
+	// mcpLineEnv names the variable choosing the line of the MCP pill.
+	mcpLineEnv string = "STATUSLINE_MCP_LINE"
+	// mcpLineTwo keeps the pill on line two.
+	mcpLineTwo string = "2"
+	// mcpOffMark opens the count of disabled servers.
+	mcpOffMark string = "\u00b7"
 )
 
-// mcpItemKind tells how one entry of the MCP pill is drawn at rest.
-type mcpItemKind int
+// mcpOnLine2 is true when the pill is asked to stay on line two; by default
+// it closes line one. Resolved once at startup; tests replace it.
+var mcpOnLine2 = os.Getenv(mcpLineEnv) == mcpLineTwo
 
-// Entry kinds of the MCP pill.
-const (
-	// mcpItemSource is an enabled-server count for one scope.
-	mcpItemSource mcpItemKind = iota
-	// mcpItemUnknown is a server nobody declared, named after a "+".
-	mcpItemUnknown
-	// mcpItemOff is the count of disabled servers, muted and crossed out.
-	mcpItemOff
-)
-
-// mcpItem is one entry of the MCP pill: "cli 5", "+name" or "off 2".
-type mcpItem struct {
-	text string
-	kind mcpItemKind
+// mcpSummary is everything the MCP pill says.
+type mcpSummary struct {
+	// on counts the enabled servers, undeclared ones being called included
+	on int
+	// off counts the disabled servers
+	off int
+	// busy is true while a call to any server is in flight
 	busy bool
 }
 
-// mcpItems sums the servers up per scope, in precedence order.
-//
-// Enabled servers are counted per scope, a scope with none is left out; a
-// server no scope declared (seen only through a call) is named on its own
-// after a "+"; disabled servers, whatever their scope, make one "off N" at
-// the end. An entry is busy when a server it counts is being called, so the
-// light lands on the scope that owns the call.
+// summarizeMCP counts the servers and tells whether one is being called.
 //
 // Params:
 //   - servers: servers to sum up
 //
 // Returns:
-//   - []mcpItem: entries in drawing order, empty when there is no server
-func mcpItems(servers model.MCPServers) []mcpItem {
-	var (
-		counts  [len(model.MCPSources)]int
-		busy    [len(model.MCPSources)]bool
-		unknown []mcpItem
-		off     int
-		offBusy bool
-	)
-	// File each server under its scope, or aside
+//   - mcpSummary: counts and call state
+func summarizeMCP(servers model.MCPServers) mcpSummary {
+	var s mcpSummary
+	// One pass: count by state, note any call
 	for _, srv := range servers {
-		// Disabled servers only count as a whole
-		if !srv.Enabled {
-			off++
-			offBusy = offBusy || srv.Busy
-			continue
+		// Enabled and disabled are counted apart
+		if srv.Enabled {
+			s.on++
+		} else {
+			s.off++
 		}
-		idx := mcpSourceIndex(srv.Source)
-		// A server outside every scope is named rather than counted
-		if idx < 0 {
-			unknown = append(unknown, mcpItem{text: mcpUnknownPrefix + srv.Name, kind: mcpItemUnknown, busy: srv.Busy})
-			continue
-		}
-		counts[idx]++
-		busy[idx] = busy[idx] || srv.Busy
+		s.busy = s.busy || srv.Busy
 	}
-
-	items := make([]mcpItem, 0, len(counts)+len(unknown)+1)
-	// Scopes in precedence order, the empty ones left out
-	for idx, n := range counts {
-		// A scope that declares nothing enabled says nothing
-		if n == 0 {
-			continue
-		}
-		items = append(items, mcpItem{text: string(model.MCPSources[idx]) + " " + itoa(n), kind: mcpItemSource, busy: busy[idx]})
-	}
-	items = append(items, unknown...)
-	// The disabled servers close the list
-	if off > 0 {
-		items = append(items, mcpItem{text: mcpOffLabel + " " + itoa(off), kind: mcpItemOff, busy: offBusy})
-	}
-	return items
+	return s
 }
 
-// mcpSourceIndex finds a scope in precedence order.
-//
-// Params:
-//   - src: scope to find
-//
-// Returns:
-//   - int: index in model.MCPSources, -1 for an unknown scope
-func mcpSourceIndex(src model.MCPSource) int {
-	// A handful of scopes: a linear scan is the cheapest lookup
-	for idx, known := range model.MCPSources {
-		// Match the scope by its name
-		if known == src {
-			return idx
-		}
-	}
-	return -1
-}
-
-// renderMCPPill renders every MCP server in one two-part pill.
-//
-// Left, the bold white label on dark teal; an arrow hands over to the light
-// teal body: enabled servers counted per scope ("cli 5 · user 1"), a server
-// no scope declares named after a "+", then "off N" muted and crossed out
-// for the disabled ones, all divided by a middle dot. The entry that owns a
-// server being called lights up as a dark teal chip with bold white ink,
-// the label's own colours. No server, no pill.
+// renderMCPPill renders the MCP servers as one small pill: the MCP glyph
+// and the number of enabled servers (text glyphs: "MCP 7"), then, when some
+// are disabled, a muted "·N" crossed out. While a call is in flight the
+// whole pill takes the chip colours, bold white on dark teal; the disabled
+// count stays, in pale teal. No server, no pill.
 //
 // Params:
 //   - sb: string builder to write to
 //   - servers: list of MCP servers
 func (r *Powerline) renderMCPPill(sb *strings.Builder, servers model.MCPServers) {
-	items := mcpItems(servers)
+	s := summarizeMCP(servers)
 	// Nothing configured draws nothing
-	if len(items) == 0 {
+	if s.on+s.off == 0 {
 		return
 	}
-
-	sb.WriteString(" " + FgMCPEnabledText + LeftRound + Reset)
-	sb.WriteString(BgMCPLabel + FgWhite + Bold + " " + mcpLabel + " " + Reset)
-	sb.WriteString(BgMCPEnabled + FgMCPEnabledText + glyphs.MCPArrow)
-	// Each entry in its own style, the arrow opening the list
-	for idx, item := range items {
-		ink := FgMCPEnabledText
-		// The disabled count is muted, its divider too
-		if item.kind == mcpItemOff {
-			ink = FgMCPMuted
-		}
-		// The arrow opens the list, a dot divides the rest
-		if idx == 0 {
-			sb.WriteString(" ")
-		} else {
-			sb.WriteString(ink + mcpSeparator)
-		}
-		writeMCPItem(sb, item, ink)
+	// At rest: dark ink on pale teal; lit: the chip colours
+	bg, ink, cap, offInk := BgMCPEnabled, FgMCPEnabledText, FgMCPEnabled, FgMCPMuted
+	if s.busy {
+		bg, ink, cap, offInk = BgMCPLabel, FgWhite, FgMCPEnabledText, FgMCPEnabled
 	}
-	sb.WriteString(" " + Reset)
-	sb.WriteString(FgMCPEnabled + RightRound + Reset)
+	sb.WriteString(" " + cap + LeftRound + Reset)
+	sb.WriteString(bg + ink + Bold + " " + Labelled(glyphs.MCP, itoa(s.on)) + Reset)
+	// The disabled servers are a discreet suffix, never a label of their own
+	if s.off > 0 {
+		sb.WriteString(bg + offInk + " " + mcpOffMark + StrikeMCP + itoa(s.off) + Reset)
+	}
+	sb.WriteString(bg + " " + Reset + cap + RightRound + Reset)
 }
 
-// writeMCPItem writes one entry inside the pill's body.
+// mcpPill renders the MCP pill on its own.
 //
 // Params:
-//   - sb: string builder to write to
-//   - item: entry to write
-//   - ink: ink of the entry at rest
-func writeMCPItem(sb *strings.Builder, item mcpItem, ink string) {
-	// An entry owning a call pops out as a chip in the label's colours
-	if item.busy {
-		sb.WriteString(BgMCPLabel + FgWhite + Bold + item.text + Reset + BgMCPEnabled)
-		return
-	}
-	// The disabled count is crossed out as well as muted
-	if item.kind == mcpItemOff {
-		ink += StrikeMCP
-	}
-	sb.WriteString(ink + item.text + Reset + BgMCPEnabled)
+//   - servers: list of MCP servers
+//
+// Returns:
+//   - string: the pill, empty when there is no server
+func (r *Powerline) mcpPill(servers model.MCPServers) string {
+	var sb strings.Builder
+	r.renderMCPPill(&sb, servers)
+	return sb.String()
 }

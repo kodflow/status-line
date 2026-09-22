@@ -6,8 +6,8 @@ import "strings"
 // MCPSource names the configuration scope that declared an MCP server.
 type MCPSource string
 
-// Configuration scopes, strongest first. The values are the short lowercase
-// names the status line prints.
+// Configuration scopes, strongest first. The pill only shows totals; the
+// scope is kept for whoever needs to tell where a server comes from.
 const (
 	// MCPSourceUnknown is a server nobody declared: a call to it was seen
 	// in the transcript but no configuration names it.
@@ -25,12 +25,6 @@ const (
 	// MCPSourcePlugin is an enabled plugin's .mcp.json.
 	MCPSourcePlugin MCPSource = "plugin"
 )
-
-// MCPSources lists the known scopes in precedence order, strongest first.
-var MCPSources = [...]MCPSource{
-	MCPSourceManaged, MCPSourceCLI, MCPSourceLocal,
-	MCPSourceProject, MCPSourceUser, MCPSourcePlugin,
-}
 
 // MCPServer represents an MCP server configuration.
 // It holds the server name, its enabled status, for a server a plugin

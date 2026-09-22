@@ -33,12 +33,14 @@ make build          # Compile le binaire → bin/status-line
 make test           # Lance les tests (go test ./...)
 make lint           # Vérifie le code (ktn-linter)
 make demo           # Démo avec données exemple
-go run ./demo/widths            # ligne 1 d'une session chargée à 200…60 colonnes
-go run ./demo/mcpline1 [-busy]  # maquettes : pastille MCP courte en ligne 1 (non branchée)
+go run ./demo/widths [-light] [cols…]  # session chargée à 200…60 colonnes
 ```
 
-`demo/` = outils de dev (`demo/sample` = état réaliste partagé) ; ils
-utilisent le vrai renderer mais rien de ce qu'ils composent n'est dans le produit.
+Tout go test / go build / go vet passe par `~/.local/bin/lourd <cmd>` (slice
+systemd plafonnée, partagée entre agents).
+
+`demo/` = outil de dev (`demo/sample` = état réaliste) ; il utilise le vrai
+renderer.
 
 ## Affichage
 
@@ -50,6 +52,8 @@ binaire : une somme absente, malformée ou différente annule la mise à jour.
 `STATUSLINE_GLYPHS` = `nerd` (défaut) | `text` (repli ASCII, sans Nerd Font)
 `STATUSLINE_COLORS` = `truecolor` | `256` force la profondeur de couleur ;
 absent, elle suit `COLORTERM` (`truecolor`/`24bit` → 24 bits, sinon 256)
+`STATUSLINE_MCP_LINE` = `2` garde la pastille MCP en ligne 2 (défaut : fin
+de ligne 1)
 `STATUSLINE_HIDE` = pastilles à masquer, séparées par des virgules :
 `context`, `session`, `weekly`, `model`, `credits`, `health`
 
@@ -65,6 +69,7 @@ symbole Unicode générique retombe sur une autre police et devient illisible.
 | Path | Répertoire où la session travaille réellement (voir ci-dessous) |
 | Git | Branche + modifiés/non-trackés + nombre de worktrees liés (hors prunable) |
 | Changes | Lignes ajoutées/supprimées |
+| MCP | Pastille `󰒍 N` en fin de ligne (voir Serveurs MCP) |
 
 Les quotas du compte (session 5h, hebdo, quota scopé au modèle courant) sont
 rendus dans le segment du modèle, séparés par un `\ue0b1`. Un quota scopé à une
@@ -101,8 +106,15 @@ tient, 5 au plus sinon (~20 µs vs ~80 µs sur i5-3210M). Aucun niveau ne
 tient → le dernier. Largeur 0 (tests) = pas de contrainte. Une ligne
 complète fait ~240 cellules, ~120 après l'étape 7, ~75 après la 11.
 
-**Ligne 2 :** une pastille par épic ouvert mène la ligne, puis **une**
-pastille MCP, puis la mise à jour. Aucune troncature : un titre long passe à la
+La pastille MCP ferme la ligne 1 à chaque niveau et n'est **jamais**
+abandonnée (≈ 8-11 cellules) : si même le dernier niveau ne la tient pas,
+elle passe en ligne 2 et la ligne 1 est ajustée à nouveau sans elle (la
+session chargée de `demo/widths` à 80 colonnes : pastille en ligne 2 ;
+`-light` : en ligne 1).
+
+**Ligne 2 :** une pastille par épic ouvert mène la ligne, puis la pastille
+MCP si elle y est (`STATUSLINE_MCP_LINE=2`, ou ligne 1 trop pleine), puis la
+mise à jour. Aucune troncature : un titre long passe à la
 ligne plutôt que d'être coupé.
 
 ## Serveurs MCP
@@ -132,19 +144,14 @@ Désactivé = `"disabled": true`, ou listé dans `projects[<dir>].disabledMcpSer
 (nom nu ou `plugin:<plugin>:<serveur>`) ; `disabledMcpjsonServers` vise
 `.mcp.json`. Tout fichier illisible ou malformé est ignoré ; pas d'exec.
 
-**Pastille (courte)** : à gauche le libellé `MCP` gras, blanc 255 sur
-sarcelle foncée 23 (capuchon gauche en 23) ; une flèche `\ue0b0` (texte : `>`)
-passe au corps sur sarcelle claire 116, encre 23 : les serveurs actifs
-**comptés par portée** dans l'ordre de priorité, en minuscules —
-`managed`, `cli`, `local`, `project`, `user`, `plugin` (`model.MCPSources`) —
-portée vide omise, séparées par un point médian : `cli 5 · user 1 · plugin 1`.
-Les désactivés, toutes portées confondues, ferment la liste en `· off N`,
-barré, encre 239 (240 ne tient que 4.31:1 sur 116), si N > 0. L'adaptateur
-pose `MCPServer.Source` (`WithSource`) sur chaque source avant la fusion : la
-portée qui gagne le nom est celle comptée. Capuchon droit en 116. Aucun
-serveur, aucune pastille. `demo/mcpline1` montre 5 emplacements possibles en
-ligne 1 (dans l'OS, entre modèle et contexte, après git, dans le contexte,
-en fin) : à 80 colonnes, aucun ne tient (~40 cellules de trop).
+**Pastille** : glyphe MCP `\U000F048D` (󰒍, présent dans MesloLGS NF —
+vérifié `fc-list ":charset=f048d"`) puis le **total** des serveurs actifs,
+gras, encre 23 sur sarcelle claire 116, capuchons arrondis 116 : `󰒍 7`
+(glyphes texte : `MCP 7`). Aucun détail par portée, aucun libellé. Des
+serveurs désactivés ajoutent un suffixe discret `·N`, encre 239 (240 ne tient
+que 4.31:1 sur 116), N barré. Aucun serveur, aucune pastille.
+L'adaptateur garde la portée (`MCPServer.Source`, `WithSource`, posée sur
+chaque source avant la fusion) : donnée utile, non affichée.
 
 **Appels en cours** (`adapter/mcpcalls`, sans hook) : 128 Ko de fin de
 `transcript_path` et des transcripts des sous-agents en cours
@@ -154,11 +161,9 @@ il reste allumé 2 s après le `timestamp` du résultat (la ligne se redessine
 chaque seconde, un appel court ne se verrait jamais). Un appel sans résultat
 depuis 30 min est tenu pour perdu. Clé → serveur (`model.WithBusy`) :
 nom normalisé (`[^A-Za-z0-9_-]` → `_`), `plugin_<plugin>_<serveur>` → serveur ;
-une clé inconnue est ajoutée, allumée, sans portée. Un appel allume
-l'**entrée de la portée** qui possède le serveur (`cli 5` devient une pastille
-dans la pastille aux couleurs du libellé, 255 gras sur 23, 7.5:1) ; un serveur
-désactivé appelé allume `off N` ; un serveur sans portée s'affiche seul,
-`+nom`, allumé, avant `off N`. Lecture de queue partagée avec `activity` : `adapter/transcript`.
+une clé inconnue est ajoutée, allumée, sans portée, comptée active. Un appel
+en vol (ou dans les 2 s) allume **toute la pastille** : 255 gras sur 23
+(7.5:1), capuchons 23 ; le suffixe `·N` reste, en 116 sur 23 (4.54:1). Lecture de queue partagée avec `activity` : `adapter/transcript`.
 
 ## Effort
 
