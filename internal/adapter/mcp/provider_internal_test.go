@@ -109,12 +109,29 @@ func TestServersEmptyMachine(t *testing.T) {
 	}
 }
 
-func TestServersEachSource(t *testing.T) {
-	tests := []struct {
-		name  string
-		setup func(t *testing.T, f *fixture, p *Provider)
-		want  string
-	}{
+// sourceCase is one machine setup and the servers it must produce.
+type sourceCase struct {
+	name  string
+	setup func(t *testing.T, f *fixture, p *Provider)
+	want  string
+}
+
+// runSourceCases runs each case on a fresh machine.
+func runSourceCases(t *testing.T, tests []sourceCase) {
+	t.Helper()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f, p := newFixture(t)
+			tt.setup(t, f, p)
+			if got := names(p.Servers()); got != tt.want {
+				t.Errorf("Servers() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestServersConfigFiles(t *testing.T) {
+	runSourceCases(t, []sourceCase{
 		{
 			name: "user scope",
 			setup: func(t *testing.T, f *fixture, _ *Provider) {
@@ -158,6 +175,11 @@ func TestServersEachSource(t *testing.T) {
 			},
 			want: "corp",
 		},
+	})
+}
+
+func TestServersCommandLine(t *testing.T) {
+	runSourceCases(t, []sourceCase{
 		{
 			name: "command line file",
 			setup: func(t *testing.T, f *fixture, p *Provider) {
@@ -184,6 +206,11 @@ func TestServersEachSource(t *testing.T) {
 			},
 			want: "a,shared,c,b",
 		},
+	})
+}
+
+func TestServersCommandLineEdges(t *testing.T) {
+	runSourceCases(t, []sourceCase{
 		{
 			name: "command line relative path resolves against the host cwd",
 			setup: func(t *testing.T, f *fixture, p *Provider) {
@@ -202,6 +229,11 @@ func TestServersEachSource(t *testing.T) {
 			},
 			want: "",
 		},
+	})
+}
+
+func TestServersPlugins(t *testing.T) {
+	runSourceCases(t, []sourceCase{
 		{
 			name: "plugin enabled",
 			setup: func(t *testing.T, f *fixture, _ *Provider) {
@@ -234,6 +266,11 @@ func TestServersEachSource(t *testing.T) {
 			},
 			want: "",
 		},
+	})
+}
+
+func TestServersPluginScope(t *testing.T) {
+	runSourceCases(t, []sourceCase{
 		{
 			name: "plugin disabled by project local settings",
 			setup: func(t *testing.T, f *fixture, _ *Provider) {
@@ -263,16 +300,7 @@ func TestServersEachSource(t *testing.T) {
 			},
 			want: "",
 		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			f, p := newFixture(t)
-			tt.setup(t, f, p)
-			if got := names(p.Servers()); got != tt.want {
-				t.Errorf("Servers() = %q, want %q", got, tt.want)
-			}
-		})
-	}
+	})
 }
 
 // installPlugin registers a plugin whose manifest is body (none when empty).
