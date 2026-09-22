@@ -15,9 +15,11 @@ internal/
 ├── adapter/                 # Adaptateurs externes
 │   ├── git/                 # Git status + diff stats
 │   ├── mcp/                 # Serveurs MCP (config, --mcp-config de l'hôte, plugins)
+│   ├── mcpcalls/            # Serveurs MCP appelés en ce moment (transcripts)
 │   ├── sessionstate/        # Session occupée + pid hôte (<config>/sessions/<pid>.json)
 │   ├── system/              # Info système (OS, Docker)
 │   ├── terminal/            # Info terminal (largeur, couleurs)
+│   ├── transcript/          # Lecture de la fin d'un transcript JSONL
 │   ├── updater/             # Auto-update binaire (GitHub releases)
 │   └── usage/               # Usage API Anthropic (OAuth, burn-rate)
 └── presentation/
@@ -105,10 +107,23 @@ Désactivé = `"disabled": true`, ou listé dans `projects[<dir>].disabledMcpSer
 (nom nu ou `plugin:<plugin>:<serveur>`) ; `disabledMcpjsonServers` vise
 `.mcp.json`. Tout fichier illisible ou malformé est ignoré ; pas d'exec.
 
-**Pastille** : fond sarcelle 116, encre 23, glyphe prise `\uf1e6` (texte :
-`MCP`), puis les serveurs actifs séparés par ` · `, triés sans casse ; les
-désactivés suivent, barrés, encre 239 (240 ne tient que 4.31:1 sur 116).
-Aucun serveur, aucune pastille.
+**Pastille (variante 9)** : à gauche le libellé `MCP` gras, blanc 255 sur
+sarcelle foncée 23 (capuchon gauche en 23) ; une flèche `\ue0b0` (texte : `>`)
+passe à la liste sur sarcelle claire 116, encre 23 : serveurs actifs séparés par
+` · `, triés sans casse ; les désactivés suivent, barrés, encre 239 (240 ne tient
+que 4.31:1 sur 116). Capuchon droit en 116. Aucun serveur, aucune pastille.
+
+**Appels en cours** (`adapter/mcpcalls`, sans hook) : 128 Ko de fin de
+`transcript_path` et des transcripts des sous-agents en cours
+(`agents.json`, `<dir transcript>/<session>/subagents/agent-<id>.jsonl`).
+Appel en vol = `tool_use` `mcp__<clé>__<outil>` sans `tool_result` plus loin ;
+il reste allumé 2 s après le `timestamp` du résultat (la ligne se redessine
+chaque seconde, un appel court ne se verrait jamais). Un appel sans résultat
+depuis 30 min est tenu pour perdu. Clé → serveur (`model.WithBusy`) :
+nom normalisé (`[^A-Za-z0-9_-]` → `_`), `plugin_<plugin>_<serveur>` → serveur ;
+une clé inconnue est ajoutée, allumée. Un serveur allumé = pastille dans la
+pastille aux couleurs du libellé (255 gras sur 23, 7.5:1) ; il ne change pas
+de place. Lecture de queue partagée avec `activity` : `adapter/transcript`.
 
 ## Effort
 

@@ -32,7 +32,7 @@ type GlyphSet struct {
 	TaskOpen  string
 	TaskDone  string
 	Subagents string
-	MCP       string
+	MCPArrow  string
 }
 
 // nerdGlyphs is the default set, drawn from the Nerd Font ranges.
@@ -56,7 +56,7 @@ var nerdGlyphs = GlyphSet{
 	TaskOpen:  "\u25a1",
 	TaskDone:  "\u25a0",
 	Subagents: "\U000F06A9",
-	MCP:       "\uf1e6",
+	MCPArrow:  SepRight,
 }
 
 // textGlyphs is the fallback set: nothing outside printable ASCII, so it
@@ -81,7 +81,7 @@ var textGlyphs = GlyphSet{
 	TaskOpen:  "-",
 	TaskDone:  "#",
 	Subagents: "agents",
-	MCP:       "MCP",
+	MCPArrow:  ">",
 }
 
 // glyphs is the active set, resolved once at startup.

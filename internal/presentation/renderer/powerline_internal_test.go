@@ -168,6 +168,7 @@ func TestPowerline_renderMCPPill(t *testing.T) {
 	strip := func(s string) string {
 		return regexp.MustCompile("\033\\[[0-9;]*m").ReplaceAllString(s, "")
 	}
+	head := " " + LeftRound + " MCP " + glyphs.MCPArrow
 	tests := []struct {
 		name    string
 		servers model.MCPServers
@@ -180,19 +181,24 @@ func TestPowerline_renderMCPPill(t *testing.T) {
 				{Name: "tasks", Enabled: true}, {Name: "GitKraken", Enabled: true},
 				{Name: "codacy", Enabled: true}, {Name: "github", Enabled: true},
 			},
-			want: " " + LeftRound + " " + glyphs.MCP + " codacy \u00b7 github \u00b7 GitKraken \u00b7 tasks " + RightRound,
+			want: head + " codacy \u00b7 github \u00b7 GitKraken \u00b7 tasks " + RightRound,
 		},
 		{
 			name: "disabled after enabled",
 			servers: model.MCPServers{
 				{Name: "zeta", Enabled: false}, {Name: "beta", Enabled: true}, {Name: "Alpha", Enabled: false},
 			},
-			want: " " + LeftRound + " " + glyphs.MCP + " beta \u00b7 Alpha \u00b7 zeta " + RightRound,
+			want: head + " beta \u00b7 Alpha \u00b7 zeta " + RightRound,
 		},
 		{
 			name:    "only disabled",
 			servers: model.MCPServers{{Name: "off", Enabled: false}},
-			want:    " " + LeftRound + " " + glyphs.MCP + " off " + RightRound,
+			want:    head + " off " + RightRound,
+		},
+		{
+			name:    "a busy server keeps its place",
+			servers: model.MCPServers{{Name: "b", Enabled: true, Busy: true}, {Name: "a", Enabled: true}, {Name: "c", Busy: true}},
+			want:    head + " a \u00b7 b \u00b7 c " + RightRound,
 		},
 	}
 	for _, tt := range tests {
@@ -211,19 +217,39 @@ func TestPowerline_renderMCPPill(t *testing.T) {
 
 func TestPowerline_renderMCPPillStyling(t *testing.T) {
 	var sb strings.Builder
-	(&Powerline{}).renderMCPPill(&sb, model.MCPServers{{Name: "on", Enabled: true}, {Name: "down", Enabled: false}})
+	(&Powerline{}).renderMCPPill(&sb, model.MCPServers{
+		{Name: "on", Enabled: true}, {Name: "down", Enabled: false}, {Name: "lit", Enabled: true, Busy: true},
+	})
 	out := sb.String()
-	if !strings.HasPrefix(out, " "+FgMCPEnabled+LeftRound+Reset+BgMCPEnabled+FgMCPEnabledText+" "+glyphs.MCP+" on") {
-		t.Errorf("the pill opens teal with the plug glyph and the enabled ink, got %q", out)
+	label := " " + FgMCPEnabledText + LeftRound + Reset + BgMCPLabel + FgWhite + Bold + " MCP " + Reset
+	if !strings.HasPrefix(out, label+BgMCPEnabled+FgMCPEnabledText+glyphs.MCPArrow+" ") {
+		t.Errorf("the pill opens with the white label on dark teal, then the arrow, got %q", out)
+	}
+	if !strings.Contains(out, FgMCPEnabledText+"on"+Reset+BgMCPEnabled) {
+		t.Errorf("an enabled server at rest is ink 23 on the light teal, got %q", out)
 	}
 	if !strings.Contains(out, FgMCPMuted+StrikeMCP+"down"+Reset+BgMCPEnabled) {
 		t.Errorf("a disabled server is muted and crossed out on the teal, got %q", out)
 	}
-	if strings.Contains(out, StrikeMCP+"on") {
-		t.Errorf("an enabled server is not crossed out, got %q", out)
+	if !strings.Contains(out, BgMCPLabel+FgWhite+Bold+"lit"+Reset+BgMCPEnabled) {
+		t.Errorf("a server being called is a bold white chip on dark teal, got %q", out)
 	}
-	if !strings.HasSuffix(out, FgMCPEnabled+RightRound+Reset) {
-		t.Errorf("the pill closes with a teal cap, got %q", out)
+	if strings.Contains(out, StrikeMCP+"on") || strings.Contains(out, BgMCPLabel+FgWhite+Bold+"on") {
+		t.Errorf("an enabled idle server is neither crossed out nor lit, got %q", out)
+	}
+	if !strings.HasSuffix(out, " "+Reset+FgMCPEnabled+RightRound+Reset) {
+		t.Errorf("the pill closes with a light teal cap, got %q", out)
+	}
+}
+
+func TestPowerline_renderMCPPillTextGlyphs(t *testing.T) {
+	saved := glyphs
+	t.Cleanup(func() { glyphs = saved })
+	glyphs = textGlyphs
+	var sb strings.Builder
+	(&Powerline{}).renderMCPPill(&sb, model.MCPServers{{Name: "x", Enabled: true}})
+	if !strings.Contains(sb.String(), " MCP "+Reset+BgMCPEnabled+FgMCPEnabledText+">") {
+		t.Errorf("text glyphs: want the MCP label then '>', got %q", sb.String())
 	}
 }
 
@@ -239,7 +265,7 @@ func TestPowerline_renderLine2MCPBeforeUpdate(t *testing.T) {
 	if epic < 0 || pill < 0 || update < 0 || !(epic < pill && pill < update) {
 		t.Errorf("want epic, then MCP, then update; got %q", out)
 	}
-	if strings.Count(out, FgMCPEnabled+LeftRound) != 1 {
+	if strings.Count(out, FgMCPEnabledText+LeftRound) != 1 {
 		t.Errorf("want a single MCP pill, got %q", out)
 	}
 }

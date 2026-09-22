@@ -12,6 +12,7 @@ import (
 	"github.com/florent/status-line/internal/adapter/git"
 	"github.com/florent/status-line/internal/adapter/health"
 	"github.com/florent/status-line/internal/adapter/mcp"
+	"github.com/florent/status-line/internal/adapter/mcpcalls"
 	"github.com/florent/status-line/internal/adapter/sessionstate"
 	"github.com/florent/status-line/internal/adapter/system"
 	"github.com/florent/status-line/internal/adapter/tasks"
@@ -159,6 +160,7 @@ func buildService(input *model.Input) *application.StatusLineService {
 		System:   system.NewProvider(),
 		Terminal: terminal.NewProvider(),
 		MCP:      mcp.NewProvider(sessionDir, session.PID),
+		MCPCalls: mcpcalls.NewProvider(input.TranscriptPath(), input.Session()),
 		Usage:    usage.NewProvider(),
 		Health:   health.NewProvider(),
 		Tasks:    tasks.NewProvider(input.Session()),

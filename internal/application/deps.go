@@ -10,6 +10,8 @@ type ServiceDeps struct {
 	System   port.SystemProvider
 	Terminal port.TerminalProvider
 	MCP      port.MCPProvider
+	// MCPCalls lights the servers being called; optional
+	MCPCalls port.MCPCallsProvider
 	Usage    port.UsageProvider
 	Health   port.HealthProvider
 	Tasks    port.TasksProvider

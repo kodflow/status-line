@@ -86,6 +86,9 @@ const (
 	FgMCPEnabled string = "\033[38;5;116m"
 	// FgMCPEnabledText is the dark teal for text on enabled MCP background.
 	FgMCPEnabledText string = "\033[38;5;23m"
+	// BgMCPLabel is the dark teal ground of the MCP label and of a server
+	// being called.
+	BgMCPLabel string = "\033[48;5;23m"
 	// FgMCPMuted is the gray ink of a disabled server inside the MCP pill.
 	// 240 only reaches 4.31:1 on the teal; 239 clears 4.5:1 (5.05:1).
 	FgMCPMuted string = "\033[38;5;239m"

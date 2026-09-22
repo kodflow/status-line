@@ -81,7 +81,7 @@ A quota scoped to one model family shows only while that model is in use.
 dashboard:
   [OS] [Opus 5 ●] [/path] [git branch !2 ?1] [+50] [-10]
   [ctx ██░░ 10% 103k/1M] [session ██░│░ 15% ▸33% ⟳2h46] [⛁ 95% ⟳47m] [$1.83]
-  [ codacy · github · tasks] [ v0.4.0]
+  [MCP  codacy · github · tasks] [ v0.4.0]
 ```
 
 ### Segments
@@ -94,7 +94,7 @@ dashboard:
 | Path | Current working directory |
 | Git | Branch name, modified (!), untracked (?) |
 | Changes | Lines added (+) and removed (-) |
-| MCP | One pill: enabled servers sorted, disabled ones crossed out after them. Sources: managed, `--mcp-config` of the running session (Linux), local, project, user, enabled plugins |
+| MCP | One pill: `MCP` label, then enabled servers sorted, disabled ones crossed out after them; a server being called (read from the transcripts) lights up for the call and 2 s after. Sources: managed, `--mcp-config` of the running session (Linux), local, project, user, enabled plugins |
 | Update | Shows version when update is downloading |
 
 ## Environment Variables

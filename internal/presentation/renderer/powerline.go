@@ -500,11 +500,16 @@ func (r *Powerline) renderWeeklySegment(sb *strings.Builder, usage model.Limit) 
 	sb.WriteString(BgBlue + FgWeekly + SepRight + Reset)
 }
 
-// renderMCPPill renders every MCP server in one teal pill.
+// mcpLabel names the MCP pill.
+const mcpLabel string = "MCP"
+
+// renderMCPPill renders every MCP server in one two-part pill.
 //
-// The plug glyph leads, then the enabled servers and, after them, the
-// disabled ones crossed out in gray; each group sorted case-insensitively and
-// the names separated by a middle dot. No server, no pill.
+// Left, the bold white label on dark teal; an arrow hands over to the light
+// teal list: enabled servers, then the disabled ones crossed out in gray,
+// each group sorted case-insensitively and divided by a middle dot. A server
+// being called lights up as a dark teal chip with bold white ink, the
+// label's own colours. No server, no pill.
 //
 // Params:
 //   - sb: string builder to write to
@@ -516,30 +521,46 @@ func (r *Powerline) renderMCPPill(sb *strings.Builder, servers model.MCPServers)
 	}
 	on, off := splitMCPServers(servers)
 
-	sb.WriteString(" " + FgMCPEnabled + LeftRound + Reset)
-	sb.WriteString(BgMCPEnabled + FgMCPEnabledText + " " + glyphs.MCP)
+	sb.WriteString(" " + FgMCPEnabledText + LeftRound + Reset)
+	sb.WriteString(BgMCPLabel + FgWhite + Bold + " " + mcpLabel + " " + Reset)
+	sb.WriteString(BgMCPEnabled + FgMCPEnabledText + glyphs.MCPArrow)
 	// Enabled servers in the pill's own ink
-	for idx, name := range on {
-		// The glyph opens the list, a dot divides the rest
+	for idx, srv := range on {
+		// The arrow opens the list, a dot divides the rest
 		if idx == 0 {
 			sb.WriteString(" ")
 		} else {
-			sb.WriteString(mcpSeparator)
+			sb.WriteString(FgMCPEnabledText + mcpSeparator)
 		}
-		sb.WriteString(name)
+		writeMCPName(sb, srv, FgMCPEnabledText)
 	}
 	// Disabled servers follow, muted and crossed out
-	for idx, name := range off {
+	for idx, srv := range off {
 		// The first one continues the list, or opens it when none is on
 		if idx == 0 && len(on) == 0 {
 			sb.WriteString(" ")
 		} else {
 			sb.WriteString(FgMCPMuted + mcpSeparator)
 		}
-		sb.WriteString(FgMCPMuted + StrikeMCP + name + Reset + BgMCPEnabled)
+		writeMCPName(sb, srv, FgMCPMuted+StrikeMCP)
 	}
 	sb.WriteString(" " + Reset)
 	sb.WriteString(FgMCPEnabled + RightRound + Reset)
+}
+
+// writeMCPName writes one server name inside the pill's list.
+//
+// Params:
+//   - sb: string builder to write to
+//   - srv: server to write
+//   - ink: style of a server at rest
+func writeMCPName(sb *strings.Builder, srv model.MCPServer, ink string) {
+	// A server being called pops out as a chip in the label's colours
+	if srv.Busy {
+		sb.WriteString(BgMCPLabel + FgWhite + Bold + srv.Name + Reset + BgMCPEnabled)
+		return
+	}
+	sb.WriteString(ink + srv.Name + Reset + BgMCPEnabled)
 }
 
 // splitMCPServers sorts the server names into enabled and disabled.
@@ -548,17 +569,17 @@ func (r *Powerline) renderMCPPill(sb *strings.Builder, servers model.MCPServers)
 //   - servers: servers to split
 //
 // Returns:
-//   - []string: enabled names, sorted case-insensitively
-//   - []string: disabled names, sorted case-insensitively
-func splitMCPServers(servers model.MCPServers) ([]string, []string) {
-	var on, off []string
+//   - model.MCPServers: enabled servers, sorted case-insensitively
+//   - model.MCPServers: disabled servers, sorted case-insensitively
+func splitMCPServers(servers model.MCPServers) (model.MCPServers, model.MCPServers) {
+	var on, off model.MCPServers
 	// File each server by its state
 	for _, s := range servers {
-		// Enabled servers lead the pill
+		// Enabled servers lead the pill; a call does not move a server
 		if s.Enabled {
-			on = append(on, s.Name)
+			on = append(on, s)
 		} else {
-			off = append(off, s.Name)
+			off = append(off, s)
 		}
 	}
 	sortFold(on)
@@ -566,16 +587,16 @@ func splitMCPServers(servers model.MCPServers) ([]string, []string) {
 	return on, off
 }
 
-// sortFold sorts names case-insensitively, ties broken by byte order.
+// sortFold sorts servers by name case-insensitively, ties broken by bytes.
 //
 // Params:
-//   - names: names to sort in place
-func sortFold(names []string) {
-	sort.Slice(names, func(i, j int) bool {
-		a, b := strings.ToLower(names[i]), strings.ToLower(names[j])
+//   - servers: servers to sort in place
+func sortFold(servers model.MCPServers) {
+	sort.Slice(servers, func(i, j int) bool {
+		a, b := strings.ToLower(servers[i].Name), strings.ToLower(servers[j].Name)
 		// Equal when folded: fall back to the exact bytes for stability
 		if a == b {
-			return names[i] < names[j]
+			return servers[i].Name < servers[j].Name
 		}
 		return a < b
 	})
