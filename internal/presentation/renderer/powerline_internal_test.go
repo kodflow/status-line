@@ -283,7 +283,8 @@ func TestPowerline_renderLine2Tasks(t *testing.T) {
 	(&Powerline{}).renderLine2(&sb, model.StatusLineData{Tasks: list, MCP: mcp})
 	out := sb.String()
 	for _, want := range []string{
-		FgTaskDone + glyphs.TaskDone + FgTaskActive + glyphs.TaskDone + FgTaskTodo + glyphs.TaskOpen,
+		FgTaskDone + glyphs.TaskDone,
+		glyphs.TaskDone + Reset + FgTaskTodo + glyphs.TaskOpen,
 		"1/3",
 		"a rather long title that must never be shortened",
 		"github",
@@ -323,5 +324,41 @@ func TestPowerline_renderLine2Subagents(t *testing.T) {
 	(&Powerline{}).renderLine2(&none, model.StatusLineData{MCP: mcp})
 	if strings.Contains(none.String(), glyphs.Subagents) {
 		t.Error("no running subagent must draw nothing")
+	}
+}
+
+func TestPowerline_renderTasksPillSortsAndPulses(t *testing.T) {
+	saved := clockNow
+	t.Cleanup(func() { clockNow = saved })
+	// Created in an order that interleaves the statuses: the bar still fills
+	// from the left, finished first, then started, then waiting
+	list := model.TaskList{Items: []model.TaskItem{
+		{ID: "1", Subject: "started", Status: model.TaskInProgress},
+		{ID: "2", Subject: "waiting", Status: model.TaskPending},
+		{ID: "3", Subject: "waiting too", Status: model.TaskPending},
+		{ID: "4", Subject: "done late", Status: model.TaskCompleted},
+		{ID: "5", Subject: "done late too", Status: model.TaskCompleted},
+	}}
+	bar := func(activeInk string) string {
+		return FgTaskDone + glyphs.TaskDone + glyphs.TaskDone +
+			activeInk + glyphs.TaskDone + Reset +
+			FgTaskTodo + glyphs.TaskOpen + glyphs.TaskOpen
+	}
+
+	clockNow = func() time.Time { return time.Unix(1_800_000_001, 0) }
+	var odd strings.Builder
+	(&Powerline{}).renderTasksPill(&odd, list)
+	if !strings.Contains(odd.String(), bar(FgTaskActive)) {
+		t.Errorf("odd second: want the sorted bar in the plain ink, got %q", odd.String())
+	}
+
+	clockNow = func() time.Time { return time.Unix(1_800_000_002, 0) }
+	var even strings.Builder
+	(&Powerline{}).renderTasksPill(&even, list)
+	if !strings.Contains(even.String(), bar(FgTaskActivePulse)) {
+		t.Errorf("even second: want the started cell in the bright frame, got %q", even.String())
+	}
+	if odd.String() == even.String() {
+		t.Error("two consecutive seconds must draw different frames")
 	}
 }

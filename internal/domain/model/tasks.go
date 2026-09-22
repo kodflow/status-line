@@ -47,6 +47,21 @@ func (l TaskList) Done() int {
 	return done
 }
 
+// Active returns how many tasks are in progress.
+//
+// Returns:
+//   - int: number of started, unfinished tasks
+func (l TaskList) Active() int {
+	active := 0
+	// Count the started items
+	for _, item := range l.Items {
+		if item.Status == TaskInProgress {
+			active++
+		}
+	}
+	return active
+}
+
 // Current returns the subject of the task being worked on.
 //
 // Returns:

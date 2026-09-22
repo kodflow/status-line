@@ -98,9 +98,13 @@ sur une jauge fausse.
 2. **Outils natifs** (repli) : `<config>/tasks/<liste>/<n>.json`, liste =
    `CLAUDE_CODE_TASK_LIST_ID` sinon `session-` + 8 premiers caractères.
 
-Ligne 2 : barre segmentée (fait / en cours / à faire), `fait/total`, titre en
+Ligne 2 : barre segmentée **triée** (fait, puis en cours, puis à faire — elle
+se remplit par la gauche quel que soit l'ordre des ids), `fait/total`, titre en
 cours, puis `󰚩 N` sous-agents actifs, puis les MCP. Une liste terminée n'est
-plus dessinée.
+plus dessinée. Les cases en cours **pulsent** : une seconde sur deux (horloge
+murale, `clockNow`) elles passent de 172 à 214 gras. Cela suppose
+`statusLine.refreshInterval: 1` — le minimum de l'hôte, qui ne redessine pas
+plus vite ; le clignotement ANSI (SGR 5) est filtré et ne sert à rien.
 
 ## Répertoire actif
 
