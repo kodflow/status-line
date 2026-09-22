@@ -143,6 +143,17 @@ func (r *Powerline) renderLine1Fit(sb *strings.Builder, data model.StatusLineDat
 		renderQuotaSegment(sb, seg, nextBg, fit)
 	}
 
+	r.renderRepoSegments(sb, data, fit)
+}
+
+// renderRepoSegments renders where the session works: path, git and
+// changes, giving up what fit says.
+//
+// Params:
+//   - sb: string builder to write to
+//   - data: status line data
+//   - fit: what to leave out
+func (r *Powerline) renderRepoSegments(sb *strings.Builder, data model.StatusLineData, fit lineFit) {
 	// Determine what follows git segment (or path if no git)
 	changesNextBg := ""
 	// Determine next segment background color based on changes
