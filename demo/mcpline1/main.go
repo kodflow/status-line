@@ -61,9 +61,32 @@ func main() {
 	}
 	pill := mcpPill(data)
 	body := pillBody(pill)
-	_, modelFg, _ := r.GetModelColors(data.Model.FullName())
+	places := placements(data, pill)
 
-	places := []placement{
+	fmt.Println("MCP pill (line two today):")
+	fmt.Println(pill)
+	fmt.Println()
+	for _, w := range widths {
+		fmt.Printf("════════ COLUMNS=%d ════════\n", w)
+		for _, pl := range places {
+			piece := pl.piece(body)
+			// Leave line one the room the pill takes
+			data.Terminal.Width = w - r.VisibleWidth(piece)
+			line := pl.splice(line1(data), piece)
+			note := "fits"
+			// Say by how much a placement misses the terminal
+			if over := r.VisibleWidth(line) - w; over > 0 {
+				note = "overflows by " + strconv.Itoa(over)
+			}
+			fmt.Printf("%s  (%d cells, %s)\n%s\n%s\n\n", pl.name, r.VisibleWidth(line), note, line, ansi.ReplaceAllString(line, ""))
+		}
+	}
+}
+
+// placements lists the candidate spots for the pill on line one.
+func placements(data model.StatusLineData, pill string) []placement {
+	_, modelFg, _ := r.GetModelColors(data.Model.FullName())
+	return []placement{
 		{
 			name:   "1. inside the OS segment, after the health glyph",
 			piece:  func(b string) string { return onGround(b, r.BgWhite, r.FgMCPEnabledText) },
@@ -89,25 +112,6 @@ func main() {
 			piece:  func(string) string { return pill },
 			splice: func(l, p string) string { return l + p },
 		},
-	}
-
-	fmt.Println("MCP pill (line two today):")
-	fmt.Println(pill)
-	fmt.Println()
-	for _, w := range widths {
-		fmt.Printf("════════ COLUMNS=%d ════════\n", w)
-		for _, pl := range places {
-			piece := pl.piece(body)
-			// Leave line one the room the pill takes
-			data.Terminal.Width = w - r.VisibleWidth(piece)
-			line := pl.splice(line1(data), piece)
-			note := "fits"
-			// Say by how much a placement misses the terminal
-			if over := r.VisibleWidth(line) - w; over > 0 {
-				note = "overflows by " + strconv.Itoa(over)
-			}
-			fmt.Printf("%s  (%d cells, %s)\n%s\n%s\n\n", pl.name, r.VisibleWidth(line), note, line, ansi.ReplaceAllString(line, ""))
-		}
 	}
 }
 

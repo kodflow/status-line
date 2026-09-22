@@ -137,8 +137,8 @@ sarcelle foncée 23 (capuchon gauche en 23) ; une flèche `\ue0b0` (texte : `>`)
 passe au corps sur sarcelle claire 116, encre 23 : les serveurs actifs
 **comptés par portée** dans l'ordre de priorité, en minuscules —
 `managed`, `cli`, `local`, `project`, `user`, `plugin` (`model.MCPSources`) —
-portée vide omise, séparées par ` · ` : ` cli 5 · user 1 · plugin 1 `. Les
-désactivés, toutes portées confondues, ferment la liste en ` · off N`,
+portée vide omise, séparées par un point médian : `cli 5 · user 1 · plugin 1`.
+Les désactivés, toutes portées confondues, ferment la liste en `· off N`,
 barré, encre 239 (240 ne tient que 4.31:1 sur 116), si N > 0. L'adaptateur
 pose `MCPServer.Source` (`WithSource`) sur chaque source avant la fusion : la
 portée qui gagne le nom est celle comptée. Capuchon droit en 116. Aucun

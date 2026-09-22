@@ -13,13 +13,17 @@ func stripSGR(s string) string {
 	return regexp.MustCompile("\033\\[[0-9;]*m").ReplaceAllString(s, "")
 }
 
-func TestMCPItems(t *testing.T) {
+// mcpItemsCase is one expectation on mcpItems, busy entries marked "*".
+type mcpItemsCase struct {
+	name    string
+	servers model.MCPServers
+	want    string
+}
+
+// mcpItemsCases lists the mcpItems expectations.
+func mcpItemsCases() []mcpItemsCase {
 	cli, user, plugin := model.MCPSourceCLI, model.MCPSourceUser, model.MCPSourcePlugin
-	tests := []struct {
-		name    string
-		servers model.MCPServers
-		want    string
-	}{
+	return []mcpItemsCase{
 		{name: "nothing", servers: nil, want: ""},
 		{
 			name: "counted per scope, precedence order, empty scopes left out",
@@ -67,7 +71,10 @@ func TestMCPItems(t *testing.T) {
 			want:    "cli 1|off 1*",
 		},
 	}
-	for _, tt := range tests {
+}
+
+func TestMCPItems(t *testing.T) {
+	for _, tt := range mcpItemsCases() {
 		t.Run(tt.name, func(t *testing.T) {
 			parts := make([]string, 0)
 			for _, it := range mcpItems(tt.servers) {
