@@ -14,8 +14,8 @@ internal/
 │   └── port/                # Interfaces (InputProvider, Renderer, GitRepository...)
 ├── adapter/                 # Adaptateurs externes
 │   ├── git/                 # Git status + diff stats
-│   ├── mcp/                 # Détection serveurs MCP (config files)
-│   ├── sessionstate/        # Session occupée ? (<config>/sessions/<pid>.json)
+│   ├── mcp/                 # Serveurs MCP (config, --mcp-config de l'hôte, plugins)
+│   ├── sessionstate/        # Session occupée + pid hôte (<config>/sessions/<pid>.json)
 │   ├── system/              # Info système (OS, Docker)
 │   ├── terminal/            # Info terminal (largeur, couleurs)
 │   ├── updater/             # Auto-update binaire (GitHub releases)
