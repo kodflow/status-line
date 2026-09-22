@@ -7,6 +7,8 @@ const (
 	TaskPending string = "pending"
 	// TaskInProgress is the task being worked on.
 	TaskInProgress string = "in_progress"
+	// TaskWaiting is a task blocked on the user: a decision, an approval.
+	TaskWaiting string = "waiting"
 	// TaskCompleted is a finished task.
 	TaskCompleted string = "completed"
 )
@@ -60,6 +62,42 @@ func (l TaskList) Active() int {
 		}
 	}
 	return active
+}
+
+// Waiting returns how many tasks wait on the user.
+//
+// Returns:
+//   - int: number of tasks blocked on the user
+func (l TaskList) Waiting() int {
+	waiting := 0
+	// Count the items blocked on the user
+	for _, item := range l.Items {
+		if item.Status == TaskWaiting {
+			waiting++
+		}
+	}
+	return waiting
+}
+
+// Headline returns the task the line names, and what state it is in.
+//
+// The line always names one: the task under way, else the first one waiting
+// on the user, else the next one to do. A bar with no title leaves the reader
+// guessing whether work stopped or is blocked.
+//
+// Returns:
+//   - string: subject to show, empty for an empty or finished list
+//   - string: its status (in_progress, waiting or pending)
+func (l TaskList) Headline() (string, string) {
+	// Prefer, in order, the state that says the most about what happens now
+	for _, status := range []string{TaskInProgress, TaskWaiting, TaskPending} {
+		for _, item := range l.Items {
+			if item.Status == status {
+				return item.Subject, status
+			}
+		}
+	}
+	return "", ""
 }
 
 // Current returns the subject of the task being worked on.

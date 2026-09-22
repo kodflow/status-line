@@ -27,3 +27,22 @@ func TestTaskList(t *testing.T) {
 		t.Error("a finished or empty list must not be active")
 	}
 }
+
+func TestTaskListHeadlineAndWaiting(t *testing.T) {
+	list := model.TaskList{Items: []model.TaskItem{
+		{ID: "1", Subject: "next", Status: model.TaskPending},
+		{ID: "2", Subject: "blocked", Status: model.TaskWaiting},
+	}}
+	if got := list.Waiting(); got != 1 {
+		t.Errorf("Waiting() = %d, want 1", got)
+	}
+	if subject, status := list.Headline(); subject != "blocked" || status != model.TaskWaiting {
+		t.Errorf("Headline() = %q, %q, want the waiting task", subject, status)
+	}
+	if subject, status := (model.TaskList{}).Headline(); subject != "" || status != "" {
+		t.Errorf("empty list Headline() = %q, %q", subject, status)
+	}
+	if !list.IsActive() {
+		t.Error("a list with waiting tasks is still active")
+	}
+}

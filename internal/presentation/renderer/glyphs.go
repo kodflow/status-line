@@ -13,75 +13,81 @@ const glyphsEnv string = "STATUSLINE_GLYPHS"
 // symbol nobody can read is worse than no symbol at all, so a plain-text set
 // stands ready for that case.
 type GlyphSet struct {
-	Reset     string
-	Project   string
-	Overrun   string
-	Ahead     string
-	Behind    string
-	Level     string
-	Fast      string
-	EffortOn  string
-	EffortOff string
-	Separator string
-	Divider   string
-	Ctx       string
-	Quota     string
-	Cost      string
-	Health    string
-	Worktree  string
-	Tasks     string
-	TaskOpen  string
-	TaskDone  string
-	Subagents string
+	Reset      string
+	Project    string
+	Overrun    string
+	Ahead      string
+	Behind     string
+	Level      string
+	Fast       string
+	EffortOn   string
+	EffortOff  string
+	Separator  string
+	Divider    string
+	Ctx        string
+	Quota      string
+	Cost       string
+	Health     string
+	Worktree   string
+	Tasks      string
+	TaskOpen   string
+	TaskDone   string
+	Subagents  string
+	TaskPaused string
+	TaskNext   string
 }
 
 // nerdGlyphs is the default set, drawn from the Nerd Font ranges.
 var nerdGlyphs = GlyphSet{
-	Reset:     " ",
-	Project:   " ",
-	Overrun:   " ",
-	Ahead:     "",
-	Behind:    "",
-	Level:     "",
-	Fast:      "",
-	EffortOn:  "●",
-	EffortOff: "●",
-	Separator: "│",
-	Divider:   SepThinRight,
-	Ctx:       "\uf1c0",
-	Quota:     "",
-	Cost:      "\uf155",
-	Health:    "\U000F0674",
-	Worktree:  "\uf126",
-	Tasks:     "\U000F0134",
-	TaskOpen:  "\u25a1",
-	TaskDone:  "\u25a0",
-	Subagents: "\U000F06A9",
+	Reset:      " ",
+	Project:    " ",
+	Overrun:    " ",
+	Ahead:      "",
+	Behind:     "",
+	Level:      "",
+	Fast:       "",
+	EffortOn:   "●",
+	EffortOff:  "●",
+	Separator:  "│",
+	Divider:    SepThinRight,
+	Ctx:        "\uf1c0",
+	Quota:      "",
+	Cost:       "\uf155",
+	Health:     "\U000F0674",
+	Worktree:   "\uf126",
+	Tasks:      "\U000F0134",
+	TaskOpen:   "\u25a1",
+	TaskDone:   "\u25a0",
+	Subagents:  "\U000F06A9",
+	TaskPaused: "\U000F03E4",
+	TaskNext:   "\U000F0054",
 }
 
 // textGlyphs is the fallback set: nothing outside printable ASCII, so it
 // renders in any font. "T-" reads as a countdown without needing a clock.
 var textGlyphs = GlyphSet{
-	Reset:     "T-",
-	Project:   ">",
-	Overrun:   "!",
-	Ahead:     "v",
-	Behind:    "^",
-	Level:     "=",
-	Fast:      "F",
-	EffortOn:  "#",
-	EffortOff: "-",
-	Separator: "|",
-	Divider:   "|",
-	Ctx:       "",
-	Quota:     "",
-	Cost:      "$",
-	Health:    "*",
-	Worktree:  "wt",
-	Tasks:     "tasks",
-	TaskOpen:  "-",
-	TaskDone:  "#",
-	Subagents: "agents",
+	Reset:      "T-",
+	Project:    ">",
+	Overrun:    "!",
+	Ahead:      "v",
+	Behind:     "^",
+	Level:      "=",
+	Fast:       "F",
+	EffortOn:   "#",
+	EffortOff:  "-",
+	Separator:  "|",
+	Divider:    "|",
+	Ctx:        "",
+	Quota:      "",
+	Cost:       "$",
+	Health:     "*",
+	Worktree:   "wt",
+	Tasks:      "tasks",
+	TaskOpen:   "-",
+	TaskDone:   "#",
+	Subagents:  "agents",
+	TaskPaused: "||",
+	TaskNext:   ">",
 }
 
 // glyphs is the active set, resolved once at startup.

@@ -98,9 +98,12 @@ sur une jauge fausse.
 2. **Outils natifs** (repli) : `<config>/tasks/<liste>/<n>.json`, liste =
    `CLAUDE_CODE_TASK_LIST_ID` sinon `session-` + 8 premiers caractères.
 
-Ligne 2 : barre segmentée **triée** (fait, puis en cours, puis à faire — elle
-se remplit par la gauche quel que soit l'ordre des ids), `fait/total`, titre en
-cours, puis `󰚩 N` sous-agents actifs, puis les MCP. Une liste terminée n'est
+Ligne 2 : barre segmentée **triée** (fait ■ vert, en cours ■ ambre, en attente
+de l'utilisateur □ ambre sourd 137, à faire □ gris — plein = fait ou en cours,
+vide = pas fait ; elle se remplit par la gauche quel que soit l'ordre des ids),
+`fait/total`, puis **toujours un titre** (`TaskList.Headline`) : la tâche en
+cours ; sinon 󰏤 la première en attente (statut `waiting` du MCP) ; sinon 󰁔 la
+prochaine à faire. Puis `󰚩 N` sous-agents actifs, puis les MCP. Une liste terminée n'est
 plus dessinée. Les cases en cours **pulsent** : une seconde sur deux (horloge
 murale, `clockNow`) elles passent de 172 à 214 gras. Cela suppose
 `statusLine.refreshInterval: 1` — le minimum de l'hôte, qui ne redessine pas

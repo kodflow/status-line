@@ -193,11 +193,23 @@ func (r *Powerline) renderTasksPill(sb *strings.Builder, list model.TaskList) {
 		activeInk = FgTaskActivePulse
 	}
 	sb.WriteString(activeInk + strings.Repeat(glyphs.TaskDone, active) + Reset)
-	sb.WriteString(FgTaskTodo + strings.Repeat(glyphs.TaskOpen, list.Total()-done-active))
+	// Waiting cells stay hollow like the ones to do — filled means done or
+	// under way, hollow means not done — and take the waiting ink
+	waiting := list.Waiting()
+	sb.WriteString(FgTaskWaiting + strings.Repeat(glyphs.TaskOpen, waiting))
+	sb.WriteString(FgTaskTodo + strings.Repeat(glyphs.TaskOpen, list.Total()-done-active-waiting))
 	sb.WriteString(Reset + " " + Bold + itoa(done) + "/" + itoa(list.Total()) + Reset)
-	// Name the task in progress, in full
-	if current := list.Current(); current != "" {
-		sb.WriteString(" " + FgTaskTitle + current + Reset)
+	// Always name a task, and say through its mark what state it is in
+	switch subject, status := list.Headline(); status {
+	// Under way: the title alone, in full
+	case model.TaskInProgress:
+		sb.WriteString(" " + FgTaskTitle + subject + Reset)
+	// Blocked on the user: paused, in the waiting ink
+	case model.TaskWaiting:
+		sb.WriteString(" " + FgTaskWaiting + glyphs.TaskPaused + " " + subject + Reset)
+	// Nothing started: the next one, dimmed
+	case model.TaskPending:
+		sb.WriteString(" " + FgTaskTodo + glyphs.TaskNext + " " + subject + Reset)
 	}
 }
 

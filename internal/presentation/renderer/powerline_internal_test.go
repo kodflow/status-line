@@ -284,7 +284,7 @@ func TestPowerline_renderLine2Tasks(t *testing.T) {
 	out := sb.String()
 	for _, want := range []string{
 		FgTaskDone + glyphs.TaskDone,
-		glyphs.TaskDone + Reset + FgTaskTodo + glyphs.TaskOpen,
+		glyphs.TaskDone + Reset + FgTaskWaiting + FgTaskTodo + glyphs.TaskOpen,
 		"1/3",
 		"a rather long title that must never be shortened",
 		"github",
@@ -342,7 +342,7 @@ func TestPowerline_renderTasksPillSortsAndPulses(t *testing.T) {
 	bar := func(activeInk string) string {
 		return FgTaskDone + glyphs.TaskDone + glyphs.TaskDone +
 			activeInk + glyphs.TaskDone + Reset +
-			FgTaskTodo + glyphs.TaskOpen + glyphs.TaskOpen
+			FgTaskWaiting + FgTaskTodo + glyphs.TaskOpen + glyphs.TaskOpen
 	}
 
 	clockNow = func() time.Time { return time.Unix(1_800_000_001, 0) }
@@ -360,5 +360,50 @@ func TestPowerline_renderTasksPillSortsAndPulses(t *testing.T) {
 	}
 	if odd.String() == even.String() {
 		t.Error("two consecutive seconds must draw different frames")
+	}
+}
+
+func TestPowerline_renderTasksPillAlwaysNamesATask(t *testing.T) {
+	tests := []struct {
+		name  string
+		items []model.TaskItem
+		want  string
+	}{
+		{name: "under way: its title", items: []model.TaskItem{
+			{ID: "1", Subject: "doing", Status: model.TaskInProgress},
+			{ID: "2", Subject: "blocked", Status: model.TaskWaiting},
+		}, want: " " + FgTaskTitle + "doing" + Reset},
+		{name: "nothing under way: the task waiting on the user", items: []model.TaskItem{
+			{ID: "1", Subject: "next", Status: model.TaskPending},
+			{ID: "2", Subject: "blocked", Status: model.TaskWaiting},
+		}, want: " " + FgTaskWaiting + glyphs.TaskPaused + " blocked" + Reset},
+		{name: "nothing started: the next one", items: []model.TaskItem{
+			{ID: "1", Subject: "done", Status: model.TaskCompleted},
+			{ID: "2", Subject: "next", Status: model.TaskPending},
+		}, want: " " + FgTaskTodo + glyphs.TaskNext + " next" + Reset},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var sb strings.Builder
+			(&Powerline{}).renderTasksPill(&sb, model.TaskList{Items: tt.items})
+			if !strings.HasSuffix(sb.String(), tt.want) {
+				t.Errorf("got %q, want it to end with %q", sb.String(), tt.want)
+			}
+		})
+	}
+}
+
+func TestPowerline_renderTasksPillWaitingCells(t *testing.T) {
+	list := model.TaskList{Items: []model.TaskItem{
+		{ID: "1", Subject: "a", Status: model.TaskWaiting},
+		{ID: "2", Subject: "b", Status: model.TaskPending},
+		{ID: "3", Subject: "c", Status: model.TaskWaiting},
+		{ID: "4", Subject: "d", Status: model.TaskCompleted},
+	}}
+	var sb strings.Builder
+	(&Powerline{}).renderTasksPill(&sb, list)
+	want := FgTaskWaiting + glyphs.TaskOpen + glyphs.TaskOpen + FgTaskTodo + glyphs.TaskOpen
+	if !strings.Contains(sb.String(), want) {
+		t.Errorf("waiting cells must follow the started ones and precede the waiting ones to do, got %q", sb.String())
 	}
 }
