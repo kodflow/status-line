@@ -112,9 +112,10 @@ absent ou pointant nulle part = aucun épic actif : la pastille `Tâches`
 décroissant (`Tâches` : dernier `created`/`updated` de ses tâches).
 
 **Pastilles (ligne 2)** : fond mauve 182, capuchons arrondis, encre prune 53.
-- *Repliée* : ` titre fait/total ` (+ ` 󰚩 N`).
+
+- *Repliée* : `titre fait/total` (+ `󰚩 N`).
 - *Dépliée* — seulement l'épic actif, seulement **pendant que la session
-  travaille** : ` titre fait/total cases titre-de-tâche ` (+ ` 󰚩 N`). Cases
+  travaille** : `titre fait/total cases titre-de-tâche` (+ `󰚩 N`). Cases
   triées : fait ■ encre 53, en cours ■ ambre `#82480b` qui **pulse** en
   `#9e5204` gras les secondes paires (horloge murale, `clockNow`), le reste
   (à faire, en attente) □ sur la piste pâle `#b48cb4`. Titre = la tâche en
