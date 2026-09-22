@@ -13,8 +13,8 @@ func TestTaskList(t *testing.T) {
 		{ID: "3", Subject: "c", Status: model.TaskInProgress},
 		{ID: "4", Subject: "d", Status: model.TaskPending},
 	}}
-	if list.Total() != 4 || list.Done() != 1 {
-		t.Errorf("Total/Done = %d/%d, want 4/1", list.Total(), list.Done())
+	if list.Total() != 4 || list.Done() != 1 || list.Active() != 2 {
+		t.Errorf("Total/Done/Active = %d/%d/%d, want 4/1/2", list.Total(), list.Done(), list.Active())
 	}
 	if got := list.Current(); got != "b" {
 		t.Errorf("Current() = %q, want the earliest started task", got)

@@ -3,6 +3,7 @@ package renderer
 
 import (
 	"strings"
+	"time"
 
 	"github.com/florent/status-line/internal/domain/model"
 	"github.com/florent/status-line/internal/domain/port"
@@ -179,25 +180,37 @@ func (r *Powerline) renderLine2(sb *strings.Builder, data model.StatusLineData) 
 //   - list: session task list, known to be active
 func (r *Powerline) renderTasksPill(sb *strings.Builder, list model.TaskList) {
 	sb.WriteString(" " + FgTaskTodo + glyphs.Tasks + Reset + " ")
-	// One cell per task, in creation order
-	for _, item := range list.Items {
-		switch item.Status {
-		// A finished task
-		case model.TaskCompleted:
-			sb.WriteString(FgTaskDone + glyphs.TaskDone)
-		// The task being worked on
-		case model.TaskInProgress:
-			sb.WriteString(FgTaskActive + glyphs.TaskDone)
-		// A task not started yet
-		default:
-			sb.WriteString(FgTaskTodo + glyphs.TaskOpen)
-		}
+	// The bar fills from the left whatever the ids: finished, then started,
+	// then waiting — a task created late and finished early must not light a
+	// cell on the far right of an otherwise empty bar
+	done, active := list.Done(), list.Active()
+	sb.WriteString(FgTaskDone + strings.Repeat(glyphs.TaskDone, done))
+	// The started cells pulse, one frame per second: the line is a still image
+	// between redraws, and a refresh interval of one second is the fastest
+	// cadence the host offers, so every other frame draws them brighter
+	activeInk := FgTaskActive
+	if pulseOn() {
+		activeInk = FgTaskActivePulse
 	}
-	sb.WriteString(Reset + " " + Bold + itoa(list.Done()) + "/" + itoa(list.Total()) + Reset)
+	sb.WriteString(activeInk + strings.Repeat(glyphs.TaskDone, active) + Reset)
+	sb.WriteString(FgTaskTodo + strings.Repeat(glyphs.TaskOpen, list.Total()-done-active))
+	sb.WriteString(Reset + " " + Bold + itoa(done) + "/" + itoa(list.Total()) + Reset)
 	// Name the task in progress, in full
 	if current := list.Current(); current != "" {
 		sb.WriteString(" " + FgTaskTitle + current + Reset)
 	}
+}
+
+// clockNow is the wall clock the pulse reads; tests replace it.
+var clockNow = time.Now
+
+// pulseOn reports whether the current frame draws the started tasks bright.
+//
+// Returns:
+//   - bool: true on even seconds
+func pulseOn() bool {
+	// Alternate on the wall clock so consecutive redraws differ
+	return clockNow().Unix()%2 == 0
 }
 
 // renderOSSegment renders the operating system segment.
