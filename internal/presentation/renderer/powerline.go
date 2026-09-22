@@ -2,6 +2,7 @@
 package renderer
 
 import (
+	"sort"
 	"strings"
 	"time"
 
@@ -146,13 +147,13 @@ func (r *Powerline) renderLine2(sb *strings.Builder, data model.StatusLineData) 
 		hasContent = true
 	}
 
-	// Render MCP server pills if any
+	// One MCP pill sums up every server, after the epics
 	if len(data.MCP) > 0 {
 		// Add separator space if previous content exists
 		if hasContent {
 			sb.WriteString(" ")
 		}
-		r.renderMCPPills(sb, data.MCP)
+		r.renderMCPPill(sb, data.MCP)
 		hasContent = true
 	}
 
@@ -499,59 +500,85 @@ func (r *Powerline) renderWeeklySegment(sb *strings.Builder, usage model.Limit) 
 	sb.WriteString(BgBlue + FgWeekly + SepRight + Reset)
 }
 
-// renderMCPPills renders MCP server pills.
+// renderMCPPill renders every MCP server in one teal pill.
+//
+// The plug glyph leads, then the enabled servers and, after them, the
+// disabled ones crossed out in gray; each group sorted case-insensitively and
+// the names separated by a middle dot. No server, no pill.
 //
 // Params:
 //   - sb: string builder to write to
 //   - servers: list of MCP servers
-func (r *Powerline) renderMCPPills(sb *strings.Builder, servers model.MCPServers) {
-	// Skip if no servers
+func (r *Powerline) renderMCPPill(sb *strings.Builder, servers model.MCPServers) {
+	// Nothing configured draws nothing
 	if len(servers) == 0 {
-		// Return early if nothing to show
 		return
 	}
+	on, off := splitMCPServers(servers)
 
-	// Add space before MCP pills
-	sb.WriteString(" ")
-
-	// Render each server as a pill
-	for idx, server := range servers {
-		// Add space between pills
-		if idx > 0 {
+	sb.WriteString(" " + FgMCPEnabled + LeftRound + Reset)
+	sb.WriteString(BgMCPEnabled + FgMCPEnabledText + " " + glyphs.MCP)
+	// Enabled servers in the pill's own ink
+	for idx, name := range on {
+		// The glyph opens the list, a dot divides the rest
+		if idx == 0 {
 			sb.WriteString(" ")
+		} else {
+			sb.WriteString(mcpSeparator)
 		}
-		// Render individual MCP pill
-		r.renderMCPPill(sb, server)
+		sb.WriteString(name)
 	}
+	// Disabled servers follow, muted and crossed out
+	for idx, name := range off {
+		// The first one continues the list, or opens it when none is on
+		if idx == 0 && len(on) == 0 {
+			sb.WriteString(" ")
+		} else {
+			sb.WriteString(FgMCPMuted + mcpSeparator)
+		}
+		sb.WriteString(FgMCPMuted + StrikeMCP + name + Reset + BgMCPEnabled)
+	}
+	sb.WriteString(" " + Reset)
+	sb.WriteString(FgMCPEnabled + RightRound + Reset)
 }
 
-// renderMCPPill renders a single MCP server pill.
+// splitMCPServers sorts the server names into enabled and disabled.
 //
 // Params:
-//   - sb: string builder to write to
-//   - server: MCP server information
-func (r *Powerline) renderMCPPill(sb *strings.Builder, server model.MCPServer) {
-	var bgColor, fgColor, textColor string
-
-	// Select colors based on enabled status
-	if server.Enabled {
-		// Use enabled colors (pale bg, dark text)
-		bgColor = BgMCPEnabled
-		fgColor = FgMCPEnabled
-		textColor = FgMCPEnabledText
-	} else {
-		// Use disabled gray colors (pale bg, dark text)
-		bgColor = BgMCPDisabled
-		fgColor = FgMCPDisabled
-		textColor = FgMCPDisabledText
+//   - servers: servers to split
+//
+// Returns:
+//   - []string: enabled names, sorted case-insensitively
+//   - []string: disabled names, sorted case-insensitively
+func splitMCPServers(servers model.MCPServers) ([]string, []string) {
+	var on, off []string
+	// File each server by its state
+	for _, s := range servers {
+		// Enabled servers lead the pill
+		if s.Enabled {
+			on = append(on, s.Name)
+		} else {
+			off = append(off, s.Name)
+		}
 	}
+	sortFold(on)
+	sortFold(off)
+	return on, off
+}
 
-	// Write left rounded cap
-	sb.WriteString(fgColor + LeftRound + Reset)
-	// Write server name
-	sb.WriteString(bgColor + textColor + " " + server.Name + " " + Reset)
-	// Write right rounded cap
-	sb.WriteString(fgColor + RightRound + Reset)
+// sortFold sorts names case-insensitively, ties broken by byte order.
+//
+// Params:
+//   - names: names to sort in place
+func sortFold(names []string) {
+	sort.Slice(names, func(i, j int) bool {
+		a, b := strings.ToLower(names[i]), strings.ToLower(names[j])
+		// Equal when folded: fall back to the exact bytes for stability
+		if a == b {
+			return names[i] < names[j]
+		}
+		return a < b
+	})
 }
 
 // renderUpdatePill renders the update notification pill.

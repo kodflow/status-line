@@ -151,15 +151,18 @@ func buildService(input *model.Input) *application.StatusLineService {
 	if !filepath.IsAbs(gitDir) {
 		gitDir = ""
 	}
+	// The session registry names the host process, whose command line may
+	// carry MCP servers; one scan serves both adapters
+	session := sessionstate.NewProvider(input.Session())
 	deps := application.ServiceDeps{
 		Git:      git.NewRepository(gitDir),
 		System:   system.NewProvider(),
 		Terminal: terminal.NewProvider(),
-		MCP:      mcp.NewProvider(sessionDir),
+		MCP:      mcp.NewProvider(sessionDir, session.PID),
 		Usage:    usage.NewProvider(),
 		Health:   health.NewProvider(),
 		Tasks:    tasks.NewProvider(input.Session()),
-		Activity: sessionstate.NewProvider(input.Session()),
+		Activity: session,
 		WorkDir:  workDir,
 	}
 	// Return service with all adapters injected

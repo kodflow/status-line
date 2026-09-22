@@ -16,7 +16,7 @@ func TestNewProvider(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := mcp.NewProvider(tt.projectDir)
+			p := mcp.NewProvider(tt.projectDir, nil)
 			if p == nil {
 				t.Error("NewProvider() returned nil")
 			}
@@ -34,7 +34,7 @@ func TestProvider_Servers(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			p := mcp.NewProvider(tt.projectDir)
+			p := mcp.NewProvider(tt.projectDir, nil)
 			servers := p.Servers()
 			if servers == nil {
 				t.Error("Servers() returned nil, want empty slice")

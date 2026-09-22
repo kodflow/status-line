@@ -78,7 +78,7 @@ One adapter per external concern. Each implements one port from
 | Adapter        | Port implemented      | What it talks to                                |
 |----------------|-----------------------|-------------------------------------------------|
 | `git`          | `GitRepository`       | `git` CLI (status, diff stats)                  |
-| `mcp`          | `MCPDetector`         | `~/.claude/.claude.json`, project `mcp.json`    |
+| `mcp`          | `MCPDetector`         | managed, host `--mcp-config` (/proc), `~/.claude.json`, project `.mcp.json`, plugin `.mcp.json` |
 | `system`       | `SystemInfoProvider`  | `runtime.GOOS`, `/.dockerenv`                   |
 | `terminal`     | `TerminalDetector`    | `golang.org/x/term` (width, color depth)        |
 | `updater`      | `Updater`             | GitHub Releases API                             |

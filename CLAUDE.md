@@ -1,4 +1,4 @@
-<!-- updated: 2026-09-22T12:00:00Z -->
+<!-- updated: 2026-09-22T15:00:00Z -->
 # Status Line
 
 CLI Go pour afficher une status line Powerline personnalisée dans Claude Code.
@@ -74,10 +74,41 @@ famille de modèles ne s'affiche que si ce modèle est en cours d'utilisation.
 | *modèle* | Quota 7j scopé par famille de modèle (`limits[]`) |
 | coût / credits | Coût cumulé de la session, solde de crédits |
 
-**Ligne ambiante:** pills MCP, notification de mise à jour.
+**Ligne 2 :** une pastille par épic ouvert mène la ligne, puis **une**
+pastille MCP, puis la mise à jour. Aucune troncature : un titre long passe à la
+ligne plutôt que d'être coupé.
 
-**Ligne 2 :** une pastille par épic ouvert mène la ligne, puis les pills
-MCP. Aucune troncature : un titre long passe à la ligne plutôt que d'être coupé.
+## Serveurs MCP
+
+`adapter/mcp` lit, par ordre de priorité (le premier qui nomme un serveur
+gagne, dédoublonnage par nom) :
+
+1. **managed** — `/etc/claude-code/managed-mcp.json` (macOS : `/Library/Application Support/ClaudeCode`)
+2. **ligne de commande** — `--mcp-config` de l'hôte : `sessionstate` retrouve
+   le pid dans `<config>/sessions/<pid>.json` (un seul scan, partagé avec
+   `Working`), puis `/proc/<pid>/cmdline`. Répétable, variadique jusqu'au
+   flag suivant, `--mcp-config=v` accepté ; valeur = JSON si elle commence par
+   `{`, sinon chemin (relatif au `cwd` de l'hôte). `--strict-mcp-config` = seuls
+   managed + ligne de commande comptent. Hors Linux (pas de `/proc`) : ignoré.
+3. **local** — `projects[<dir>].mcpServers` du fichier global
+4. **projet** — `<dir>/.mcp.json`, repli `mcp.json`
+5. **user** — `mcpServers` du fichier global
+6. **plugins** — `<config>/plugins/installed_plugins.json` ; activé si
+   `enabledPlugins["<plugin>@<marketplace>"]` vaut `true` (`<config>/settings.json`,
+   puis `<dir>/.claude/settings.json`, puis `settings.local.json`) ;
+   serveurs dans `<installPath>/.mcp.json` (`mcpServers` ou map nue), marqués
+   `Plugin`.
+
+Fichier global = `$CLAUDE_CONFIG_DIR/.claude.json`, sinon `~/.claude.json`
+puis `~/.claude/.claude.json`. `<config>` = `$CLAUDE_CONFIG_DIR` ou `~/.claude`.
+Désactivé = `"disabled": true`, ou listé dans `projects[<dir>].disabledMcpServers`
+(nom nu ou `plugin:<plugin>:<serveur>`) ; `disabledMcpjsonServers` vise
+`.mcp.json`. Tout fichier illisible ou malformé est ignoré ; pas d'exec.
+
+**Pastille** : fond sarcelle 116, encre 23, glyphe prise `\uf1e6` (texte :
+`MCP`), puis les serveurs actifs séparés par ` · `, triés sans casse ; les
+désactivés suivent, barrés, encre 239 (240 ne tient que 4.31:1 sur 116).
+Aucun serveur, aucune pastille.
 
 ## Effort
 

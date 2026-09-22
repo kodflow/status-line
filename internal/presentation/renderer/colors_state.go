@@ -117,16 +117,5 @@ var (
 	FgEpicTrack string = pickInk(epicTrackTrue, epicTrack256)
 )
 
-// MCP list colours. The servers are ambient information: they are read when
-// something is wrong, not while working, so they stay dimmed until one is.
-const (
-	// FgMCPText is the dimmed ink of a healthy server name.
-	FgMCPText string = "\033[38;5;245m"
-	// FgMCPSep is the separator between two server names.
-	FgMCPSep string = "\033[38;5;240m"
-	// FgMCPDown is the ink of a server that is not enabled.
-	FgMCPDown string = "\033[38;5;131m"
-)
-
-// mcpSeparator divides two server names.
-const mcpSeparator string = "\u00b7"
+// mcpSeparator divides two server names inside the MCP pill.
+const mcpSeparator string = " \u00b7 "

@@ -1,6 +1,7 @@
 package renderer
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -163,21 +164,83 @@ func TestPowerline_renderChangesSegment(t *testing.T) {
 	}
 }
 
-func TestPowerline_renderMCPPills(t *testing.T) {
+func TestPowerline_renderMCPPill(t *testing.T) {
+	strip := func(s string) string {
+		return regexp.MustCompile("\033\\[[0-9;]*m").ReplaceAllString(s, "")
+	}
 	tests := []struct {
 		name    string
 		servers model.MCPServers
+		want    string
 	}{
-		{name: "with servers", servers: model.MCPServers{{Name: "test", Enabled: true}}},
-		{name: "empty", servers: model.MCPServers{}},
+		{name: "empty draws nothing", servers: model.MCPServers{}, want: ""},
+		{
+			name: "enabled sorted case-insensitively",
+			servers: model.MCPServers{
+				{Name: "tasks", Enabled: true}, {Name: "GitKraken", Enabled: true},
+				{Name: "codacy", Enabled: true}, {Name: "github", Enabled: true},
+			},
+			want: " " + LeftRound + " " + glyphs.MCP + " codacy \u00b7 github \u00b7 GitKraken \u00b7 tasks " + RightRound,
+		},
+		{
+			name: "disabled after enabled",
+			servers: model.MCPServers{
+				{Name: "zeta", Enabled: false}, {Name: "beta", Enabled: true}, {Name: "Alpha", Enabled: false},
+			},
+			want: " " + LeftRound + " " + glyphs.MCP + " beta \u00b7 Alpha \u00b7 zeta " + RightRound,
+		},
+		{
+			name:    "only disabled",
+			servers: model.MCPServers{{Name: "off", Enabled: false}},
+			want:    " " + LeftRound + " " + glyphs.MCP + " off " + RightRound,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := &Powerline{}
 			var sb strings.Builder
-			r.renderMCPPills(&sb, tt.servers)
-			_ = sb.String() // Just verify no panic
+			(&Powerline{}).renderMCPPill(&sb, tt.servers)
+			if got := strip(sb.String()); got != tt.want {
+				t.Errorf("pill = %q, want %q", got, tt.want)
+			}
+			if tt.want != "" && strings.Count(sb.String(), LeftRound) != 1 {
+				t.Errorf("want one pill, got %q", sb.String())
+			}
 		})
+	}
+}
+
+func TestPowerline_renderMCPPillStyling(t *testing.T) {
+	var sb strings.Builder
+	(&Powerline{}).renderMCPPill(&sb, model.MCPServers{{Name: "on", Enabled: true}, {Name: "down", Enabled: false}})
+	out := sb.String()
+	if !strings.HasPrefix(out, " "+FgMCPEnabled+LeftRound+Reset+BgMCPEnabled+FgMCPEnabledText+" "+glyphs.MCP+" on") {
+		t.Errorf("the pill opens teal with the plug glyph and the enabled ink, got %q", out)
+	}
+	if !strings.Contains(out, FgMCPMuted+StrikeMCP+"down"+Reset+BgMCPEnabled) {
+		t.Errorf("a disabled server is muted and crossed out on the teal, got %q", out)
+	}
+	if strings.Contains(out, StrikeMCP+"on") {
+		t.Errorf("an enabled server is not crossed out, got %q", out)
+	}
+	if !strings.HasSuffix(out, FgMCPEnabled+RightRound+Reset) {
+		t.Errorf("the pill closes with a teal cap, got %q", out)
+	}
+}
+
+func TestPowerline_renderLine2MCPBeforeUpdate(t *testing.T) {
+	var sb strings.Builder
+	(&Powerline{}).renderLine2(&sb, model.StatusLineData{
+		Tasks:  model.TaskBoard{Epics: []model.Epic{sampleEpic()}},
+		MCP:    model.MCPServers{{Name: "github", Enabled: true}, {Name: "tasks", Enabled: true}},
+		Update: model.UpdateInfo{Available: true, Version: "v9.9.9"},
+	})
+	out := sb.String()
+	epic, pill, update := strings.Index(out, "SDK status-line"), strings.Index(out, "github"), strings.Index(out, "v9.9.9")
+	if epic < 0 || pill < 0 || update < 0 || !(epic < pill && pill < update) {
+		t.Errorf("want epic, then MCP, then update; got %q", out)
+	}
+	if strings.Count(out, FgMCPEnabled+LeftRound) != 1 {
+		t.Errorf("want a single MCP pill, got %q", out)
 	}
 }
 

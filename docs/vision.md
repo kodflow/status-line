@@ -29,7 +29,8 @@ doesn't expose:
 - **Git state** — branch, modified count, untracked count, lines added/
   removed in the current session.
 - **Active MCP servers** — what tools the agent currently has access to,
-  derived from `~/.claude/.claude.json` and `mcp.json`.
+  derived from the config files, the session's `--mcp-config` and the
+  enabled plugins.
 
 Without these, you discover problems after the fact: the rate-limit cap, a
 forgotten unstaged file, an MCP server that didn't load. Status Line surfaces

@@ -2,7 +2,6 @@
 package mcp
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -14,6 +13,8 @@ import (
 
 // Config file names and paths.
 const (
+	// configDirEnv relocates the whole configuration directory.
+	configDirEnv string = "CLAUDE_CONFIG_DIR"
 	// claudeConfigDir is the Claude config directory name.
 	claudeConfigDir string = ".claude"
 	// userConfigFileName is the user-level Claude config file.
@@ -28,6 +29,8 @@ const (
 	managedPathLinux string = "/etc/claude-code"
 	// managedPathMacOS is the macOS enterprise config directory.
 	managedPathMacOS string = "/Library/Application Support/ClaudeCode"
+	// procRoot is where Linux exposes each process's command line.
+	procRoot string = "/proc"
 	// defaultMapCapacity is the default capacity for server tracking map.
 	defaultMapCapacity int = 16
 	// defaultSliceCapacity is the default capacity for server list.
@@ -38,115 +41,100 @@ const (
 var _ port.MCPProvider = (*Provider)(nil)
 
 // Provider implements port.MCPProvider by reading Claude settings.
-// It reads MCP server configurations from official Claude Code config files.
+//
+// Every source is a small file read: the config files, the enabled plugins'
+// manifests and, on Linux, the host's command line under /proc. Nothing is
+// executed and nothing touches the network.
 type Provider struct {
-	projectDir string
+	projectDir  string
+	configDir   string
+	userConfigs []string
+	managedPath string
+	procDir     string
+	pid         func() int
 }
 
 // NewProvider creates a new MCP provider adapter.
 //
 // Params:
 //   - projectDir: the project directory path
+//   - pid: returns the host process running the session, 0 when unknown;
+//     nil skips the command-line source
 //
 // Returns:
 //   - *Provider: new provider instance
-func NewProvider(projectDir string) *Provider {
-	// Return provider with project directory
-	return &Provider{projectDir: projectDir}
+func NewProvider(projectDir string, pid func() int) *Provider {
+	p := &Provider{projectDir: projectDir, pid: pid, managedPath: managedConfigPath()}
+	home, _ := os.UserHomeDir()
+	p.configDir = os.Getenv(configDirEnv)
+	// A relocated config directory holds the global config file too
+	if p.configDir != "" {
+		p.userConfigs = []string{filepath.Join(p.configDir, userConfigFileName)}
+	} else if home != "" {
+		p.configDir = filepath.Join(home, claudeConfigDir)
+		p.userConfigs = []string{
+			filepath.Join(home, userConfigFileName),
+			filepath.Join(p.configDir, userConfigFileName),
+		}
+	}
+	// /proc only exists on Linux; elsewhere the command line stays unread
+	if runtime.GOOS == "linux" {
+		p.procDir = procRoot
+	}
+	return p
 }
 
-// Servers returns the list of configured MCP servers.
-// Reads from all official config locations and merges results.
-// Order: Enterprise → User → Local → Project (following precedence)
+// Servers returns the MCP servers the session can reach.
+//
+// A name is drawn once, from the first source that declares it:
+// managed > command line > local > project > user > plugin. With
+// --strict-mcp-config only managed and command-line servers count.
+// disabledMcpServers (and disabledMcpjsonServers for the project file)
+// in the global config's entry for this project mark servers disabled.
 //
 // Returns:
 //   - model.MCPServers: list of MCP server configurations
 func (p *Provider) Servers() model.MCPServers {
-	// Track unique servers by name (last one wins per precedence)
+	global := p.readGlobalConfig()
+	local := global.Projects[p.projectDir]
+	cli := p.readCommandLine()
+
+	sources := []model.MCPServers{p.readManagedConfig(), cli.servers}
+	// Strict mode ignores every configured scope but the managed one
+	if !cli.strict {
+		project := p.readProjectConfig()
+		markDisabled(project, local.DisabledMcpjsonServers)
+		sources = append(sources,
+			convertServers(local.MCPServers, ""),
+			project,
+			convertServers(global.MCPServers, ""),
+			p.readPluginServers(),
+		)
+	}
+
 	seen := make(map[string]bool, defaultMapCapacity)
 	servers := make(model.MCPServers, 0, defaultSliceCapacity)
-
-	// Read enterprise managed config (highest precedence)
-	enterpriseServers := p.readManagedConfig()
-	// Add enterprise servers to results
-	for _, s := range enterpriseServers {
-		// Mark server as seen and add to list
-		seen[s.Name] = true
-		servers = append(servers, s)
-	}
-
-	// Read user scope from ~/.claude.json mcpServers
-	userServers := p.readUserConfig()
-	// Add user servers not already seen
-	for _, s := range userServers {
-		// Skip if server already added from higher precedence
-		if !seen[s.Name] {
+	// Walk the sources in precedence order: the first to name a server wins
+	for _, source := range sources {
+		// Keep only the names no stronger source already declared
+		for _, s := range source {
+			// A weaker source never overrides a stronger one
+			if seen[s.Name] {
+				continue
+			}
 			seen[s.Name] = true
 			servers = append(servers, s)
 		}
 	}
-
-	// Read local scope from ~/.claude.json projects[path].mcpServers
-	localServers := p.readLocalConfig()
-	// Add local servers not already seen
-	for _, s := range localServers {
-		// Skip if server already added from higher precedence
-		if !seen[s.Name] {
-			seen[s.Name] = true
-			servers = append(servers, s)
-		}
-	}
-
-	// Read project scope from {project}/.mcp.json
-	projectServers := p.readProjectConfig()
-	// Add project servers not already seen
-	for _, s := range projectServers {
-		// Skip if server already added from higher precedence
-		if !seen[s.Name] {
-			seen[s.Name] = true
-			servers = append(servers, s)
-		}
-	}
-
-	// Return combined servers
+	markDisabled(servers, local.DisabledMcpServers)
 	return servers
-}
-
-// userConfigPath returns the path to user-level Claude config.
-//
-// Returns:
-//   - string: path to ~/.claude/.claude.json
-func (p *Provider) userConfigPath() string {
-	home, err := os.UserHomeDir()
-	// Check if home directory is accessible
-	if err != nil {
-		// Return empty path if home not found
-		return ""
-	}
-	// Return user config path (~/.claude/.claude.json)
-	return filepath.Join(home, claudeConfigDir, userConfigFileName)
-}
-
-// projectConfigPaths returns paths to project MCP config files.
-// Returns dotted (.mcp.json) first, then undotted (mcp.json) as fallback.
-//
-// Returns:
-//   - []string: paths to check in order
-func (p *Provider) projectConfigPaths() []string {
-	if p.projectDir == "" {
-		return nil
-	}
-	return []string{
-		filepath.Join(p.projectDir, projectMCPFileName),
-		filepath.Join(p.projectDir, projectMCPFallbackFileName),
-	}
 }
 
 // managedConfigPath returns the path to enterprise managed MCP config.
 //
 // Returns:
 //   - string: platform-specific path to managed-mcp.json
-func (p *Provider) managedConfigPath() string {
+func managedConfigPath() string {
 	var basePath string
 	// Select path based on platform
 	switch runtime.GOOS {
@@ -158,81 +146,44 @@ func (p *Provider) managedConfigPath() string {
 		basePath = managedPathLinux
 	// Other platforms not supported
 	default:
-		// Windows uses C:\Program Files\ClaudeCode but skip for now
 		return ""
 	}
-	// Return managed config path
 	return filepath.Join(basePath, managedMCPFileName)
 }
 
-// readUserConfig reads MCP servers from user-level config.
-// Looks for mcpServers at root of ~/.claude.json.
+// projectConfigPaths returns paths to project MCP config files.
+// Returns dotted (.mcp.json) first, then undotted (mcp.json) as fallback.
 //
 // Returns:
-//   - model.MCPServers: list of MCP servers from user config
-func (p *Provider) readUserConfig() model.MCPServers {
-	path := p.userConfigPath()
-	// Check if path is provided
-	if path == "" {
-		// Return empty list for empty path
-		return model.MCPServers{}
+//   - []string: paths to check in order
+func (p *Provider) projectConfigPaths() []string {
+	// No project, no project file
+	if p.projectDir == "" {
+		return nil
 	}
-
-	data, err := os.ReadFile(path)
-	// Check if file is readable
-	if err != nil {
-		// Return empty list if file not accessible
-		return model.MCPServers{}
+	return []string{
+		filepath.Join(p.projectDir, projectMCPFileName),
+		filepath.Join(p.projectDir, projectMCPFallbackFileName),
 	}
-
-	var config userConfigFile
-	// Check if JSON is valid
-	if err := json.Unmarshal(data, &config); err != nil {
-		// Return empty list if parsing fails
-		return model.MCPServers{}
-	}
-
-	// Return servers from root mcpServers
-	return p.convertServers(config.MCPServers)
 }
 
-// readLocalConfig reads MCP servers from local scope config.
-// Looks for servers in projects[projectDir].mcpServers of ~/.claude.json.
+// readGlobalConfig reads the global config (~/.claude.json).
+//
+// The first candidate that parses wins: $CLAUDE_CONFIG_DIR/.claude.json when
+// the directory is relocated, else ~/.claude.json then ~/.claude/.claude.json.
 //
 // Returns:
-//   - model.MCPServers: list of MCP servers from local config
-func (p *Provider) readLocalConfig() model.MCPServers {
-	path := p.userConfigPath()
-	// Check if path is provided
-	if path == "" {
-		// Return empty list for empty path
-		return model.MCPServers{}
+//   - userConfigFile: parsed config, empty when none is readable
+func (p *Provider) readGlobalConfig() userConfigFile {
+	// Try each candidate location in turn
+	for _, path := range p.userConfigs {
+		var config userConfigFile
+		// An unreadable or malformed candidate gives way to the next one
+		if readJSON(path, &config) {
+			return config
+		}
 	}
-
-	data, err := os.ReadFile(path)
-	// Check if file is readable
-	if err != nil {
-		// Return empty list if file not accessible
-		return model.MCPServers{}
-	}
-
-	var config userConfigFile
-	// Check if JSON is valid
-	if err := json.Unmarshal(data, &config); err != nil {
-		// Return empty list if parsing fails
-		return model.MCPServers{}
-	}
-
-	// Look for project-specific config
-	projCfg, exists := config.Projects[p.projectDir]
-	// Check if project exists in config
-	if !exists {
-		// Return empty list if project not found
-		return model.MCPServers{}
-	}
-
-	// Return servers from project config
-	return p.convertServers(projCfg.MCPServers)
+	return userConfigFile{}
 }
 
 // readProjectConfig reads MCP servers from project MCP config file.
@@ -241,25 +192,15 @@ func (p *Provider) readLocalConfig() model.MCPServers {
 // Returns:
 //   - model.MCPServers: list of MCP servers from project config
 func (p *Provider) readProjectConfig() model.MCPServers {
-	paths := p.projectConfigPaths()
-	if len(paths) == 0 {
-		return model.MCPServers{}
-	}
-
-	for _, path := range paths {
-		data, err := os.ReadFile(path)
-		if err != nil {
-			continue
-		}
-
+	// Take the first project file that parses
+	for _, path := range p.projectConfigPaths() {
 		var config mcpConfigFile
-		if err := json.Unmarshal(data, &config); err != nil {
+		// A missing or malformed file gives way to the fallback
+		if !readJSON(path, &config) {
 			continue
 		}
-
-		return p.convertServers(config.MCPServers)
+		return convertServers(config.MCPServers, "")
 	}
-
 	return model.MCPServers{}
 }
 
@@ -268,67 +209,71 @@ func (p *Provider) readProjectConfig() model.MCPServers {
 // Returns:
 //   - model.MCPServers: list of MCP servers from managed-mcp.json
 func (p *Provider) readManagedConfig() model.MCPServers {
-	path := p.managedConfigPath()
-	// Check if path is provided
-	if path == "" {
-		// Return empty list for empty path
-		return model.MCPServers{}
-	}
-
-	data, err := os.ReadFile(path)
-	// Check if file is readable
-	if err != nil {
-		// Return empty list if file not accessible
-		return model.MCPServers{}
-	}
-
 	var config mcpConfigFile
-	// Check if JSON is valid
-	if err := json.Unmarshal(data, &config); err != nil {
-		// Return empty list if parsing fails
+	// No managed path, or no readable managed file, declares nothing
+	if p.managedPath == "" || !readJSON(p.managedPath, &config) {
 		return model.MCPServers{}
 	}
+	return convertServers(config.MCPServers, "")
+}
 
-	// Return servers from mcpServers
-	return p.convertServers(config.MCPServers)
+// markDisabled marks the listed servers disabled.
+//
+// A plugin server may be listed under its qualified name
+// plugin:<plugin>:<server>, as the host writes it.
+//
+// Params:
+//   - servers: servers to update in place
+//   - names: names listed as disabled
+func markDisabled(servers model.MCPServers, names []string) {
+	// Nothing listed, nothing to do
+	if len(names) == 0 {
+		return
+	}
+	off := make(map[string]bool, len(names))
+	// Index the disabled names for a single pass over the servers
+	for _, name := range names {
+		off[name] = true
+	}
+	// Disable each server listed by plain or qualified name
+	for i := range servers {
+		s := &servers[i]
+		// Only a listed server changes state
+		if off[s.Name] || (s.Plugin != "" && off["plugin:"+s.Plugin+":"+s.Name]) {
+			s.Enabled = false
+		}
+	}
 }
 
 // convertServers converts a map of server configs to MCPServers slice.
 //
 // Params:
 //   - servers: map of server name to config
+//   - plugin: plugin providing the servers, empty for a config file
 //
 // Returns:
-//
-// Returns:
-//   - model.MCPServers: slice of MCP servers
-func (p *Provider) convertServers(servers map[string]mcpServerConfig) model.MCPServers {
+//   - model.MCPServers: slice of MCP servers, sorted by name
+func convertServers(servers map[string]mcpServerConfig, plugin string) model.MCPServers {
 	// Check if servers map is empty
 	if len(servers) == 0 {
-		// Return empty list
 		return model.MCPServers{}
 	}
 
-	// Extract and sort keys for deterministic order
 	names := make([]string, 0, len(servers))
+	// Extract keys for a deterministic order
 	for name := range servers {
 		names = append(names, name)
 	}
 	sort.Strings(names)
 
-	// Preallocate with known capacity
 	result := make(model.MCPServers, 0, len(servers))
 	// Convert map to slice in sorted order
 	for _, name := range names {
-		serverConfig := servers[name]
-		server := model.MCPServer{
+		result = append(result, model.MCPServer{
 			Name:    name,
-			Enabled: !serverConfig.Disabled,
-		}
-		// Append server to result
-		result = append(result, server)
+			Enabled: !servers[name].Disabled,
+			Plugin:  plugin,
+		})
 	}
-
-	// Return converted servers
 	return result
 }
