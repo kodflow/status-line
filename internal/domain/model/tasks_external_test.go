@@ -46,3 +46,12 @@ func TestTaskListHeadlineAndWaiting(t *testing.T) {
 		t.Error("a list with waiting tasks is still active")
 	}
 }
+
+func TestTaskBoardIsEmpty(t *testing.T) {
+	if !(model.TaskBoard{}).IsEmpty() {
+		t.Error("a zero board is not empty")
+	}
+	if (model.TaskBoard{Unattributed: 1}).IsEmpty() || (model.TaskBoard{Epics: []model.Epic{{ID: model.NoEpic}}}).IsEmpty() {
+		t.Error("a board with a subagent or an epic reads as empty")
+	}
+}

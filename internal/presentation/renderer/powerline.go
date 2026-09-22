@@ -75,7 +75,7 @@ func (r *Powerline) renderLine1(sb *strings.Builder, data model.StatusLineData) 
 	modelBg, _, _ := GetModelColors(data.Model.FullName())
 
 	// Render OS segment (transitions to Model segment)
-	r.renderOSSegment(sb, data.System, data.Icons.OS, data.Health, modelBg)
+	r.renderOSSegment(sb, data.System, data.Icons.OS, data.Health, data.Tasks.Unattributed, modelBg)
 
 	// Build the quota chain first: each segment needs to know the colour of the
 	// one that follows it to draw its separator
@@ -139,16 +139,10 @@ func (r *Powerline) renderLine2(sb *strings.Builder, data model.StatusLineData) 
 	// Track if we've rendered anything
 	hasContent := false
 
-	// The task list leads the line: it is the work in progress, the rest is
-	// ambient. It is never shortened; a long title wraps rather than hides.
-	if data.Tasks.IsActive() {
-		r.renderTasksPill(sb, data.Tasks)
-		hasContent = true
-	}
-	// The running subagents sit right after the task list: both are the work
-	// under way, the rest of the line is ambient
-	if data.Subagents > 0 {
-		sb.WriteString(" " + FgTaskTodo + glyphs.Subagents + Reset + " " + Bold + itoa(data.Subagents) + Reset)
+	// The epics lead the line: they are the work in progress, the rest is
+	// ambient. Nothing is shortened; a long title wraps rather than hides.
+	for _, epic := range data.Tasks.Epics {
+		r.renderEpicPill(sb, epic, epic.Active && data.Working)
 		hasContent = true
 	}
 
@@ -172,39 +166,69 @@ func (r *Powerline) renderLine2(sb *strings.Builder, data model.StatusLineData) 
 	}
 }
 
-// renderTasksPill renders the session task list: a segmented bar with one
-// cell per task, the done/total count and the title of the task in progress.
+// noEpicLabel names the pill of the tasks filed under no epic.
+const noEpicLabel string = "T\u00e2ches"
+
+// renderEpicPill renders one epic as a mauve pill.
+//
+// Collapsed, the pill says what the epic is and how far it went: its title
+// and done/total. Expanded — the active epic while the session works — it
+// adds one cell per task and names the task that matters now.
 //
 // Params:
 //   - sb: string builder to write to
-//   - list: session task list, known to be active
-func (r *Powerline) renderTasksPill(sb *strings.Builder, list model.TaskList) {
-	sb.WriteString(" " + FgTaskTodo + glyphs.Tasks + Reset + " ")
-	// The bar fills from the left whatever the ids: finished, then started,
-	// then waiting — a task created late and finished early must not light a
-	// cell on the far right of an otherwise empty bar
+//   - epic: open epic to draw
+//   - expanded: whether to draw the cells and the headline
+func (r *Powerline) renderEpicPill(sb *strings.Builder, epic model.Epic, expanded bool) {
+	label := epic.Title
+	// The tasks filed under no epic, and a nameless epic, still get a name
+	if epic.ID == model.NoEpic {
+		label = noEpicLabel
+	} else if label == "" {
+		label = "#" + itoa(epic.ID)
+	}
+	list := epic.Tasks
+	sb.WriteString(" " + FgEpic + LeftRound + Reset)
+	sb.WriteString(BgEpic + FgEpicInk + Bold + " " + label + " " + itoa(list.Done()) + "/" + itoa(list.Total()) + Reset)
+	// Only the epic under way, only while it moves, shows its cells
+	if expanded {
+		renderEpicCells(sb, list)
+		// Always name a task: the one under way, else the next one
+		if subject, _ := list.Headline(); subject != "" {
+			sb.WriteString(BgEpic + FgEpicInk + " " + subject + Reset)
+		}
+	}
+	// The subagents started for this epic travel with it
+	if epic.Subagents > 0 {
+		sb.WriteString(BgEpic + FgEpicInk + Bold + " " + glyphs.Subagents + " " + itoa(epic.Subagents) + Reset)
+	}
+	sb.WriteString(BgEpic + " " + Reset + FgEpic + RightRound + Reset)
+}
+
+// renderEpicCells renders one cell per task, filled from the left: done, then
+// under way, then everything else, whatever the ids — a task created late and
+// finished early must not light a cell on the far right of an empty bar.
+//
+// Params:
+//   - sb: string builder to write to
+//   - list: tasks of the expanded epic
+func renderEpicCells(sb *strings.Builder, list model.TaskList) {
+	// An epic focused before its first task has no cell to draw
+	if list.Total() == 0 {
+		return
+	}
 	done, active := list.Done(), list.Active()
-	sb.WriteString(FgTaskDone + strings.Repeat(glyphs.TaskDone, done))
+	sb.WriteString(BgEpic + " " + FgEpicInk + strings.Repeat(glyphs.TaskDone, done) + Reset)
 	// The started cells pulse, one frame per second: the line is a still image
 	// between redraws, and a refresh interval of one second is the fastest
 	// cadence the host offers, so every other frame draws them brighter
-	activeInk := FgTaskActive
+	activeInk := FgEpicActive
 	if pulseOn() {
-		activeInk = FgTaskActivePulse
+		activeInk = FgEpicPulse
 	}
-	sb.WriteString(activeInk + strings.Repeat(glyphs.TaskDone, active) + Reset)
-	// Only the task under way stands out; everything not done is grey
-	sb.WriteString(FgTaskTodo + strings.Repeat(glyphs.TaskOpen, list.Total()-done-active))
-	sb.WriteString(Reset + " " + Bold + itoa(done) + "/" + itoa(list.Total()) + Reset)
-	// Always name a task: the one under way, else the next one, in grey
-	switch subject, status := list.Headline(); status {
-	// Under way: the title in the title ink
-	case model.TaskInProgress:
-		sb.WriteString(" " + FgTaskTitle + subject + Reset)
-	// Waiting or to do: named plainly, in the grey of the cells not done
-	case model.TaskWaiting, model.TaskPending:
-		sb.WriteString(" " + FgTaskTodo + subject + Reset)
-	}
+	sb.WriteString(BgEpic + activeInk + strings.Repeat(glyphs.TaskDone, active) + Reset)
+	// Only the task under way stands out; pending and waiting share the track
+	sb.WriteString(BgEpic + FgEpicTrack + strings.Repeat(glyphs.TaskOpen, list.Total()-done-active) + Reset)
 }
 
 // clockNow is the wall clock the pulse reads; tests replace it.
@@ -226,8 +250,9 @@ func pulseOn() bool {
 //   - sys: system information
 //   - showIcon: whether to show the OS icon
 //   - health: state of Claude's services, drawn beside the icon when known
+//   - subagents: running subagents tied to no epic on line 2
 //   - nextBg: background color of the next segment
-func (r *Powerline) renderOSSegment(sb *strings.Builder, sys model.SystemInfo, showIcon bool, health model.ServiceHealth, nextBg string) {
+func (r *Powerline) renderOSSegment(sb *strings.Builder, sys model.SystemInfo, showIcon bool, health model.ServiceHealth, subagents int, nextBg string) {
 	// Write left rounded cap
 	sb.WriteString(FgWhite + LeftRound + Reset)
 	// Check if icon should be shown
@@ -242,6 +267,10 @@ func (r *Powerline) renderOSSegment(sb *strings.Builder, sys model.SystemInfo, s
 	// The health glyph sits inside the same white ground, coloured by state
 	if color := healthColor(health); color != "" && !isHidden(hideHealth) {
 		sb.WriteString(BgWhite + color + glyphs.Health + " " + Reset)
+	}
+	// Subagents working for no epic on show belong to the session as a whole
+	if subagents > 0 {
+		sb.WriteString(BgWhite + FgBlack + Bold + glyphs.Subagents + " " + itoa(subagents) + " " + Reset)
 	}
 	// Write separator to next segment
 	sb.WriteString(nextBg + FgWhite + SepRight + Reset)

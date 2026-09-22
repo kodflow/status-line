@@ -3,6 +3,7 @@ package renderer
 import (
 	"fmt"
 	"math"
+	"strings"
 	"testing"
 )
 
@@ -10,6 +11,8 @@ import (
 // foreground (38) or background (48) alike.
 func ansiToRGB(t *testing.T, esc string) (r, g, b float64) {
 	t.Helper()
+	// A bold prefix changes the weight, not the colour
+	esc = strings.Replace(esc, "\033[1;", "\033[", 1)
 	var kind, n int
 	var tr, tg, tb int
 	if _, err := fmt.Sscanf(esc, "\033[%d;2;%d;%d;%dm", &kind, &tr, &tg, &tb); err == nil {
@@ -75,6 +78,7 @@ func TestEverySegmentInkIsReadableOnItsOwnGround(t *testing.T) {
 		{name: "lines added", bg: BgGreen, fg: FgGreenText},
 		{name: "lines removed", bg: BgRed, fg: FgRedText},
 		{name: "mcp pill", bg: BgMCPEnabled, fg: FgMCPEnabledText},
+		{name: "epic pill", bg: BgEpic, fg: FgEpicInk},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -117,5 +121,38 @@ func TestHealthGlyphIsReadableOnTheOSGround(t *testing.T) {
 				t.Errorf("contrast %.2f:1 is below the %.1f:1 floor", got, minRatio)
 			}
 		})
+	}
+}
+
+func TestEpicCellsAreVisibleOnTheMauve(t *testing.T) {
+	// The cells are graphical objects: done and under way, in both frames and
+	// both colour depths, hold the 3:1 floor. The track of the cells not under
+	// way is deliberately pale, yet must not melt into the ground.
+	tests := []struct {
+		name string
+		fg   string
+		min  float64
+	}{
+		{name: "done", fg: FgEpicInk, min: 3.0},
+		{name: "under way", fg: epicActiveTrue, min: 3.0},
+		{name: "under way 256", fg: epicActive256, min: 3.0},
+		{name: "pulse", fg: epicPulseTrue, min: 3.0},
+		{name: "pulse 256", fg: epicPulse256, min: 3.0},
+		{name: "track", fg: epicTrackTrue, min: 1.4},
+		{name: "track 256", fg: epicTrack256, min: 1.4},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := contrast(t, tt.fg, BgEpic); got < tt.min {
+				t.Errorf("contrast %.2f:1 is below the %.1f:1 floor", got, tt.min)
+			}
+		})
+	}
+}
+
+func TestEpicPulseFramesDiffer(t *testing.T) {
+	// A pulse whose two frames are the same escape does not pulse
+	if epicActiveTrue == epicPulseTrue || epicActive256 == epicPulse256 {
+		t.Error("the plain and bright frames of the cell under way are identical")
 	}
 }

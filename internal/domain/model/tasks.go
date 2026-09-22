@@ -123,3 +123,40 @@ func (l TaskList) IsActive() bool {
 	// Something is still open
 	return l.Total() > 0 && l.Done() < l.Total()
 }
+
+// NoEpic is the epic id of tasks filed under no epic: those created before the
+// first epic, or while none was active.
+const NoEpic int = 0
+
+// Epic is one subject the main agent works on: a titled list of its tasks.
+type Epic struct {
+	// ID identifies the epic; NoEpic gathers the tasks filed under none.
+	ID int
+	// Title names the epic, empty for NoEpic.
+	Title string
+	// Active marks the epic the main agent is focused on. When no epic is
+	// active, the tasks filed under none are.
+	Active bool
+	// Tasks holds the epic's tasks, in creation order.
+	Tasks TaskList
+	// Subagents counts the running subagents started for this epic.
+	Subagents int
+}
+
+// TaskBoard is what the session is working on: the main agent's open epics,
+// in display order, and the running subagents tied to none of them.
+type TaskBoard struct {
+	// Epics lists the open epics, the active one first.
+	Epics []Epic
+	// Unattributed counts running subagents whose epic is not shown.
+	Unattributed int
+}
+
+// IsEmpty reports whether the board has nothing to draw.
+//
+// Returns:
+//   - bool: true when no epic is open and no subagent runs
+func (b TaskBoard) IsEmpty() bool {
+	// Both halves of the board are empty
+	return len(b.Epics) == 0 && b.Unattributed == 0
+}

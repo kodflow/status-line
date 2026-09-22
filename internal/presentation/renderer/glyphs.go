@@ -29,7 +29,6 @@ type GlyphSet struct {
 	Cost      string
 	Health    string
 	Worktree  string
-	Tasks     string
 	TaskOpen  string
 	TaskDone  string
 	Subagents string
@@ -53,7 +52,6 @@ var nerdGlyphs = GlyphSet{
 	Cost:      "\uf155",
 	Health:    "\U000F0674",
 	Worktree:  "\uf126",
-	Tasks:     "\U000F0134",
 	TaskOpen:  "\u25a1",
 	TaskDone:  "\u25a0",
 	Subagents: "\U000F06A9",
@@ -78,7 +76,6 @@ var textGlyphs = GlyphSet{
 	Cost:      "$",
 	Health:    "*",
 	Worktree:  "wt",
-	Tasks:     "tasks",
 	TaskOpen:  "-",
 	TaskDone:  "#",
 	Subagents: "agents",
