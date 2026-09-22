@@ -92,6 +92,13 @@ const (
 	// FgMCPMuted is the gray ink of the disabled count inside the MCP pill.
 	// 240 only reaches 4.31:1 on the teal; 239 clears 4.5:1 (5.05:1).
 	FgMCPMuted string = "\033[38;5;239m"
+	// FgMCPOnWhite is the dark teal of the MCP glyph on the OS segment's
+	// white ground (6.46:1).
+	FgMCPOnWhite string = "\033[38;5;23m"
+	// FgMCPMutedOnWhite is the gray of the disabled count on the OS
+	// segment's white ground: 241 (5.26:1); 242 barely clears 4.5 and 244
+	// falls to 3.4:1.
+	FgMCPMutedOnWhite string = "\033[38;5;241m"
 	// StrikeMCP crosses out the disabled count; terminals without it keep
 	// the gray alone.
 	StrikeMCP string = "\033[9m"

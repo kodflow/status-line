@@ -64,33 +64,89 @@ func TestPowerline_renderMCPPill(t *testing.T) {
 	}
 }
 
+// pillOf renders the line-two pill on its own.
+func pillOf(list model.MCPServers) string {
+	var sb strings.Builder
+	(&Powerline{}).renderMCPPill(&sb, list)
+	return sb.String()
+}
+
 func TestPowerline_renderMCPPillStyling(t *testing.T) {
-	p := &Powerline{}
-	idle := p.mcpPill(servers(2, 1))
+	idle := pillOf(servers(2, 1))
 	if !strings.HasPrefix(idle, " "+FgMCPEnabled+LeftRound+Reset+BgMCPEnabled+FgMCPEnabledText+Bold+" "+glyphs.MCP+" 2") {
 		t.Errorf("at rest: bold dark ink on pale teal, got %q", idle)
 	}
 	if !strings.Contains(idle, BgMCPEnabled+FgMCPMuted+" "+mcpOffMark+StrikeMCP+"1"+Reset) {
 		t.Errorf("at rest: the disabled count is muted and crossed out, got %q", idle)
 	}
-	if !strings.HasSuffix(idle, BgMCPEnabled+" "+Reset+FgMCPEnabled+RightRound+Reset) {
-		t.Errorf("at rest: pale teal caps, got %q", idle)
-	}
-
 	list := servers(2, 1)
 	list[0].Busy = true
-	lit := p.mcpPill(list)
+	lit := pillOf(list)
 	if !strings.HasPrefix(lit, " "+FgMCPEnabledText+LeftRound+Reset+BgMCPLabel+FgWhite+Bold+" "+glyphs.MCP+" 2") {
 		t.Errorf("lit: the whole pill is bold white on dark teal, got %q", lit)
 	}
 	if !strings.Contains(lit, BgMCPLabel+FgMCPEnabled+" "+mcpOffMark+StrikeMCP+"1"+Reset) {
 		t.Errorf("lit: the disabled count stays, pale teal on dark teal, got %q", lit)
 	}
-	if strings.Contains(lit, BgMCPEnabled) {
-		t.Errorf("lit: no pale teal ground is left, got %q", lit)
+}
+
+// inlineOf renders the OS-segment indicator on its own.
+func inlineOf(list model.MCPServers) string {
+	var sb strings.Builder
+	writeMCPInline(&sb, summarizeMCP(list))
+	return sb.String()
+}
+
+func TestWriteMCPInline(t *testing.T) {
+	if got := inlineOf(nil); got != "" {
+		t.Errorf("no server, nothing, got %q", got)
 	}
-	if strings.Count(lit, LeftRound) != 1 {
-		t.Errorf("lit: one pill, no chip inside it, got %q", lit)
+	if got, want := stripSGR(inlineOf(servers(7, 0))), glyphs.MCP+" 7 "; got != want {
+		t.Errorf("idle = %q, want %q", got, want)
+	}
+	if got, want := stripSGR(inlineOf(servers(7, 1))), glyphs.MCP+" 7 \u00b71 "; got != want {
+		t.Errorf("with a disabled server = %q, want %q", got, want)
+	}
+	idle := inlineOf(servers(7, 2))
+	for what, piece := range map[string]string{
+		"the glyph in dark teal on white":       BgWhite + FgMCPOnWhite + Bold + glyphs.MCP + " " + Reset,
+		"the count in the OS ink":               BgWhite + FgBlack + Bold + "7" + Reset,
+		"the disabled count muted, crossed out": BgWhite + FgMCPMutedOnWhite + " " + mcpOffMark + StrikeMCP + "2" + Reset,
+		"closed by a space on the white ground": BgWhite + " " + Reset,
+	} {
+		if !strings.Contains(idle, piece) {
+			t.Errorf("idle: %s, got %q", what, idle)
+		}
+	}
+	if strings.Contains(idle, LeftRound) || strings.Contains(idle, RightRound) {
+		t.Errorf("inside the OS segment there are no caps, got %q", idle)
+	}
+
+	list := servers(7, 2)
+	list[1].Busy = true
+	lit := inlineOf(list)
+	if !strings.HasPrefix(lit, BgMCPLabel+FgWhite+Bold+glyphs.MCP+" 7"+Reset) {
+		t.Errorf("lit: glyph and count are one bold white chip on dark teal, got %q", lit)
+	}
+	if !strings.Contains(lit, BgWhite+FgMCPMutedOnWhite+" "+mcpOffMark+StrikeMCP+"2") {
+		t.Errorf("lit: the disabled suffix stays, got %q", lit)
+	}
+	if VisibleWidth(lit) != VisibleWidth(idle) {
+		t.Errorf("lighting up must not shift the line: %d vs %d cells", VisibleWidth(lit), VisibleWidth(idle))
+	}
+}
+
+func TestWriteMCPInlineTextGlyphs(t *testing.T) {
+	saved := glyphs
+	t.Cleanup(func() { glyphs = saved })
+	glyphs = textGlyphs
+	if got := stripSGR(inlineOf(servers(7, 0))); got != "MCP 7 " {
+		t.Errorf("text glyphs: want \"MCP 7 \", got %q", got)
+	}
+	list := servers(7, 0)
+	list[0].Busy = true
+	if got := stripSGR(inlineOf(list)); got != "MCP 7 " {
+		t.Errorf("text glyphs, lit: want \"MCP 7 \", got %q", got)
 	}
 }
 
@@ -98,12 +154,12 @@ func TestPowerline_renderMCPPillTextGlyphs(t *testing.T) {
 	saved := glyphs
 	t.Cleanup(func() { glyphs = saved })
 	glyphs = textGlyphs
-	if got := stripSGR((&Powerline{}).mcpPill(servers(7, 0))); !strings.Contains(got, " MCP 7 ") {
+	if got := stripSGR(pillOf(servers(7, 0))); !strings.Contains(got, " MCP 7 ") {
 		t.Errorf("text glyphs: want \"MCP 7\", got %q", got)
 	}
 }
 
-// withMCPLine sets the pill's line for one test.
+// withMCPLine sets the indicator's line for one test.
 func withMCPLine(t *testing.T, line2 bool) {
 	t.Helper()
 	saved := mcpOnLine2
@@ -111,63 +167,56 @@ func withMCPLine(t *testing.T, line2 bool) {
 	mcpOnLine2 = line2
 }
 
-// lightLine is a session narrow enough to carry the pill at 80 columns.
-func lightLine(width int) model.StatusLineData {
-	data := busyLine(width)
-	data.Limits.Scoped = nil
-	data.Git.Branch = "main"
-	data.MCP = servers(7, 1)
-	return data
+func TestOSSegmentOrder(t *testing.T) {
+	var sb strings.Builder
+	(&Powerline{}).renderOSSegment(&sb, model.SystemInfo{OS: model.OSLinux}, true, model.HealthOK, servers(7, 1), 2, BgBlue)
+	got := stripSGR(sb.String())
+	health, mcp, agents := strings.Index(got, glyphs.Health), strings.Index(got, glyphs.MCP+" 7"), strings.Index(got, glyphs.Subagents+" 2")
+	if health < 0 || mcp < 0 || agents < 0 || !(health < mcp && mcp < agents) {
+		t.Errorf("want OS icon, health, MCP, subagents; got %q", got)
+	}
+	if strings.Count(sb.String(), SepRight) != 1 {
+		t.Errorf("the indicator stays inside the one OS segment, got %q", got)
+	}
 }
 
-func TestMCPPillClosesLineOne(t *testing.T) {
+func TestMCPIndicatorInTheOSSegment(t *testing.T) {
 	withMCPLine(t, false)
-	for _, width := range []int{0, 200, 120, 80} {
-		out := (&Powerline{}).Render(lightLine(width))
+	for _, width := range []int{0, 200, 160, 120, 100, 80} {
+		data := busyLine(width)
+		data.MCP = servers(7, 1)
+		out := (&Powerline{}).Render(data)
 		line1, line2, _ := strings.Cut(out, "\n")
-		if !strings.HasSuffix(stripSGR(line1), glyphs.MCP+" 7 ·1 "+RightRound) {
-			t.Errorf("COLUMNS=%d: the pill closes line one, got %q", width, stripSGR(line1))
+		os, _, _ := strings.Cut(line1, SepRight)
+		if !strings.Contains(stripSGR(os), glyphs.MCP+" 7 \u00b71") {
+			t.Errorf("COLUMNS=%d: the indicator sits in the OS segment, got %q", width, stripSGR(line1))
 		}
 		if strings.Contains(line2, glyphs.MCP) {
-			t.Errorf("COLUMNS=%d: the pill is drawn once, got line two %q", width, stripSGR(line2))
+			t.Errorf("COLUMNS=%d: never on line two by default, got %q", width, stripSGR(line2))
 		}
 		if width > 0 && VisibleWidth(line1) > lineBudget(width) {
-			t.Errorf("COLUMNS=%d: line one is %d wide", width, VisibleWidth(line1))
+			t.Errorf("COLUMNS=%d: line one is %d wide, over %d", width, VisibleWidth(line1), lineBudget(width))
 		}
-	}
-}
-
-func TestMCPPillMovesToLineTwoWhenLineOneIsFull(t *testing.T) {
-	withMCPLine(t, false)
-	data := busyLine(80)
-	data.MCP = servers(7, 1)
-	out := (&Powerline{}).Render(data)
-	line1, line2, _ := strings.Cut(out, "\n")
-	if strings.Contains(line1, glyphs.MCP) {
-		t.Errorf("a full line one gives the pill up, got %q", stripSGR(line1))
-	}
-	if VisibleWidth(line1) > lineBudget(80) {
-		t.Errorf("line one still fits without the pill, got %d cells", VisibleWidth(line1))
-	}
-	if !strings.Contains(stripSGR(line2), glyphs.MCP+" 7 ·1") {
-		t.Errorf("the pill moved to line two, got %q", stripSGR(line2))
 	}
 }
 
 func TestMCPPillEnvKeepsItOnLineTwo(t *testing.T) {
 	withMCPLine(t, true)
-	out := (&Powerline{}).Render(lightLine(200))
+	data := busyLine(200)
+	data.MCP = servers(7, 0)
+	out := (&Powerline{}).Render(data)
 	line1, line2, _ := strings.Cut(out, "\n")
-	if strings.Contains(line1, glyphs.MCP) || !strings.Contains(line2, glyphs.MCP+" 7") {
-		t.Errorf("STATUSLINE_MCP_LINE=2: the pill is on line two only, got %q / %q", stripSGR(line1), stripSGR(line2))
+	if strings.Contains(line1, glyphs.MCP) {
+		t.Errorf("STATUSLINE_MCP_LINE=2: nothing in line one, got %q", stripSGR(line1))
+	}
+	if !strings.Contains(line2, FgMCPEnabled+LeftRound) || !strings.Contains(stripSGR(line2), glyphs.MCP+" 7") {
+		t.Errorf("STATUSLINE_MCP_LINE=2: the pill is on line two, got %q", stripSGR(line2))
 	}
 }
 
-func TestMCPPillAbsentWithoutServers(t *testing.T) {
+func TestMCPIndicatorAbsentWithoutServers(t *testing.T) {
 	withMCPLine(t, false)
-	data := lightLine(200)
-	data.MCP = nil
-	if out := (&Powerline{}).Render(data); strings.Contains(out, glyphs.MCP) {
-		t.Errorf("no server, no pill, got %q", stripSGR(out))
+	if out := (&Powerline{}).Render(busyLine(200)); strings.Contains(out, glyphs.MCP) {
+		t.Errorf("no server, no indicator, got %q", stripSGR(out))
 	}
 }

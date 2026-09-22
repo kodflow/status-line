@@ -71,9 +71,9 @@ Configure in your Claude Code settings to use as the status line provider.
 
 Line one carries everything about the session: the model with its own rate
 limits beside it, the context window, then where you are. Line two carries the
-open epics, then the update notice. The MCP pill (`󰒍 7`: the number of enabled servers)
-closes line one; `STATUSLINE_MCP_LINE=2` keeps it on line two, and it moves
-there by itself when line one has no room left for it.
+open epics, then the update notice. The MCP servers show in the OS segment that opens
+line one (`󰒍 7`: the number of enabled servers); `STATUSLINE_MCP_LINE=2`
+moves them to a pill on line two.
 
 Line one fits the terminal: the host gives the status line its width in
 `COLUMNS` (120 when absent). A line too wide gives up, one step at a time, the
@@ -88,7 +88,7 @@ refills.
 
 A quota scoped to one model family shows only while that model is in use.
 dashboard:
-  [OS] [Opus 5 ●] [/path] [git branch !2 ?1] [+50] [-10] [󰒍 7 ·1]
+  [OS 󰙴 󰒍 7 ·1] [Opus 5 ●] [/path] [git branch !2 ?1] [+50] [-10]
   [ctx ██░░ 10% 103k/1M] [session ██░│░ 15% ▸33% ⟳2h46] [⛁ 95% ⟳47m] [$1.83]
   [ v0.4.0]
 ```
@@ -103,7 +103,7 @@ dashboard:
 | Path | Current working directory |
 | Git | Branch name, modified (!), untracked (?) |
 | Changes | Lines added (+) and removed (-) |
-| MCP | Small pill at the end of line one: MCP glyph and the number of enabled servers (`MCP 7` without a Nerd Font); disabled servers add a muted, crossed `·N`; the whole pill lights up while a call is in flight (read from the transcripts) and 2 s after. Sources: managed, `--mcp-config` of the running session (Linux), local, project, user, enabled plugins. `STATUSLINE_MCP_LINE=2` moves it to line two |
+| MCP | Inside the OS segment, after the health sparkle: MCP glyph and the number of enabled servers (`MCP 7` without a Nerd Font); disabled servers add a muted, crossed `·N`; glyph and count light up as a dark teal chip while a call is in flight (read from the transcripts) and 2 s after. Sources: managed, `--mcp-config` of the running session (Linux), local, project, user, enabled plugins. `STATUSLINE_MCP_LINE=2` shows it as a pill on line two instead |
 | Update | Shows version when update is downloading |
 
 ## Environment Variables
@@ -117,7 +117,7 @@ dashboard:
 | `STATUSLINE_LINE_GAP` | Blank lines between the two rows (0-3) | `0` |
 | `STATUSLINE_GLYPHS` | `nerd` or `text` (no Nerd Font required) | `nerd` |
 | `STATUSLINE_HIDE` | Comma-separated segments to leave out: `context`, `session`, `weekly`, `model` | — |
-| `STATUSLINE_MCP_LINE` | `2` keeps the MCP pill on line two instead of the end of line one | line one |
+| `STATUSLINE_MCP_LINE` | `2` shows the MCP servers as a pill on line two instead of inside the OS segment | OS segment |
 
 ## Auto-Update
 

@@ -65,6 +65,10 @@ func TestFitLevelsOrder(t *testing.T) {
 	want = append(want, all)
 	all.dropPath = true
 	want = append(want, all)
+	all.dropModelIcon = true
+	want = append(want, all)
+	all.branchMax = tightestBranchMax
+	want = append(want, all)
 	if !reflect.DeepEqual(fitLevels, want) {
 		t.Fatalf("fitLevels =\n%+v\nwant\n%+v", fitLevels, want)
 	}
@@ -149,6 +153,9 @@ func TestLine1EachStep(t *testing.T) {
 		{10, func(l string) bool { return !strings.Contains(l, "+12") && !strings.Contains(l, "-3") }, "the changes are gone"},
 		{10, func(l string) bool { return strings.Contains(l, "renderer") }, "the path stays"},
 		{11, func(l string) bool { return !strings.Contains(l, "renderer") && strings.Contains(l, "feat/") }, "the path is gone, the branch stays"},
+		{11, func(l string) bool { return strings.Contains(l, IconModel+" Opus 5") }, "the model icon stays"},
+		{12, func(l string) bool { return !strings.Contains(l, IconModel) && strings.Contains(l, " Opus 5") }, "the model icon is gone, the name stays"},
+		{13, func(l string) bool { return strings.Contains(l, " feat/ad\u2026 ") }, "the branch keeps 8 runes"},
 	}
 	for _, tt := range tests {
 		if line := line1At(data, fitLevels[tt.level]); !tt.check(line) {
@@ -273,11 +280,11 @@ func BenchmarkRenderLine1(b *testing.B) {
 		{name: "fits-first", width: 1000},
 		{name: "cols-120", width: 120},
 		{name: "cols-100", width: 100},
-		{name: "cols-80-pill-moves", width: 80},
+		{name: "cols-80", width: 80},
 		{name: "overflows-all", width: 20},
 	} {
 		data := busyLine(bc.width)
-		// The MCP pill closes line one, or moves when there is no room
+		// The MCP indicator sits in the OS segment at every level
 		data.MCP = servers(7, 1)
 		b.Run(bc.name, func(b *testing.B) {
 			for b.Loop() {

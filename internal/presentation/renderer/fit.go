@@ -21,8 +21,10 @@ const (
 	// tightPathMax leaves the path its last element only: TruncatePath
 	// never cuts below ".../<last>".
 	tightPathMax int = 1
-	// tightBranchMax is the branch budget of the tightest levels.
+	// tightBranchMax is the branch budget of the tight levels.
 	tightBranchMax int = 12
+	// tightestBranchMax is the branch budget of the last level.
+	tightestBranchMax int = 8
 	// branchEllipsis ends a shortened branch name.
 	branchEllipsis string = "…"
 )
@@ -51,6 +53,8 @@ type lineFit struct {
 	dropChanges bool
 	// dropPath leaves out the directory; the branch still says where.
 	dropPath bool
+	// dropModelIcon leaves the model its name alone.
+	dropModelIcon bool
 }
 
 // fitLevels are the degradation steps, each one giving up what the
@@ -59,7 +63,8 @@ type lineFit struct {
 // branch and the countdowns. A full line is about 240 cells, and those
 // steps bring it to about 120; the last ones, beyond that list, are what
 // still has to go for 80 columns: the path to its last element and the
-// branch to 12 runes, quota names to their initial, the changes, the path.
+// branch to 12 runes, quota names to their initial, the changes, the path,
+// the model icon, and the branch down to 8 runes.
 var fitLevels = buildFitLevels()
 
 // buildFitLevels accumulates the degradation steps.
@@ -79,6 +84,8 @@ func buildFitLevels() []lineFit {
 		func(f *lineFit) { f.shortNames = true },
 		func(f *lineFit) { f.dropChanges = true },
 		func(f *lineFit) { f.dropPath = true },
+		func(f *lineFit) { f.dropModelIcon = true },
+		func(f *lineFit) { f.branchMax = tightestBranchMax },
 	}
 	levels := make([]lineFit, 0, len(steps)+1)
 	var fit lineFit

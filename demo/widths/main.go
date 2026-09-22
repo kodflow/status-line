@@ -1,6 +1,6 @@
 // Command widths renders the sample state at several terminal widths, to
 // see the adaptive condensing of line one at work. Line two is printed when
-// it carries something (the MCP pill moves there when line one is full).
+// it carries something (the MCP pill, with STATUSLINE_MCP_LINE=2).
 //
 //	go run ./demo/widths            # coloured, then stripped
 //	go run ./demo/widths 100 72     # chosen widths only
@@ -40,7 +40,7 @@ func main() {
 		}
 	}
 	data := sample.Data()
-	// The lighter session leaves line one room for the MCP pill at 80
+	// A lighter session, for comparison
 	if *light {
 		data.Limits.Scoped = nil
 		data.Git.Branch = "main"
@@ -56,7 +56,7 @@ func main() {
 		fmt.Printf("── COLUMNS=%d  visible=%d  render=%s\n", w, renderer.VisibleWidth(line1), took)
 		fmt.Println(line1)
 		fmt.Println(ansi.ReplaceAllString(line1, ""))
-		// Line two only matters when the MCP pill had to move there
+		// Line two only carries something when the MCP pill is asked there
 		if line2 != "" {
 			fmt.Println("   line 2: " + ansi.ReplaceAllString(line2, ""))
 		}

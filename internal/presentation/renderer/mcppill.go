@@ -18,8 +18,9 @@ const (
 	mcpOffMark string = "\u00b7"
 )
 
-// mcpOnLine2 is true when the pill is asked to stay on line two; by default
-// it closes line one. Resolved once at startup; tests replace it.
+// mcpOnLine2 is true when the MCP servers are asked onto line two, as a
+// pill of their own; by default they sit in the OS segment of line one.
+// Resolved once at startup; tests replace it.
 var mcpOnLine2 = os.Getenv(mcpLineEnv) == mcpLineTwo
 
 // mcpSummary is everything the MCP pill says.
@@ -54,7 +55,39 @@ func summarizeMCP(servers model.MCPServers) mcpSummary {
 	return s
 }
 
-// renderMCPPill renders the MCP servers as one small pill: the MCP glyph
+// writeMCPInline sums the MCP servers up inside the OS segment, on its
+// white ground: the MCP glyph in dark teal, the number of enabled servers
+// in the OS ink, then, when some are disabled, a muted "·N" crossed out.
+// While a call is in flight the glyph and the count become a chip, bold
+// white on dark teal, taking exactly the cells they took at rest so the
+// line does not shift. No server, nothing.
+//
+// Params:
+//   - sb: string builder to write to
+//   - s: servers summed up
+func writeMCPInline(sb *strings.Builder, s mcpSummary) {
+	// Nothing configured draws nothing
+	if s.on+s.off == 0 {
+		return
+	}
+	// Lit: one chip for glyph and count; at rest: each in its own ink
+	if s.busy {
+		sb.WriteString(BgMCPLabel + FgWhite + Bold + Labelled(glyphs.MCP, itoa(s.on)) + Reset)
+	} else {
+		glyph := glyphs.MCP
+		// The text set spells the glyph out; it still needs its space
+		sb.WriteString(BgWhite + FgMCPOnWhite + Bold + glyph + " " + Reset)
+		sb.WriteString(BgWhite + FgBlack + Bold + itoa(s.on) + Reset)
+	}
+	// The disabled servers are a discreet suffix, never a label of their own
+	if s.off > 0 {
+		sb.WriteString(BgWhite + FgMCPMutedOnWhite + " " + mcpOffMark + StrikeMCP + itoa(s.off) + Reset)
+	}
+	sb.WriteString(BgWhite + " " + Reset)
+}
+
+// renderMCPPill renders the MCP servers as one small pill (line two, when
+// STATUSLINE_MCP_LINE=2): the MCP glyph
 // and the number of enabled servers (text glyphs: "MCP 7"), then, when some
 // are disabled, a muted "·N" crossed out. While a call is in flight the
 // whole pill takes the chip colours, bold white on dark teal; the disabled
@@ -81,17 +114,4 @@ func (r *Powerline) renderMCPPill(sb *strings.Builder, servers model.MCPServers)
 		sb.WriteString(bg + offInk + " " + mcpOffMark + StrikeMCP + itoa(s.off) + Reset)
 	}
 	sb.WriteString(bg + " " + Reset + cap + RightRound + Reset)
-}
-
-// mcpPill renders the MCP pill on its own.
-//
-// Params:
-//   - servers: list of MCP servers
-//
-// Returns:
-//   - string: the pill, empty when there is no server
-func (r *Powerline) mcpPill(servers model.MCPServers) string {
-	var sb strings.Builder
-	r.renderMCPPill(&sb, servers)
-	return sb.String()
 }

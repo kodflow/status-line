@@ -52,8 +52,8 @@ binaire : une somme absente, malformée ou différente annule la mise à jour.
 `STATUSLINE_GLYPHS` = `nerd` (défaut) | `text` (repli ASCII, sans Nerd Font)
 `STATUSLINE_COLORS` = `truecolor` | `256` force la profondeur de couleur ;
 absent, elle suit `COLORTERM` (`truecolor`/`24bit` → 24 bits, sinon 256)
-`STATUSLINE_MCP_LINE` = `2` garde la pastille MCP en ligne 2 (défaut : fin
-de ligne 1)
+`STATUSLINE_MCP_LINE` = `2` sort les serveurs MCP du segment OS vers une
+pastille en ligne 2 (défaut : dans le segment OS de la ligne 1)
 `STATUSLINE_HIDE` = pastilles à masquer, séparées par des virgules :
 `context`, `session`, `weekly`, `model`, `credits`, `health`
 
@@ -64,12 +64,11 @@ symbole Unicode générique retombe sur une autre police et devient illisible.
 
 | Segment | Description |
 |---------|-------------|
-| OS | Icône système + étincelles 󰙴 = état de Claude (vert/orange/rouge), puis `󰚩 N` sous-agents hors épic affiché |
+| OS | Icône système + étincelles 󰙴 = état de Claude (vert/orange/rouge), puis `󰒍 N` serveurs MCP, puis `󰚩 N` sous-agents hors épic affiché |
 | Model | Pill colorée (Haiku/Sonnet/Opus/Fable) + jauge d'effort + fast mode |
 | Path | Répertoire où la session travaille réellement (voir ci-dessous) |
 | Git | Branche + modifiés/non-trackés + nombre de worktrees liés (hors prunable) |
 | Changes | Lignes ajoutées/supprimées |
-| MCP | Pastille `󰒍 N` en fin de ligne (voir Serveurs MCP) |
 
 Les quotas du compte (session 5h, hebdo, quota scopé au modèle courant) sont
 rendus dans le segment du modèle, séparés par un `\ue0b1`. Un quota scopé à une
@@ -100,21 +99,20 @@ scopé (libellé + % + compte à rebours), 3 barre hebdo, 4 barre session
 7 comptes à rebours — puis, pour tenir en 80 colonnes : 8 chemin à son
 dernier élément et branche à 12, 9 noms de quota à l'initiale (`W`, `O`),
 10 sans les changements (+/−), 11 sans le chemin (la branche reste ; hors
-dépôt, jamais). Le premier niveau qui tient gagne, trouvé par bissection
+dépôt, jamais), 12 sans l'icône du modèle, 13 branche à 8 runes. Le premier niveau qui tient gagne, trouvé par bissection
 (largeurs décroissantes le long des niveaux, testé) : 1 rendu si la ligne
 tient, 5 au plus sinon (~20 µs vs ~80 µs sur i5-3210M). Aucun niveau ne
 tient → le dernier. Largeur 0 (tests) = pas de contrainte. Une ligne
 complète fait ~240 cellules, ~120 après l'étape 7, ~75 après la 11.
 
-La pastille MCP ferme la ligne 1 à chaque niveau et n'est **jamais**
-abandonnée (≈ 8-11 cellules) : si même le dernier niveau ne la tient pas,
-elle passe en ligne 2 et la ligne 1 est ajustée à nouveau sans elle (la
-session chargée de `demo/widths` à 80 colonnes : pastille en ligne 2 ;
-`-light` : en ligne 1).
+L'indicateur MCP du segment OS (≈ 4-7 cellules) est dessiné à chaque
+niveau : jamais abandonné, jamais déplacé, compté dans le budget. Les deux
+derniers niveaux existent pour lui : 12 sans l'icône du modèle (le nom
+reste), 13 branche à 8 runes — la session chargée de `demo/widths` tient
+alors en 76 cellules à 80 colonnes.
 
 **Ligne 2 :** une pastille par épic ouvert mène la ligne, puis la pastille
-MCP si elle y est (`STATUSLINE_MCP_LINE=2`, ou ligne 1 trop pleine), puis la
-mise à jour. Aucune troncature : un titre long passe à la
+MCP si `STATUSLINE_MCP_LINE=2`, puis la mise à jour. Aucune troncature : un titre long passe à la
 ligne plutôt que d'être coupé.
 
 ## Serveurs MCP
@@ -144,12 +142,18 @@ Désactivé = `"disabled": true`, ou listé dans `projects[<dir>].disabledMcpSer
 (nom nu ou `plugin:<plugin>:<serveur>`) ; `disabledMcpjsonServers` vise
 `.mcp.json`. Tout fichier illisible ou malformé est ignoré ; pas d'exec.
 
-**Pastille** : glyphe MCP `\U000F048D` (󰒍, présent dans MesloLGS NF —
-vérifié `fc-list ":charset=f048d"`) puis le **total** des serveurs actifs,
-gras, encre 23 sur sarcelle claire 116, capuchons arrondis 116 : `󰒍 7`
-(glyphes texte : `MCP 7`). Aucun détail par portée, aucun libellé. Des
-serveurs désactivés ajoutent un suffixe discret `·N`, encre 239 (240 ne tient
-que 4.31:1 sur 116), N barré. Aucun serveur, aucune pastille.
+**Indicateur (défaut)** : dans le segment OS de la ligne 1, sur son fond
+blanc 255, après l'étincelle de santé et avant `󰚩 N` : glyphe MCP
+`\U000F048D` (󰒍, présent dans MesloLGS NF — `fc-list ":charset=f048d"`)
+en sarcelle 23 gras (6.46:1), puis le **total** des serveurs actifs en encre
+OS 232 gras : `󰒍 7` (glyphes texte : `MCP 7`). Aucun détail par portée, pas
+de capuchons. Des serveurs désactivés ajoutent `·N`, gris 241 (5.26:1 ; 242
+ne tient que 4.53, 244 tombe à 3.4), N barré. Aucun serveur, rien.
+
+**Pastille (ligne 2, `STATUSLINE_MCP_LINE=2`)** : même contenu, pastille à
+capuchons arrondis 116, encre 23 gras sur 116 ; `·N` en 239 (240 ne tient
+que 4.31:1 sur 116).
+
 L'adaptateur garde la portée (`MCPServer.Source`, `WithSource`, posée sur
 chaque source avant la fusion) : donnée utile, non affichée.
 
@@ -162,8 +166,11 @@ chaque seconde, un appel court ne se verrait jamais). Un appel sans résultat
 depuis 30 min est tenu pour perdu. Clé → serveur (`model.WithBusy`) :
 nom normalisé (`[^A-Za-z0-9_-]` → `_`), `plugin_<plugin>_<serveur>` → serveur ;
 une clé inconnue est ajoutée, allumée, sans portée, comptée active. Un appel
-en vol (ou dans les 2 s) allume **toute la pastille** : 255 gras sur 23
-(7.5:1), capuchons 23 ; le suffixe `·N` reste, en 116 sur 23 (4.54:1). Lecture de queue partagée avec `activity` : `adapter/transcript`.
+en vol (ou dans les 2 s) allume l'indicateur : glyphe et nombre deviennent
+une puce 255 gras sur 23 (7.5:1), sur exactement les mêmes cellules (la
+ligne ne bouge pas) ; `·N` reste, gris sur blanc. En pastille de ligne 2,
+toute la pastille s'allume (capuchons 23) et `·N` passe en 116 sur 23
+(4.54:1). Lecture de queue partagée avec `activity` : `adapter/transcript`.
 
 ## Effort
 

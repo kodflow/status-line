@@ -56,13 +56,12 @@ func (r *Powerline) Render(data model.StatusLineData) string {
 //   - sb: string builder to write to
 //   - data: status line data
 func (r *Powerline) renderCompact(sb *strings.Builder, data model.StatusLineData) {
-	// Line one carries everything the session is: identity, quotas,
-	// repository, and by default the MCP pill at its end. Line two carries
-	// the epics, the MCP pill when it is asked there or when line one has
-	// no room left for it, and an update notice.
-	mcpOnLine1 := r.renderLine1(sb, data)
+	// Line one carries everything the session is: identity, MCP servers,
+	// quotas, repository. Line two carries the epics, the MCP pill when it
+	// is asked there, and an update notice.
+	r.renderLine1(sb, data)
 	sb.WriteString("\n" + LineGap())
-	r.renderLine2With(sb, data, !mcpOnLine1)
+	r.renderLine2With(sb, data, mcpOnLine2)
 	sb.WriteString("\n")
 }
 
@@ -70,38 +69,17 @@ func (r *Powerline) renderCompact(sb *strings.Builder, data model.StatusLineData
 //
 // The line is drawn whole first; while it is wider than the terminal
 // allows, it is drawn again one degradation step further (fitLevels). The
-// MCP pill closes the line and is never given up: when even the tightest
-// level cannot hold it, it moves to line two instead. The second line is
-// never condensed: a long task title wraps instead.
+// MCP indicator inside the OS segment is part of every level, never given
+// up. The second line is never condensed: a long task title wraps instead.
 //
 // Params:
 //   - sb: string builder to write to
 //   - data: status line data
-//
-// Returns:
-//   - bool: true when the MCP pill was drawn on this line
-func (r *Powerline) renderLine1(sb *strings.Builder, data model.StatusLineData) bool {
-	budget := lineBudget(data.Terminal.Width)
-	pill := ""
-	// The pill closes line one unless it is asked to stay on line two
-	if !mcpOnLine2 {
-		pill = r.mcpPill(data.MCP)
-	}
-	line, _, fits := fitLine1(budget, func(buf *strings.Builder, fit lineFit) {
-		r.renderLine1Fit(buf, data, fit)
-		buf.WriteString(pill)
-	})
-	// No pill, or a line that holds it: done
-	if pill == "" || fits {
-		sb.WriteString(line)
-		return pill != ""
-	}
-	// Even the tightest line cannot hold the pill: it goes to line two
-	line, _, _ = fitLine1(budget, func(buf *strings.Builder, fit lineFit) {
+func (r *Powerline) renderLine1(sb *strings.Builder, data model.StatusLineData) {
+	line, _, _ := fitLine1(lineBudget(data.Terminal.Width), func(buf *strings.Builder, fit lineFit) {
 		r.renderLine1Fit(buf, data, fit)
 	})
 	sb.WriteString(line)
-	return false
 }
 
 // renderLine1Fit renders the first line with OS, Model, quota, Path, Git and
@@ -116,7 +94,12 @@ func (r *Powerline) renderLine1Fit(sb *strings.Builder, data model.StatusLineDat
 	modelBg, _, _ := GetModelColors(data.Model.FullName())
 
 	// Render OS segment (transitions to Model segment)
-	r.renderOSSegment(sb, data.System, data.Icons.OS, data.Health, data.Tasks.Unattributed, modelBg)
+	var mcp model.MCPServers
+	// The MCP indicator lives in the OS segment unless asked onto line two
+	if !mcpOnLine2 {
+		mcp = data.MCP
+	}
+	r.renderOSSegment(sb, data.System, data.Icons.OS, data.Health, mcp, data.Tasks.Unattributed, modelBg)
 
 	// Build the quota chain first: each segment needs to know the colour of the
 	// one that follows it to draw its separator
@@ -146,6 +129,8 @@ func (r *Powerline) renderLine1Fit(sb *strings.Builder, data model.StatusLineDat
 		Quotas:   modelQuotas(data),
 		Fit:      fit,
 	}
+	// The smallest levels leave the model its name alone
+	modelData.ShowIcon = modelData.ShowIcon && !fit.dropModelIcon
 	r.renderModelSegment(sb, modelData)
 
 	// Chain every quota, each handing over to the next and the last to the path
@@ -321,9 +306,10 @@ func pulseOn() bool {
 //   - sys: system information
 //   - showIcon: whether to show the OS icon
 //   - health: state of Claude's services, drawn beside the icon when known
+//   - mcp: MCP servers to sum up after the health glyph, nil for none
 //   - subagents: running subagents tied to no epic on line 2
 //   - nextBg: background color of the next segment
-func (r *Powerline) renderOSSegment(sb *strings.Builder, sys model.SystemInfo, showIcon bool, health model.ServiceHealth, subagents int, nextBg string) {
+func (r *Powerline) renderOSSegment(sb *strings.Builder, sys model.SystemInfo, showIcon bool, health model.ServiceHealth, mcp model.MCPServers, subagents int, nextBg string) {
 	// Write left rounded cap
 	sb.WriteString(FgWhite + LeftRound + Reset)
 	// Check if icon should be shown
@@ -339,6 +325,8 @@ func (r *Powerline) renderOSSegment(sb *strings.Builder, sys model.SystemInfo, s
 	if color := healthColor(health); color != "" && !isHidden(hideHealth) {
 		sb.WriteString(BgWhite + color + glyphs.Health + " " + Reset)
 	}
+	// The MCP servers the session can reach, between health and subagents
+	writeMCPInline(sb, summarizeMCP(mcp))
 	// Subagents working for no epic on show belong to the session as a whole
 	if subagents > 0 {
 		sb.WriteString(BgWhite + FgBlack + Bold + glyphs.Subagents + " " + itoa(subagents) + " " + Reset)
