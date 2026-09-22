@@ -3,33 +3,43 @@ package terminal
 
 import (
 	"os"
+	"strconv"
+	"strings"
 
 	"github.com/florent/status-line/internal/domain/model"
 	"github.com/florent/status-line/internal/domain/port"
-	"golang.org/x/term"
 )
 
 const (
-	// defaultWidth is the fallback terminal width.
-	defaultWidth int = 120
-	// ttyPath is the path to the TTY device.
-	ttyPath string = "/dev/tty"
+	// DefaultWidth is the width assumed when COLUMNS is absent or invalid.
+	DefaultWidth int = 120
+	// columnsEnv is the variable the host sets to the width it gives the
+	// status line command.
+	columnsEnv string = "COLUMNS"
+	// maxWidth bounds a plausible width; anything larger is a typo.
+	maxWidth int = 10000
 )
 
 // Compile-time interface implementation check.
 var _ port.TerminalProvider = (*Provider)(nil)
 
-// Provider implements port.TerminalProvider using terminal detection.
-// It retrieves terminal dimensions from the system.
-type Provider struct{}
+// Provider implements port.TerminalProvider from the environment.
+//
+// The status line command runs with its output piped to the host, so its
+// own stdout is no terminal and /dev/tty would report the whole window
+// rather than the room the host gives the line. The host says that room in
+// COLUMNS; nothing is executed and no device is opened.
+type Provider struct {
+	getenv func(string) string
+}
 
 // NewProvider creates a new terminal provider adapter.
 //
 // Returns:
-//   - *Provider: new provider instance
+//   - *Provider: provider reading the process environment
 func NewProvider() *Provider {
-	// Return empty struct as no state is needed
-	return &Provider{}
+	// Read the real environment
+	return &Provider{getenv: os.Getenv}
 }
 
 // Info returns the current terminal information.
@@ -37,34 +47,27 @@ func NewProvider() *Provider {
 // Returns:
 //   - model.TerminalInfo: terminal dimensions
 func (p *Provider) Info() model.TerminalInfo {
-	// Return terminal info with width
-	return model.TerminalInfo{
-		Width: p.getWidth(),
+	getenv := p.getenv
+	// A zero provider still reads the real environment
+	if getenv == nil {
+		getenv = os.Getenv
 	}
+	return model.TerminalInfo{Width: ParseWidth(getenv(columnsEnv))}
 }
 
-// getWidth returns the terminal width in columns.
+// ParseWidth reads a COLUMNS value.
+//
+// Params:
+//   - value: raw COLUMNS value
 //
 // Returns:
-//   - int: terminal width or default if unavailable
-func (p *Provider) getWidth() int {
-	tty, err := os.Open(ttyPath)
-	// Check if tty is available
-	if err == nil {
-		defer tty.Close()
-		// Try to get width from tty
-		if width, _, err := term.GetSize(int(tty.Fd())); err == nil && width > 0 {
-			// Return tty width
-			return width
-		}
+//   - int: the width, DefaultWidth when the value is absent, not a
+//     positive integer, or implausibly large
+func ParseWidth(value string) int {
+	width, err := strconv.Atoi(strings.TrimSpace(value))
+	// Anything but a plausible positive count falls back to the default
+	if err != nil || width <= 0 || width > maxWidth {
+		return DefaultWidth
 	}
-
-	// Fallback: try stdout
-	if width, _, err := term.GetSize(int(os.Stdout.Fd())); err == nil && width > 0 {
-		// Return stdout width
-		return width
-	}
-
-	// Return default width as last resort
-	return defaultWidth
+	return width
 }

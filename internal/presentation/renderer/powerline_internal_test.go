@@ -119,7 +119,7 @@ func TestPowerline_renderPathSegment(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &Powerline{}
 			var sb strings.Builder
-			r.renderPathSegment(&sb, "/workspace", true, true, "")
+			r.renderPathSegment(&sb, "/workspace", true, true, "", 0)
 			if sb.Len() == 0 {
 				t.Error("renderPathSegment() produced empty output")
 			}
@@ -139,7 +139,7 @@ func TestPowerline_renderGitSegment(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			r := &Powerline{}
 			var sb strings.Builder
-			r.renderGitSegment(&sb, tt.git, true, "")
+			r.renderGitSegment(&sb, tt.git, true, "", 0)
 			_ = sb.String() // Just verify no panic
 		})
 	}
@@ -260,8 +260,8 @@ func TestPowerline_renderOSSegmentHealth(t *testing.T) {
 
 func TestPowerline_renderGitSegmentWorktrees(t *testing.T) {
 	var with, without strings.Builder
-	(&Powerline{}).renderGitSegment(&with, model.GitStatus{Branch: "main", Worktrees: 2}, true, "")
-	(&Powerline{}).renderGitSegment(&without, model.GitStatus{Branch: "main"}, true, "")
+	(&Powerline{}).renderGitSegment(&with, model.GitStatus{Branch: "main", Worktrees: 2}, true, "", 0)
+	(&Powerline{}).renderGitSegment(&without, model.GitStatus{Branch: "main"}, true, "", 0)
 	if !strings.Contains(with.String(), glyphs.Worktree+" 2") {
 		t.Errorf("worktree count missing from %q", with.String())
 	}

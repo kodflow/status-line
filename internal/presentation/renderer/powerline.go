@@ -65,12 +65,30 @@ func (r *Powerline) renderCompact(sb *strings.Builder, data model.StatusLineData
 	sb.WriteString("\n")
 }
 
-// renderLine1 renders the first line with OS, Model, Weekly, Path, Git, and Changes segments.
+// renderLine1 renders the first line, condensed to the terminal width.
+//
+// The line is drawn whole first; while it is wider than the terminal
+// allows, it is drawn again one degradation step further (fitLevels). The
+// second line is never condensed: a long task title wraps instead.
 //
 // Params:
 //   - sb: string builder to write to
 //   - data: status line data
 func (r *Powerline) renderLine1(sb *strings.Builder, data model.StatusLineData) {
+	line, _ := fitLine1(lineBudget(data.Terminal.Width), func(buf *strings.Builder, fit lineFit) {
+		r.renderLine1Fit(buf, data, fit)
+	})
+	sb.WriteString(line)
+}
+
+// renderLine1Fit renders the first line with OS, Model, quota, Path, Git and
+// Changes segments, giving up what fit says.
+//
+// Params:
+//   - sb: string builder to write to
+//   - data: status line data
+//   - fit: what to leave out
+func (r *Powerline) renderLine1Fit(sb *strings.Builder, data model.StatusLineData, fit lineFit) {
 	// Get model background color for OS segment transition (use FullName for color detection)
 	modelBg, _, _ := GetModelColors(data.Model.FullName())
 
@@ -81,8 +99,15 @@ func (r *Powerline) renderLine1(sb *strings.Builder, data model.StatusLineData) 
 	// one that follows it to draw its separator
 	segments := quotaSegments(data)
 
+	// Whatever ends the quota chain hands over to the path, or straight to
+	// the branch when the path gave way
+	afterQuotas := BgBlue
+	if fit.dropPath && data.Git.IsInRepo() {
+		afterQuotas = BgGit
+	}
+
 	// The model segment carries the account quotas that apply to this model
-	modelNextBg := BgBlue
+	modelNextBg := afterQuotas
 	// Hand over to the first remaining segment when there is one
 	if len(segments) > 0 {
 		modelNextBg = segments[0].bg
@@ -96,17 +121,18 @@ func (r *Powerline) renderLine1(sb *strings.Builder, data model.StatusLineData) 
 		Effort:   data.Effort,
 		FastMode: data.FastMode,
 		Quotas:   modelQuotas(data),
+		Fit:      fit,
 	}
 	r.renderModelSegment(sb, modelData)
 
 	// Chain every quota, each handing over to the next and the last to the path
 	for idx, seg := range segments {
-		nextBg := BgBlue
+		nextBg := afterQuotas
 		// Hand over to the next quota when there is one
 		if idx+1 < len(segments) {
 			nextBg = segments[idx+1].bg
 		}
-		renderQuotaSegment(sb, seg, nextBg)
+		renderQuotaSegment(sb, seg, nextBg, fit)
 	}
 
 	// Determine what follows git segment (or path if no git)
@@ -121,13 +147,23 @@ func (r *Powerline) renderLine1(sb *strings.Builder, data model.StatusLineData) 
 		changesNextBg = BgRed
 	}
 
-	// Render path segment (pass changesNextBg for case when no git)
-	r.renderPathSegment(sb, data.Dir, data.Git.IsInRepo(), data.Icons.Path, changesNextBg)
+	// A line too narrow for the changes leaves them to the git counters
+	changes := data.Changes
+	if fit.dropChanges {
+		changes = model.CodeChanges{}
+		changesNextBg = ""
+	}
+
+	// Render path segment (pass changesNextBg for case when no git); only
+	// the tightest level gives it up, and only when the branch stays
+	if !fit.dropPath || !data.Git.IsInRepo() {
+		r.renderPathSegment(sb, data.Dir, data.Git.IsInRepo(), data.Icons.Path, changesNextBg, fit.pathMax)
+	}
 
 	// Render git segment if in repo
-	r.renderGitSegment(sb, data.Git, data.Icons.Git, changesNextBg)
+	r.renderGitSegment(sb, data.Git, data.Icons.Git, changesNextBg, fit.branchMax)
 	// Render code changes if any
-	r.renderChangesSegment(sb, data.Changes)
+	r.renderChangesSegment(sb, changes)
 }
 
 // renderLine2 renders the second line with dynamic pills (MCP, Update).
@@ -336,24 +372,28 @@ func (r *Powerline) renderModelSegment(sb *strings.Builder, data *ModelSegmentDa
 	// read as one group and are drawn as one, divided by a thin rule rather
 	// than by a new segment.
 	for idx, quota := range data.Quotas {
-		cursor := noCursor
-		// Place the even-burn cursor only when the window makes it meaningful
-		if quota.HasWindow() {
-			cursor = quota.CursorPosition()
-		}
-		bar := RenderProgressBarWidth(quota.Progress(), cursor, segBarWidth, textColor, bgColor+textColor)
-
 		// The first quota is the model's own session budget and runs straight
 		// on from its name; the rest are divided by a thin rule and named
 		if idx == 0 {
 			sb.WriteString(bgColor + textColor + " " + Reset)
 		} else {
 			sb.WriteString(bgColor + textColor + " " + glyphs.Divider + Reset)
-			sb.WriteString(bgColor + textColor + Bold + " " + QuotaLabel(quota) + " " + Reset)
+			sb.WriteString(bgColor + textColor + Bold + " " + data.Fit.quotaLabel(quota) + " " + Reset)
 		}
-		sb.WriteString(bgColor + textColor + bar + Bold + " " + itoa(quota.Percent) + "%" + Reset)
+		// The bar goes when the line is too narrow; the figure stays
+		if data.Fit.dropBar(quota.Kind) {
+			sb.WriteString(bgColor + textColor + Bold + itoa(quota.Percent) + "%" + Reset)
+		} else {
+			cursor := noCursor
+			// Place the even-burn cursor only when the window makes it meaningful
+			if quota.HasWindow() {
+				cursor = quota.CursorPosition()
+			}
+			bar := RenderProgressBarWidth(quota.Progress(), cursor, segBarWidth, textColor, bgColor+textColor)
+			sb.WriteString(bgColor + textColor + bar + Bold + " " + itoa(quota.Percent) + "%" + Reset)
+		}
 		// Append the countdown to the refill, which the bar cannot say
-		if quota.HasWindow() {
+		if quota.HasWindow() && !data.Fit.dropCountdowns {
 			sb.WriteString(bgColor + textColor + " " + glyphs.Reset + FormatDuration(quota.Remaining()) + Reset)
 		}
 	}
@@ -372,8 +412,9 @@ func (r *Powerline) renderModelSegment(sb *strings.Builder, data *ModelSegmentDa
 //   - hasGit: whether git segment follows
 //   - showIcon: whether to show the folder icon
 //   - nextBg: background color of next segment if no git
-func (r *Powerline) renderPathSegment(sb *strings.Builder, dir string, hasGit bool, showIcon bool, nextBg string) {
-	truncated := TruncatePath(dir, defaultMaxPath)
+//   - maxPath: path budget, 0 for the default one
+func (r *Powerline) renderPathSegment(sb *strings.Builder, dir string, hasGit bool, showIcon bool, nextBg string, maxPath int) {
+	truncated := TruncatePath(dir, maxPath)
 	// Check if icon should be shown
 	if showIcon {
 		// Write path with folder icon and dark blue text
@@ -405,7 +446,8 @@ func (r *Powerline) renderPathSegment(sb *strings.Builder, dir string, hasGit bo
 //   - git: git status information
 //   - showIcon: whether to show the git branch icon
 //   - nextBg: background color of next segment for separator
-func (r *Powerline) renderGitSegment(sb *strings.Builder, git model.GitStatus, showIcon bool, nextBg string) {
+//   - maxBranch: branch budget in runes, 0 for no limit
+func (r *Powerline) renderGitSegment(sb *strings.Builder, git model.GitStatus, showIcon bool, nextBg string, maxBranch int) {
 	// Skip if not in a git repository
 	if !git.IsInRepo() {
 		// Return early if not in repo
@@ -415,10 +457,10 @@ func (r *Powerline) renderGitSegment(sb *strings.Builder, git model.GitStatus, s
 	// Check if icon should be shown
 	if showIcon {
 		// Write branch with icon and dark cyan text
-		sb.WriteString(BgGit + FgGitInk + Bold + " " + IconGitBranch + " " + git.Branch)
+		sb.WriteString(BgGit + FgGitInk + Bold + " " + IconGitBranch + " " + TruncateBranch(git.Branch, maxBranch))
 	} else {
 		// Write branch without icon with dark cyan text
-		sb.WriteString(BgGit + FgGitInk + Bold + " " + git.Branch)
+		sb.WriteString(BgGit + FgGitInk + Bold + " " + TruncateBranch(git.Branch, maxBranch))
 	}
 
 	// Add modified indicator if present

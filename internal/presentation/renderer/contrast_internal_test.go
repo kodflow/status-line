@@ -101,6 +101,7 @@ func TestAdjacentSegmentsDifferInGround(t *testing.T) {
 	}{
 		{name: "os and context are separated by the model", left: BgContext, right: BgBlue},
 		{name: "context and path", left: BgContext, right: BgBlue},
+		{name: "context and git, the path given up", left: BgContext, right: BgGit},
 		{name: "path and git", left: BgBlue, right: BgGit},
 		{name: "git and lines added", left: BgGit, right: BgGreen},
 		{name: "lines added and removed", left: BgGreen, right: BgRed},
