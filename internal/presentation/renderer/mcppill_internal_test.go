@@ -30,10 +30,8 @@ func mcpItemsCases() []mcpItemsCase {
 			servers: model.MCPServers{
 				{Name: "p", Enabled: true, Source: plugin},
 				{Name: "a", Enabled: true, Source: cli}, {Name: "b", Enabled: true, Source: cli},
-				{Name: "u", Enabled: true, Source: user},
-				{Name: "m", Enabled: true, Source: model.MCPSourceManaged},
-				{Name: "l", Enabled: true, Source: model.MCPSourceLocal},
-				{Name: "j", Enabled: true, Source: model.MCPSourceProject},
+				{Name: "u", Enabled: true, Source: user}, {Name: "m", Enabled: true, Source: model.MCPSourceManaged},
+				{Name: "l", Enabled: true, Source: model.MCPSourceLocal}, {Name: "j", Enabled: true, Source: model.MCPSourceProject},
 			},
 			want: "managed 1|cli 2|local 1|project 1|user 1|plugin 1",
 		},
