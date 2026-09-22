@@ -56,11 +56,17 @@ type taskFile struct {
 	Agent   string `json:"agent"`
 	Subject string `json:"subject"`
 	Status  string `json:"status"`
+	Epic    int    `json:"epic"`
 }
 
 // sessionTasks is the tasks MCP file.
 type sessionTasks struct {
 	Tasks []taskFile `json:"tasks"`
+	// Epics holds each agent's current epic; tasks of earlier epics are
+	// finished subjects and are not shown.
+	Epics map[string]struct {
+		ID int `json:"id"`
+	} `json:"epics"`
 }
 
 // sessionAgents is the running-agents file.
@@ -165,8 +171,13 @@ func (p *Provider) mcpTasks() model.TaskList {
 	}
 	items := make([]model.TaskItem, 0, len(file.Tasks))
 	// Subagents keep their own lists; only the main agent's is shown
+	epic := file.Epics[mainAgent].ID
 	for _, task := range file.Tasks {
 		if task.Agent != "" && task.Agent != mainAgent {
+			continue
+		}
+		// Only the current epic: an earlier subject is not this one's progress
+		if task.Epic != epic {
 			continue
 		}
 		items = append(items, model.TaskItem{ID: task.ID, Subject: task.Subject, Status: task.Status})

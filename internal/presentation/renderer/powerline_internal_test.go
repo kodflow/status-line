@@ -284,7 +284,7 @@ func TestPowerline_renderLine2Tasks(t *testing.T) {
 	out := sb.String()
 	for _, want := range []string{
 		FgTaskDone + glyphs.TaskDone,
-		glyphs.TaskDone + Reset + FgTaskWaiting + FgTaskTodo + glyphs.TaskOpen,
+		glyphs.TaskDone + Reset + FgTaskTodo + glyphs.TaskOpen,
 		"1/3",
 		"a rather long title that must never be shortened",
 		"github",
@@ -342,7 +342,7 @@ func TestPowerline_renderTasksPillSortsAndPulses(t *testing.T) {
 	bar := func(activeInk string) string {
 		return FgTaskDone + glyphs.TaskDone + glyphs.TaskDone +
 			activeInk + glyphs.TaskDone + Reset +
-			FgTaskWaiting + FgTaskTodo + glyphs.TaskOpen + glyphs.TaskOpen
+			FgTaskTodo + glyphs.TaskOpen + glyphs.TaskOpen
 	}
 
 	clockNow = func() time.Time { return time.Unix(1_800_000_001, 0) }
@@ -376,11 +376,11 @@ func TestPowerline_renderTasksPillAlwaysNamesATask(t *testing.T) {
 		{name: "nothing under way: the task waiting on the user", items: []model.TaskItem{
 			{ID: "1", Subject: "next", Status: model.TaskPending},
 			{ID: "2", Subject: "blocked", Status: model.TaskWaiting},
-		}, want: " " + FgTaskWaiting + glyphs.TaskPaused + " blocked" + Reset},
+		}, want: " " + FgTaskTodo + "blocked" + Reset},
 		{name: "nothing started: the next one", items: []model.TaskItem{
 			{ID: "1", Subject: "done", Status: model.TaskCompleted},
 			{ID: "2", Subject: "next", Status: model.TaskPending},
-		}, want: " " + FgTaskTodo + glyphs.TaskNext + " next" + Reset},
+		}, want: " " + FgTaskTodo + "next" + Reset},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -402,8 +402,8 @@ func TestPowerline_renderTasksPillWaitingCells(t *testing.T) {
 	}}
 	var sb strings.Builder
 	(&Powerline{}).renderTasksPill(&sb, list)
-	want := FgTaskWaiting + glyphs.TaskOpen + glyphs.TaskOpen + FgTaskTodo + glyphs.TaskOpen
+	want := FgTaskTodo + glyphs.TaskOpen + glyphs.TaskOpen + glyphs.TaskOpen + Reset
 	if !strings.Contains(sb.String(), want) {
-		t.Errorf("waiting cells must follow the started ones and precede the waiting ones to do, got %q", sb.String())
+		t.Errorf("waiting cells are drawn like the ones to do, hollow and grey, got %q", sb.String())
 	}
 }

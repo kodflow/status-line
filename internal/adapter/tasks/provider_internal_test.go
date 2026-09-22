@@ -114,3 +114,20 @@ func TestSubagents(t *testing.T) {
 func itoa(v int64) string {
 	return strconv.FormatInt(v, 10)
 }
+
+func TestTasksShowTheCurrentEpicOnly(t *testing.T) {
+	dir := t.TempDir()
+	p := &Provider{sessionDir: dir, now: time.Now}
+	writeFile(t, filepath.Join(dir, "tasks.json"), `{"epics":{"main":{"id":2,"title":"SDK"}},"tasks":[
+		{"id":"1","agent":"main","epic":1,"subject":"old subject","status":"completed"},
+		{"id":"2","agent":"main","epic":2,"subject":"freeze goldens","status":"in_progress"},
+		{"id":"3","agent":"main","epic":2,"subject":"write the SDK","status":"pending"}]}`)
+	list := p.Tasks()
+	if list.Total() != 2 || list.Items[0].Subject != "freeze goldens" {
+		t.Errorf("current epic = %+v, want tasks 2 and 3 only", list.Items)
+	}
+	writeFile(t, filepath.Join(dir, "tasks.json"), `{"tasks":[{"id":"1","agent":"main","subject":"before epics","status":"pending"}]}`)
+	if got := p.Tasks(); got.Total() != 1 {
+		t.Errorf("a list with no epic yet is shown whole, got %+v", got.Items)
+	}
+}

@@ -89,9 +89,6 @@ const (
 	// FgTaskActivePulse is the bright frame of the task being worked on; the
 	// bold is closed by the Reset that follows the started cells.
 	FgTaskActivePulse string = "\033[1;38;5;214m"
-	// FgTaskWaiting is a task blocked on the user: amber like the work under
-	// way, muted because nothing moves until the user answers.
-	FgTaskWaiting string = "\033[38;5;137m"
 	// FgTaskTodo is a task not started yet.
 	FgTaskTodo string = "\033[38;5;245m"
 	// FgTaskTitle is the title of the task being worked on.

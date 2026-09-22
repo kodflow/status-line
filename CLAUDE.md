@@ -93,16 +93,18 @@ sur une jauge fausse.
 
 1. **MCP tasks de `kodflow-hooks`** (prioritaire) : `<config>/kodflow/sessions/<session_id>/tasks.json`.
    Chaque tâche porte son `agent` (injecté par le hook PreToolUse) ; seules
-   celles de `main` sont affichées. `agents.json` à côté = sous-agents lancés
+   celles de `main` sont affichées, et seulement celles de son **épic courant**
+   (`epics.main.id`, ouvert par `task_epic`) : un nouveau sujet a sa propre
+   liste et son propre compteur, il ne rallonge pas le précédent. `agents.json` à côté = sous-agents lancés
    (hooks SubagentStart/Stop) ; un agent sans stop depuis 12 h est ignoré.
 2. **Outils natifs** (repli) : `<config>/tasks/<liste>/<n>.json`, liste =
    `CLAUDE_CODE_TASK_LIST_ID` sinon `session-` + 8 premiers caractères.
 
-Ligne 2 : barre segmentée **triée** (fait ■ vert, en cours ■ ambre, en attente
-de l'utilisateur □ ambre sourd 137, à faire □ gris — plein = fait ou en cours,
-vide = pas fait ; elle se remplit par la gauche quel que soit l'ordre des ids),
-`fait/total`, puis **toujours un titre** (`TaskList.Headline`) : la tâche en
-cours ; sinon 󰏤 la première en attente (statut `waiting` du MCP) ; sinon 󰁔 la
+Ligne 2 : barre segmentée **triée** (fait ■ vert, en cours ■ ambre qui pulse,
+tout le reste □ gris — l'ambre est réservé à ce qui avance vraiment ; elle se
+remplit par la gauche quel que soit l'ordre des ids), `fait/total`, puis
+**toujours un titre** (`TaskList.Headline`) : la tâche en cours ; sinon, en
+gris, la première en attente de l'utilisateur (statut `waiting` du MCP) ou la
 prochaine à faire. Puis `󰚩 N` sous-agents actifs, puis les MCP. Une liste terminée n'est
 plus dessinée. Les cases en cours **pulsent** : une seconde sur deux (horloge
 murale, `clockNow`) elles passent de 172 à 214 gras. Cela suppose
