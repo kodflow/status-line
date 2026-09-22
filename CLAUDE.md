@@ -1,4 +1,4 @@
-<!-- updated: 2026-09-22T15:00:00Z -->
+<!-- updated: 2026-09-22T18:00:00Z -->
 # Status Line
 
 CLI Go pour afficher une status line Powerline personnalisée dans Claude Code.
@@ -18,7 +18,7 @@ internal/
 │   ├── mcpcalls/            # Serveurs MCP appelés en ce moment (transcripts)
 │   ├── sessionstate/        # Session occupée + pid hôte (<config>/sessions/<pid>.json)
 │   ├── system/              # Info système (OS, Docker)
-│   ├── terminal/            # Info terminal (largeur, couleurs)
+│   ├── terminal/            # Largeur du terminal (COLUMNS)
 │   ├── transcript/          # Lecture de la fin d'un transcript JSONL
 │   ├── updater/             # Auto-update binaire (GitHub releases)
 │   └── usage/               # Usage API Anthropic (OAuth, burn-rate)
@@ -33,7 +33,12 @@ make build          # Compile le binaire → bin/status-line
 make test           # Lance les tests (go test ./...)
 make lint           # Vérifie le code (ktn-linter)
 make demo           # Démo avec données exemple
+go run ./demo/widths            # ligne 1 d'une session chargée à 200…60 colonnes
+go run ./demo/mcpline1 [-busy]  # maquettes : pastille MCP courte en ligne 1 (non branchée)
 ```
+
+`demo/` = outils de dev (`demo/sample` = état réaliste partagé) ; ils
+utilisent le vrai renderer mais rien de ce qu'ils composent n'est dans le produit.
 
 ## Affichage
 
@@ -76,6 +81,26 @@ famille de modèles ne s'affiche que si ce modèle est en cours d'utilisation.
 | *modèle* | Quota 7j scopé par famille de modèle (`limits[]`) |
 | coût / credits | Coût cumulé de la session, solde de crédits |
 
+**Largeur (ligne 1 seulement)** : `adapter/terminal` lit `COLUMNS` (posé
+par l'hôte pour la commande de status line) ; absent, non entier, ≤ 0 ou
+> 10000 → 120. Pas de `/dev/tty` ni d'exec. Budget = `COLUMNS − 4`
+(`lineMargin` : l'hôte rembourre la ligne, et une ligne pile au bord passe à
+la ligne au moindre désaccord sur un glyphe). Largeur visible
+(`VisibleWidth`, `width.go`) : échappements CSI/OSC ignorés, glyphes Nerd
+Font (PUA) = 1 cellule, blocs larges CJK/emoji = 2 (petite table), marques
+combinantes = 0. `fit.go` : niveaux cumulatifs, dans l'ordre voulu par
+l'utilisateur — 1 barre du contexte (reste icône + %), 2 barre du quota
+scopé (libellé + % + compte à rebours), 3 barre hebdo, 4 barre session
+(% seul), 5 chemin à 20, 6 branche à 20 runes (début gardé + `…`),
+7 comptes à rebours — puis, pour tenir en 80 colonnes : 8 chemin à son
+dernier élément et branche à 12, 9 noms de quota à l'initiale (`W`, `O`),
+10 sans les changements (+/−), 11 sans le chemin (la branche reste ; hors
+dépôt, jamais). Le premier niveau qui tient gagne, trouvé par bissection
+(largeurs décroissantes le long des niveaux, testé) : 1 rendu si la ligne
+tient, 5 au plus sinon (~20 µs vs ~80 µs sur i5-3210M). Aucun niveau ne
+tient → le dernier. Largeur 0 (tests) = pas de contrainte. Une ligne
+complète fait ~240 cellules, ~120 après l'étape 7, ~75 après la 11.
+
 **Ligne 2 :** une pastille par épic ouvert mène la ligne, puis **une**
 pastille MCP, puis la mise à jour. Aucune troncature : un titre long passe à la
 ligne plutôt que d'être coupé.
@@ -107,11 +132,19 @@ Désactivé = `"disabled": true`, ou listé dans `projects[<dir>].disabledMcpSer
 (nom nu ou `plugin:<plugin>:<serveur>`) ; `disabledMcpjsonServers` vise
 `.mcp.json`. Tout fichier illisible ou malformé est ignoré ; pas d'exec.
 
-**Pastille (variante 9)** : à gauche le libellé `MCP` gras, blanc 255 sur
+**Pastille (courte)** : à gauche le libellé `MCP` gras, blanc 255 sur
 sarcelle foncée 23 (capuchon gauche en 23) ; une flèche `\ue0b0` (texte : `>`)
-passe à la liste sur sarcelle claire 116, encre 23 : serveurs actifs séparés par
-` · `, triés sans casse ; les désactivés suivent, barrés, encre 239 (240 ne tient
-que 4.31:1 sur 116). Capuchon droit en 116. Aucun serveur, aucune pastille.
+passe au corps sur sarcelle claire 116, encre 23 : les serveurs actifs
+**comptés par portée** dans l'ordre de priorité, en minuscules —
+`managed`, `cli`, `local`, `project`, `user`, `plugin` (`model.MCPSources`) —
+portée vide omise, séparées par ` · ` : ` cli 5 · user 1 · plugin 1 `. Les
+désactivés, toutes portées confondues, ferment la liste en ` · off N`,
+barré, encre 239 (240 ne tient que 4.31:1 sur 116), si N > 0. L'adaptateur
+pose `MCPServer.Source` (`WithSource`) sur chaque source avant la fusion : la
+portée qui gagne le nom est celle comptée. Capuchon droit en 116. Aucun
+serveur, aucune pastille. `demo/mcpline1` montre 5 emplacements possibles en
+ligne 1 (dans l'OS, entre modèle et contexte, après git, dans le contexte,
+en fin) : à 80 colonnes, aucun ne tient (~40 cellules de trop).
 
 **Appels en cours** (`adapter/mcpcalls`, sans hook) : 128 Ko de fin de
 `transcript_path` et des transcripts des sous-agents en cours
@@ -121,9 +154,11 @@ il reste allumé 2 s après le `timestamp` du résultat (la ligne se redessine
 chaque seconde, un appel court ne se verrait jamais). Un appel sans résultat
 depuis 30 min est tenu pour perdu. Clé → serveur (`model.WithBusy`) :
 nom normalisé (`[^A-Za-z0-9_-]` → `_`), `plugin_<plugin>_<serveur>` → serveur ;
-une clé inconnue est ajoutée, allumée. Un serveur allumé = pastille dans la
-pastille aux couleurs du libellé (255 gras sur 23, 7.5:1) ; il ne change pas
-de place. Lecture de queue partagée avec `activity` : `adapter/transcript`.
+une clé inconnue est ajoutée, allumée, sans portée. Un appel allume
+l'**entrée de la portée** qui possède le serveur (`cli 5` devient une pastille
+dans la pastille aux couleurs du libellé, 255 gras sur 23, 7.5:1) ; un serveur
+désactivé appelé allume `off N` ; un serveur sans portée s'affiche seul,
+`+nom`, allumé, avant `off N`. Lecture de queue partagée avec `activity` : `adapter/transcript`.
 
 ## Effort
 
