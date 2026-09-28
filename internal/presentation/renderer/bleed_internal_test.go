@@ -396,49 +396,91 @@ func TestACutNeverLeavesTealOpenBeyondTheChip(t *testing.T) {
 	// than spelling its escape out a second time
 	teal := replayPrefix(BgMCPLabel).bg
 	for _, set := range []struct {
-		name    string
-		set     GlyphSet
-		payload string
+		name string
+		set  GlyphSet
 	}{
-		{name: "glyphs:nerd", set: nerdGlyphs, payload: nerdGlyphs.MCP + " 7"},
-		{name: "glyphs:text", set: textGlyphs, payload: textGlyphs.MCP + " 7"},
+		{name: "glyphs:nerd", set: nerdGlyphs},
+		{name: "glyphs:text", set: textGlyphs},
 	} {
 		glyphs = set.set
 		lit := servers(7, 2)
 		lit[0].Busy = true
-		for _, width := range []int{0, 200, 120, 80} {
+		for _, width := range []int{0, 200, 120, 80, 60, 40} {
 			data := busyLine(width)
 			data.MCP = lit
 			data.Tasks.Unattributed = 3
 			line, _, _ := strings.Cut((&Powerline{}).Render(data), "\n")
 			label := set.name + " COLUMNS=" + itoa(width)
 
-			// Every prefix of the line is a frame the host could have got
-			first, last, open := -1, -1, 0
-			for cut := range len(line) + 1 {
-				state := replayPrefix(line[:cut])
-				// Only the chip's ground is an accent; every other ground
-				// a cut leaves open is the segment's own
-				if state.bg != teal {
-					continue
+			payload, drawn := chipPayload(line)
+			// The narrowest levels give the indicator up altogether; then
+			// there is no accent ground in the line to leave open at all
+			if !drawn {
+				// Teal in force with no single opening sequence to be found
+				// means the ground was opened by something else — separate
+				// escapes, which is exactly the window this test closes
+				if open := tealOffsets(line, teal); open != 0 {
+					t.Errorf("%s: a cut leaves teal open at %d offsets, yet the chip's one opening sequence is nowhere in the line: its ground is being opened apart from its ink",
+						label, open)
 				}
-				open++
-				if first < 0 {
-					first = cut
-				}
-				last = cut
+				continue
 			}
-			want := len(set.payload) + len(Reset)
-			// The stretch is the payload and its closing reset, no more
-			if open != want {
-				t.Errorf("%s: a cut leaves teal open at %d offsets, want %d (payload %d + reset %d)",
-					label, open, want, len(set.payload), len(Reset))
+			first, last, open := tealRun(line, teal)
+			// The stretch is the payload the chip draws and its closing
+			// reset, whatever level the chip is drawn at
+			if want := len(payload) + len(Reset); open != want {
+				t.Errorf("%s: a cut leaves teal open at %d offsets, want %d (payload %q is %d bytes + reset %d)",
+					label, open, want, payload, len(payload), len(Reset))
 			}
 			// And it is one stretch, not scattered pieces of the line
-			if open > 0 && last-first+1 != open {
+			if last-first+1 != open {
 				t.Errorf("%s: the offsets that leave teal open run from %d to %d but there are only %d of them",
 					label, first, last, open)
 			}
 		}
 	}
+}
+
+// chipPayload returns the bytes the lit chip draws between its single opening
+// sequence and the reset that closes it, and whether the chip is lit at all.
+func chipPayload(line string) (string, bool) {
+	at := strings.Index(line, mcpLitOpen)
+	// An unlit line, or one whose level gave the indicator up, has no chip
+	if at < 0 {
+		return "", false
+	}
+	rest := line[at+len(mcpLitOpen):]
+	end := strings.Index(rest, Reset)
+	// The chip always closes; a chip that did not would fail checkLine first
+	if end < 0 {
+		return "", false
+	}
+	return rest[:end], true
+}
+
+// tealOffsets counts the byte offsets at which a cut would leave the chip's
+// ground open.
+func tealOffsets(line, teal string) int {
+	_, _, open := tealRun(line, teal)
+	return open
+}
+
+// tealRun returns the first and last byte offset at which a cut leaves the
+// chip's ground open, and how many such offsets there are.
+func tealRun(line, teal string) (int, int, int) {
+	first, last, open := -1, -1, 0
+	// Every prefix of the line is a frame the host could have got
+	for cut := range len(line) + 1 {
+		// Only the chip's ground is an accent; every other ground a cut
+		// leaves open is the segment's own
+		if replayPrefix(line[:cut]).bg != teal {
+			continue
+		}
+		open++
+		if first < 0 {
+			first = cut
+		}
+		last = cut
+	}
+	return first, last, open
 }

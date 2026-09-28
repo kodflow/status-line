@@ -93,7 +93,7 @@ func TestPowerline_renderMCPPillStyling(t *testing.T) {
 // inlineOf renders the OS-segment indicator on its own.
 func inlineOf(list model.MCPServers) string {
 	var sb strings.Builder
-	writeMCPInline(&sb, summarizeMCP(list))
+	writeMCPInline(&sb, summarizeMCP(list), lineFit{})
 	return sb.String()
 }
 
@@ -169,7 +169,7 @@ func withMCPLine(t *testing.T, line2 bool) {
 
 func TestOSSegmentOrder(t *testing.T) {
 	var sb strings.Builder
-	(&Powerline{}).renderOSSegment(&sb, model.SystemInfo{OS: model.OSLinux}, true, model.HealthOK, servers(7, 1), 2, BgBlue)
+	osSegment(&sb, model.HealthOK, servers(7, 1), 2)
 	got := stripSGR(sb.String())
 	health, mcp, agents := strings.Index(got, glyphs.Health), strings.Index(got, glyphs.MCP+" 7"), strings.Index(got, glyphs.Subagents+" 2")
 	if health < 0 || mcp < 0 || agents < 0 || !(health < mcp && mcp < agents) {
@@ -182,7 +182,8 @@ func TestOSSegmentOrder(t *testing.T) {
 
 func TestMCPIndicatorInTheOSSegment(t *testing.T) {
 	withMCPLine(t, false)
-	for _, width := range []int{0, 200, 160, 120, 100, 80} {
+	// Wide enough that the OS segment has given nothing up yet
+	for _, width := range []int{0, 200, 160} {
 		data := busyLine(width)
 		data.MCP = servers(7, 1)
 		out := (&Powerline{}).Render(data)
@@ -194,8 +195,25 @@ func TestMCPIndicatorInTheOSSegment(t *testing.T) {
 		if strings.Contains(line2, glyphs.MCP) {
 			t.Errorf("COLUMNS=%d: never on line two by default, got %q", width, stripSGR(line2))
 		}
-		if width > 0 && VisibleWidth(line1) > lineBudget(width) {
-			t.Errorf("COLUMNS=%d: line one is %d wide, over %d", width, VisibleWidth(line1), lineBudget(width))
+	}
+}
+
+func TestMCPIndicatorNeverMovesOutOfTheOSSegment(t *testing.T) {
+	withMCPLine(t, false)
+	// The indicator may be given up as the line narrows, but while it is
+	// drawn it is drawn in the OS segment and never on line two
+	for _, width := range []int{0, 200, 160, 120, 100, 80, 60, 40} {
+		data := busyLine(width)
+		data.MCP = servers(7, 1)
+		data.Tasks.Unattributed = 3
+		line1, line2, _ := strings.Cut((&Powerline{}).Render(data), "\n")
+		os, _, _ := strings.Cut(line1, SepRight)
+		// Drawn at all, it is inside the OS segment and nowhere else
+		if strings.Contains(stripSGR(line1), glyphs.MCP) && !strings.Contains(stripSGR(os), glyphs.MCP) {
+			t.Errorf("COLUMNS=%d: the indicator left the OS segment, got %q", width, stripSGR(line1))
+		}
+		if strings.Contains(line2, glyphs.MCP) {
+			t.Errorf("COLUMNS=%d: never on line two by default, got %q", width, stripSGR(line2))
 		}
 	}
 }

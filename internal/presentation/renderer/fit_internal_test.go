@@ -58,17 +58,21 @@ func TestFitStepsFollowTheUsersOrder(t *testing.T) {
 		"session: % + countdown",
 		"path: 20 cells",
 		"branch: 20 runes",
+		"os: health + MCP + count",
 		"scoped: label + %",
 		"weekly: label + %",
 		"session: %",
 		"path: last element",
 		"branch: 12 runes",
+		"os: health + MCP glyph",
 		"scoped: initial + %",
 		"weekly: initial + %",
 		"changes: hidden",
 		"path: hidden (inside a repository)",
 		"model: name",
 		"branch: 8 runes",
+		"os: health",
+		"os: OS icon alone",
 	}
 	if got := describeSteps(fitSteps); !reflect.DeepEqual(got, want) {
 		t.Errorf("steps =\n%q\nwant\n%q", got, want)
@@ -207,24 +211,37 @@ func TestSegmentLadders(t *testing.T) {
 	}
 }
 
-func TestOSSegmentNeverShrinks(t *testing.T) {
+func TestOSSegmentGivesWayInOrder(t *testing.T) {
 	withMCPLine(t, false)
 	data := busyLine(0)
 	data.MCP = servers(7, 1)
 	data.Tasks.Unattributed = 2
-	os := func(fit lineFit) string {
-		line := line1At(data, fit)
-		head, _, _ := strings.Cut(line, SepRight)
+	osAt := func(level int) string {
+		var fit lineFit
+		fit[segOS] = level
+		head, _, _ := strings.Cut(line1At(data, fit), SepRight)
 		return head
 	}
-	full := os(fitLevels[0])
-	if !strings.Contains(full, glyphs.MCP+" 7") || !strings.Contains(full, glyphs.Subagents+" 2") {
-		t.Fatalf("the OS segment carries MCP and subagents, got %q", full)
+	// Richest to soberest, in the order the user chose: the subagent count
+	// first because line two already shows those subagents inside their
+	// epic, then the MCP count, then its glyph, and the health light last
+	// because the one time it matters is the one time not to lose it
+	want := []string{
+		" " + glyphs.Health + " " + glyphs.MCP + " 7 \u00b71 " + glyphs.Subagents + " 2 ",
+		" " + glyphs.Health + " " + glyphs.MCP + " 7 \u00b71 ",
+		" " + glyphs.Health + " " + glyphs.MCP + " ",
+		" " + glyphs.Health + " ",
+		" ",
 	}
-	for i, fit := range fitLevels {
-		if got := os(fit); got != full {
-			t.Errorf("state %d changes the OS segment: %q, want %q", i, got, full)
+	for level, tail := range want {
+		// The OS icon is never given up: it is what says the bar is the bar
+		if got, expect := osAt(level), LeftRound+" "+IconLinux+tail; got != expect {
+			t.Errorf("os level %d = %q, want %q", level, got, expect)
 		}
+	}
+	// The ladder has exactly as many rungs as the policy declares
+	if got := len(condensePolicy[segOS].levels); got != len(want) {
+		t.Errorf("the policy declares %d levels, the ladder draws %d", got, len(want))
 	}
 }
 
@@ -246,11 +263,12 @@ func TestCondensed(t *testing.T) {
 }
 
 func TestFitLine1PicksTheFirstLevelThatFits(t *testing.T) {
-	// Level n draws 100-5n cells
+	// Level n draws 100-n cells: one cell per rung keeps every level
+	// positive however many rungs the policy grows
 	render := func(sb *strings.Builder, fit lineFit) {
 		for level, f := range fitLevels {
 			if f == fit {
-				sb.WriteString("\033[1m" + strings.Repeat("x", 100-5*level) + "\033[0m")
+				sb.WriteString("\033[1m" + strings.Repeat("x", 100-level) + "\033[0m")
 				return
 			}
 		}
@@ -261,8 +279,8 @@ func TestFitLine1PicksTheFirstLevelThatFits(t *testing.T) {
 		{budget: 0, level: 0},
 		{budget: 100, level: 0},
 		{budget: 99, level: 1},
-		{budget: 85, level: 3},
-		{budget: 71, level: 6},
+		{budget: 85, level: 15},
+		{budget: 80, level: 20},
 		{budget: 1, level: len(fitLevels) - 1},
 	}
 	for _, tt := range tests {
@@ -409,5 +427,76 @@ func BenchmarkRenderLine1(b *testing.B) {
 				(&Powerline{}).renderLine1(&sb, data)
 			}
 		})
+	}
+}
+
+// TestLineOneNeverOverflowsTheHostsBox is the acceptance the OS ladder exists
+// for. The host lays the status line out in a box of exactly lineBudget cells
+// and truncates every line longer than that, on every redraw — so a line over
+// budget is not a cosmetic overflow, it is a frame the host cuts each second.
+//
+// The subagent count was what pushed a loaded session over at 80 columns: 80
+// cells against a budget of 76. With the OS segment on the ladder the tightest
+// line loses nine cells, and 80 columns fits with one to spare.
+//
+// Below some width no ladder can help: the tightest level still has to draw
+// the model, its quotas and the branch. So the assertion is in two halves —
+// the line fits wherever the budget allows it, and where it cannot it is the
+// tightest line the policy can produce, never one rung short of it.
+func TestLineOneNeverOverflowsTheHostsBox(t *testing.T) {
+	withMCPLine(t, false)
+	savedGlyphs := glyphs
+	t.Cleanup(func() { glyphs = savedGlyphs })
+	rest := servers(7, 2)
+	lit := servers(7, 2)
+	lit[0].Busy = true
+	for _, set := range []struct {
+		name string
+		set  GlyphSet
+	}{{name: "glyphs:nerd", set: nerdGlyphs}, {name: "glyphs:text", set: textGlyphs}} {
+		glyphs = set.set
+		for _, chip := range []struct {
+			name string
+			list model.MCPServers
+		}{{name: "chip:rest", list: rest}, {name: "chip:lit", list: lit}} {
+			// The subagent count is the cell load the ladder exists to shed
+			for _, subagents := range []int{0, 3, 12} {
+				shape := func(width int) model.StatusLineData {
+					data := busyLine(width)
+					data.MCP = chip.list
+					data.Tasks.Unattributed = subagents
+					return data
+				}
+				// What the policy can reach when it has given up everything
+				tightest := VisibleWidth(line1At(shape(0), fitLevels[len(fitLevels)-1]))
+				floor := tightest + lineMargin
+				label := set.name + " " + chip.name + " agents:" + itoa(subagents)
+				// The defect was a loaded session at 80 columns: the ladder
+				// has to bring the floor under that and keep it there
+				if floor > 80 {
+					t.Errorf("%s: the tightest line is %d cells, so nothing under %d columns fits", label, tightest, floor)
+				}
+				for width := 40; width <= 200; width++ {
+					line1, _, _ := strings.Cut((&Powerline{}).Render(shape(width)), "\n")
+					emitted, budget := VisibleWidth(line1), lineBudget(width)
+					// Wide enough for the policy to fit: it must fit, which
+					// is cut=no in the byte trace
+					if width >= floor {
+						if emitted > budget {
+							t.Errorf("%s COLUMNS=%d: emitted %d cells for a budget of %d", label, width, emitted, budget)
+							return
+						}
+						continue
+					}
+					// Too narrow for any level: the tightest one, exactly —
+					// a wider line here would mean a rung left unused
+					if emitted != tightest {
+						t.Errorf("%s COLUMNS=%d: emitted %d cells, but the tightest level is %d",
+							label, width, emitted, tightest)
+						return
+					}
+				}
+			}
+		}
 	}
 }

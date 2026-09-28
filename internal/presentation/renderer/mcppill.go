@@ -127,12 +127,31 @@ func summarizeMCP(servers model.MCPServers) mcpSummary {
 // white-on-teal can be drawn. `TestACutNeverLeavesTealOpenBeyondTheChip`
 // measures that stretch and fails if it grows.
 //
+// The indicator gives way in two steps of the OS segment's ladder: the count
+// goes first and the glyph stands alone, then the glyph goes too. Lit or at
+// rest, each step takes the same cells as the other, so a call landing
+// mid-frame never shifts the line whatever the level.
+//
 // Params:
 //   - sb: string builder to write to
 //   - s: servers summed up
-func writeMCPInline(sb *strings.Builder, s mcpSummary) {
-	// Nothing configured draws nothing
-	if s.on+s.off == 0 {
+//   - fit: how much of the OS segment the line has room for
+func writeMCPInline(sb *strings.Builder, s mcpSummary, fit lineFit) {
+	// Nothing configured, or the indicator given up altogether, draws nothing
+	if s.on+s.off == 0 || fit.dropMCPIndicator() {
+		return
+	}
+	// Without its count the glyph stands alone: it still says the servers are
+	// there, and it still lights up while a call is in flight. The disabled
+	// suffix counts servers too, so it goes with the count.
+	if fit.dropMCPCount() {
+		open := mcpGlyphOpen
+		// Lit, the glyph alone becomes the chip
+		if s.busy {
+			open = mcpLitOpen
+		}
+		sb.WriteString(open + glyphs.MCP + Reset)
+		sb.WriteString(BgWhite + " " + Reset)
 		return
 	}
 	// Lit: one chip for glyph and count; at rest: each in its own ink

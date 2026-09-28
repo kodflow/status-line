@@ -69,7 +69,7 @@ symbole Unicode générique retombe sur une autre police et devient illisible.
 
 | Segment | Description |
 |---------|-------------|
-| OS | Icône système + étincelles 󰙴 = état de Claude (vert/orange/rouge), puis `󰒍 N` serveurs MCP, puis `󰚩 N` sous-agents hors épic affiché |
+| OS | Icône système + étincelles 󰙴 = état de Claude (vert/orange/rouge), puis `󰒍 N` serveurs MCP, puis `󰚩 N` sous-agents hors épic affiché — cède en 4 étapes (voir condensation) |
 | Model | Pill colorée (Haiku/Sonnet/Opus/Fable) + jauge d'effort + fast mode |
 | Path | Répertoire où la session travaille réellement (voir ci-dessous) |
 | Git | Branche + modifiés/non-trackés + nombre de worktrees liés (hors prunable) |
@@ -115,32 +115,62 @@ poids — plus il est bas, plus tôt le segment cède) :
 | session | 40 | barre + % + rebours → % + rebours → % |
 | path | 50 | 30 → 20 → dernier élément → caché (dans un dépôt seulement) |
 | branch | 60 | entière → 20 → 12 → 8 runes (`…`, compteurs `!3 ?1` toujours gardés) |
+| OS | 70 | santé + MCP + nombre + sous-agents → sans les sous-agents → sans le nombre MCP → santé seule → icône OS seule |
 | changes | 240 | affichés → cachés |
 | model | 255 | icône + nom → nom (la jauge d'effort reste) |
-| OS | — | ne rétrécit jamais (icône, santé, MCP, sous-agents) |
 
 Passes : l'étape n d'un segment de poids w a le rang (n−1)·100 + w ; la passe
 n baisse d'un palier chaque segment qui en a encore un, poids croissant ; un
 poids > 100 retient un segment pour une passe ultérieure (changes, model).
-Ordre par défaut = celui de l'utilisateur : barres (context, scoped, weekly,
-session), chemin et branche à 20, rebours (scoped, weekly, session), chemin
-au dernier élément et branche à 12, initiales, changements, chemin caché,
-icône du modèle, branche à 8. `STATUSLINE_WEIGHTS=context=10,weekly=30,…`
+Ordre par défaut : barres (context, scoped, weekly, session), chemin et
+branche à 20, **sous-agents**, rebours (scoped, weekly, session), chemin au
+dernier élément et branche à 12, **nombre MCP**, initiales, changements,
+chemin caché, icône du modèle, branche à 8, **glyphe MCP**, **santé**.
+`STATUSLINE_WEIGHTS=context=10,weekly=30,…`
 remplace des poids (noms ci-dessus, entiers 0-999 ; entrée inconnue ou
-malformée ignorée). Les états successifs (`fitLevels`, 18 : la ligne pleine + 17 étapes) sont cumulatifs et
+malformée ignorée). Les états successifs (`fitLevels`, 22 : la ligne pleine + 21 étapes) sont cumulatifs et
 de largeur décroissante, donc le premier qui tient est trouvé par
 bissection — même résultat qu'une marche pas à pas qui remesure après chaque
 étape : 1 rendu si la ligne tient, 6 au plus sinon. Aucun état ne tient →
 le dernier. Largeur 0 (tests) = pas de contrainte. `renderer.Condensed`
 dit quels segments ont cédé (utilisé par `demo/widths`).
 
-L'indicateur MCP du segment OS (≈ 4-7 cellules) est dessiné à chaque
-état : jamais abandonné, jamais déplacé, compté dans le budget. Les deux
-derniers paliers (icône du modèle, branche à 8) existent pour lui : la
-session chargée de `demo/widths` tient alors en 76 cellules à 80 colonnes —
-mais seulement sans `󰚩 N` : les sous-agents hors épic ajoutent 4 cellules et
-la font passer à 80, donc au-delà du budget. Sous 80 colonnes le dernier
-palier déborde toujours ; l'hôte coupe alors la queue de la ligne.
+**Le segment OS cède désormais aussi**, en quatre étapes (il ne l'a pas
+toujours fait : il était intouchable, et c'est ce qui laissait la ligne plus
+large que la boîte de l'hôte, donc coupée à chaque redraw). Ordre choisi par
+l'utilisateur, du plus riche au plus sobre :
+
+```
+󰙴 󰒍 7 󰚩 2     complet
+󰙴 󰒍 7          le nombre de sous-agents cède en premier
+󰙴 󰒍            le nombre MCP cède, le glyphe reste
+󰙴              le glyphe MCP cède
+               la santé cède, l'icône OS seule
+```
+
+Le nombre de sous-agents part d'abord parce qu'il est le plus redondant : un
+sous-agent en cours est déjà dessiné dans la pastille de son épic en ligne 2.
+La santé part en dernier parce que le seul moment où elle compte est le seul
+moment où il ne faut pas l'avoir perdue. L'icône OS ne cède jamais : c'est
+elle qui dit que la barre est la barre. Le glyphe MCP allumé reste une puce
+tant qu'il est dessiné, même sans son nombre.
+
+Avec poids 70, les quatre étapes tombent aux rangs 70 / 170 / 270 / 370 :
+sous-agents dans la passe 1, nombre MCP dans la passe 2, glyphe MCP dans la
+passe 3, santé seule dans la passe 4 — donc **dernière étape de toute
+l'échelle**. Conséquence assumée : à 120 colonnes le nombre MCP part avant
+que les libellés de quota ne passent à leur initiale. `STATUSLINE_WEIGHTS=os=245`
+repousse tout le segment après les autres si ce compromis ne plaît pas.
+
+**Mesuré** (session chargée de `busyLine`, `󰚩 3`, 7 serveurs dont 2
+désactivés) : la ligne la plus serrée passe de 76 à **67 cellules**, donc
+80 colonnes tient (75 pour un budget de 76) là où elle débordait à 80. Le
+plancher est **71 colonnes** : en dessous, les 34 cellules du segment modèle
+(nom + jauge d'effort + deux quotas à l'initiale) et les 18 de git sont
+incompressibles avec les paliers actuels.
+`TestLineOneNeverOverflowsTheHostsBox` vérifie les deux moitiés : ça tient
+partout où le budget le permet, et là où c'est impossible la ligne est
+exactement le palier le plus serré — jamais un cran de trop.
 
 **Ligne 2 :** une pastille par épic ouvert mène la ligne, puis la pastille
 MCP si `STATUSLINE_MCP_LINE=2`, puis la mise à jour. Nous ne tronquons rien
@@ -174,7 +204,8 @@ STATUSLINE_TRACE=~/statusline.trace  # puis relancer la session
   nombres répondent d'un coup d'œil à « est-ce l'hôte qui nous a coupés ».
 - `chip=lit` marque les cadres où la puce MCP était allumée
   (`renderer.ChipLit`) : dans une trace d'une journée, ce sont les seuls à
-  regarder.
+  regarder. `chip=rest` couvre les deux autres cas — au repos, ou pas
+  dessinée du tout parce que le segment OS a cédé son indicateur.
 - Plafond 192 Mio (≈ un jour à un cadre/seconde) puis la trace s'arrête ;
   toute erreur d'écriture est avalée — la barre ne doit jamais casser à cause
   de son propre journal.
@@ -331,6 +362,11 @@ en sarcelle 23 gras (6.46:1), puis le **total** des serveurs actifs en encre
 OS 232 gras : `󰒍 7` (glyphes texte : `MCP 7`). Aucun détail par portée, pas
 de capuchons. Des serveurs désactivés ajoutent `·N`, gris 241 (5.26:1 ; 242
 ne tient que 4.53, 244 tombe à 3.4), N barré. Aucun serveur, rien.
+
+L'indicateur **cède quand la ligne manque de place** : d'abord son nombre (et
+donc `·N`, qui compte aussi des serveurs), puis le glyphe. Voir l'échelle du
+segment OS dans « Politique de condensation ». Il ne quitte jamais le segment
+OS pour autant (`TestMCPIndicatorNeverMovesOutOfTheOSSegment`).
 
 **Pastille (ligne 2, `STATUSLINE_MCP_LINE=2`)** : même contenu, pastille à
 capuchons arrondis 116, encre 23 gras sur 116 ; `·N` en 239 (240 ne tient

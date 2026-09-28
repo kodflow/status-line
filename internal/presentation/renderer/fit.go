@@ -29,8 +29,9 @@ const (
 	branchEllipsis string = "\u2026"
 )
 
-// segID names a line-one segment that can shrink. The OS segment (OS
-// icon, health, MCP, subagents) is not one: it never shrinks.
+// segID names a line-one segment that can shrink. Every segment of line one
+// is one, the OS segment included: a segment that could not shrink left the
+// line wider than the host's box, which the host then cut on every redraw.
 type segID int
 
 // Shrinkable segments of line one.
@@ -41,6 +42,7 @@ const (
 	segSession
 	segPath
 	segBranch
+	segOS
 	segChanges
 	segModel
 	segCount
@@ -80,6 +82,13 @@ var condensePolicy = [segCount]segPolicy{
 	segSession: {name: "session", weight: 40, levels: []string{"bar + % + countdown", "% + countdown", "%"}},
 	segPath:    {name: "path", weight: 50, levels: []string{"30 cells", "20 cells", "last element", "hidden (inside a repository)"}},
 	segBranch:  {name: "branch", weight: 60, levels: []string{"whole", "20 runes", "12 runes", "8 runes"}},
+	segOS: {name: "os", weight: 70, levels: []string{
+		"health + MCP + count + subagents",
+		"health + MCP + count",
+		"health + MCP glyph",
+		"health",
+		"OS icon alone",
+	}},
 	segChanges: {name: "changes", weight: 240, levels: []string{"shown", "hidden"}},
 	segModel:   {name: "model", weight: 255, levels: []string{"icon + name", "name"}},
 }
@@ -271,6 +280,48 @@ func (f lineFit) branchMax() int {
 	return branchBudgets[f[segBranch]]
 }
 
+// dropSubagents reports whether the subagent count gives way.
+//
+// It goes first of the OS segment's four steps: a running subagent is already
+// drawn inside its epic's pill on line two, so the count beside the OS icon
+// is the most redundant thing the segment carries.
+//
+// Returns:
+//   - bool: true from the first level on
+func (f lineFit) dropSubagents() bool {
+	return f[segOS] >= 1
+}
+
+// dropMCPCount reports whether the MCP server count gives way, glyph kept.
+//
+// The glyph alone still says the session can reach MCP servers, and the chip
+// still lights up on it while a call is in flight.
+//
+// Returns:
+//   - bool: true from the second level on
+func (f lineFit) dropMCPCount() bool {
+	return f[segOS] >= 2
+}
+
+// dropMCPIndicator reports whether the MCP indicator goes altogether.
+//
+// Returns:
+//   - bool: true from the third level on
+func (f lineFit) dropMCPIndicator() bool {
+	return f[segOS] >= 3
+}
+
+// dropHealth reports whether the service health glyph gives way.
+//
+// Last of all, and deliberately: the one moment the light matters is the one
+// moment it must not be the thing that was dropped to save four cells.
+//
+// Returns:
+//   - bool: true at the last level
+func (f lineFit) dropHealth() bool {
+	return f[segOS] >= 4
+}
+
 // dropChanges reports whether the added/removed lines are hidden.
 //
 // Returns:
@@ -311,7 +362,24 @@ func presentSegments(data model.StatusLineData) [segCount]bool {
 	present[segBranch] = data.Git.IsInRepo()
 	present[segChanges] = data.Changes.HasChanges()
 	present[segModel] = data.Icons.Model
+	present[segOS] = osSegmentHasSlack(data)
 	return present
+}
+
+// osSegmentHasSlack reports whether the OS segment draws anything it could
+// give up. The OS icon itself is never given up, so a segment holding only
+// the icon has no step to report.
+//
+// Params:
+//   - data: status line data
+//
+// Returns:
+//   - bool: true when health, the MCP indicator or the subagents are on show
+func osSegmentHasSlack(data model.StatusLineData) bool {
+	// The MCP indicator only counts while it sits in this segment
+	mcpShown := !mcpOnLine2 && len(data.MCP) > 0
+	healthShown := healthColor(data.Health) != "" && !isHidden(hideHealth)
+	return healthShown || mcpShown || data.Tasks.Unattributed > 0
 }
 
 // Condensed describes where line one stands after fitting the data:
