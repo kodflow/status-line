@@ -129,11 +129,38 @@ dit quels segments ont cédé (utilisé par `demo/widths`).
 L'indicateur MCP du segment OS (≈ 4-7 cellules) est dessiné à chaque
 état : jamais abandonné, jamais déplacé, compté dans le budget. Les deux
 derniers paliers (icône du modèle, branche à 8) existent pour lui : la
-session chargée de `demo/widths` tient alors en 76 cellules à 80 colonnes.
+session chargée de `demo/widths` tient alors en 76 cellules à 80 colonnes —
+mais seulement sans `󰚩 N` : les sous-agents hors épic ajoutent 4 cellules et
+la font passer à 80, donc au-delà du budget. Sous 80 colonnes le dernier
+palier déborde toujours ; l'hôte coupe alors la queue de la ligne.
 
 **Ligne 2 :** une pastille par épic ouvert mène la ligne, puis la pastille
-MCP si `STATUSLINE_MCP_LINE=2`, puis la mise à jour. Aucune troncature : un titre long passe à la
-ligne plutôt que d'être coupé.
+MCP si `STATUSLINE_MCP_LINE=2`, puis la mise à jour. Nous ne tronquons rien
+nous-mêmes ; c'est l'hôte qui coupe (voir ci-dessous), un titre long compris.
+
+**Ce que l'hôte fait de nos octets** (lu dans Claude Code 2.1.283) : il découpe
+la sortie sur `\n` et rend chaque ligne en `wrap: "truncate"`. La coupe est
+une tranche **par cellule** (`Bun.sliceAnsi`) suivie d'un `…` : elle ne peut
+donc jamais tomber au milieu d'un échappement. La largeur mesurée est
+`Bun.stringWidth(ligne, {ambiguousIsNarrow: true})` — échappements ignorés,
+glyphes Nerd Font (PUA) à 1 cellule, comme `VisibleWidth`. Surtout : l'hôte
+**reporte nos attributs d'une ligne sur la suivante**, en préfixant chaque
+ligne de la concaténation de tous les échappements SGR des lignes
+précédentes. Le `\033[0m` final de la ligne 1 est donc la seule chose qui
+empêche la puce MCP allumée de peindre la ligne 2 — c'est un invariant, pas
+un hasard : `bleed_internal_test.go` le vérifie.
+
+**Invariants de rendu** (`bleed_internal_test.go`) : un automate SGR rejoue
+chaque ligne comme un terminal et exige que chaque ligne finisse sur un reset
+complet, qu'aucun échappement ne soit tronqué, que chaque segment de la ligne 1
+ouvre et ferme sur le même fond (un accent — la puce MCP allumée — est une
+plage contiguë qui ne touche aucun bord), que les pastilles de la ligne 2
+restent dans leurs capuchons (l'espace entre deux pastilles ne porte aucun
+attribut), que `\033[9m` ne barre que des chiffres, et qu'allumer la puce ne
+change pas la largeur de la ligne. La matrice couvre les deux jeux de glyphes,
+les deux profondeurs de couleur, les deux lignes possibles pour MCP, tous les
+états de santé, 16 formes de l'indicateur, les sous-agents, les formes de la
+ligne 2 et les paliers de condensation.
 
 ## Serveurs MCP
 
