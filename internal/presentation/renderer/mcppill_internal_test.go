@@ -73,19 +73,19 @@ func pillOf(list model.MCPServers) string {
 
 func TestPowerline_renderMCPPillStyling(t *testing.T) {
 	idle := pillOf(servers(2, 1))
-	if !strings.HasPrefix(idle, " "+FgMCPEnabled+LeftRound+Reset+BgMCPEnabled+FgMCPEnabledText+Bold+" "+glyphs.MCP+" 2") {
+	if !strings.HasPrefix(idle, " "+FgMCPEnabled+LeftRound+Reset+mergeSGR(BgMCPEnabled, FgMCPEnabledText, Bold)+" "+glyphs.MCP+" 2") {
 		t.Errorf("at rest: bold dark ink on pale teal, got %q", idle)
 	}
-	if !strings.Contains(idle, BgMCPEnabled+FgMCPMuted+" "+mcpOffMark+StrikeMCP+"1"+Reset) {
+	if !strings.Contains(idle, mergeSGR(BgMCPEnabled, FgMCPMuted)+" "+mcpOffMark+StrikeMCP+"1"+Reset) {
 		t.Errorf("at rest: the disabled count is muted and crossed out, got %q", idle)
 	}
 	list := servers(2, 1)
 	list[0].Busy = true
 	lit := pillOf(list)
-	if !strings.HasPrefix(lit, " "+FgMCPEnabledText+LeftRound+Reset+BgMCPLabel+FgWhite+Bold+" "+glyphs.MCP+" 2") {
+	if !strings.HasPrefix(lit, " "+FgMCPEnabledText+LeftRound+Reset+mcpLitOpen+" "+glyphs.MCP+" 2") {
 		t.Errorf("lit: the whole pill is bold white on dark teal, got %q", lit)
 	}
-	if !strings.Contains(lit, BgMCPLabel+FgMCPEnabled+" "+mcpOffMark+StrikeMCP+"1"+Reset) {
+	if !strings.Contains(lit, mergeSGR(BgMCPLabel, FgMCPEnabled)+" "+mcpOffMark+StrikeMCP+"1"+Reset) {
 		t.Errorf("lit: the disabled count stays, pale teal on dark teal, got %q", lit)
 	}
 }
@@ -109,9 +109,9 @@ func TestWriteMCPInline(t *testing.T) {
 	}
 	idle := inlineOf(servers(7, 2))
 	for what, piece := range map[string]string{
-		"the glyph in dark teal on white":       BgWhite + FgMCPOnWhite + Bold + glyphs.MCP + " " + Reset,
-		"the count in the OS ink":               BgWhite + FgBlack + Bold + "7" + Reset,
-		"the disabled count muted, crossed out": BgWhite + FgMCPMutedOnWhite + " " + mcpOffMark + StrikeMCP + "2" + Reset,
+		"the glyph in dark teal on white":       mcpGlyphOpen + glyphs.MCP + " " + Reset,
+		"the count in the OS ink":               mcpCountOpen + "7" + Reset,
+		"the disabled count muted, crossed out": mcpOffOpen + " " + mcpOffMark + StrikeMCP + "2" + Reset,
 		"closed by a space on the white ground": BgWhite + " " + Reset,
 	} {
 		if !strings.Contains(idle, piece) {
@@ -125,10 +125,10 @@ func TestWriteMCPInline(t *testing.T) {
 	list := servers(7, 2)
 	list[1].Busy = true
 	lit := inlineOf(list)
-	if !strings.HasPrefix(lit, BgMCPLabel+FgWhite+Bold+glyphs.MCP+" 7"+Reset) {
+	if !strings.HasPrefix(lit, mcpLitOpen+glyphs.MCP+" 7"+Reset) {
 		t.Errorf("lit: glyph and count are one bold white chip on dark teal, got %q", lit)
 	}
-	if !strings.Contains(lit, BgWhite+FgMCPMutedOnWhite+" "+mcpOffMark+StrikeMCP+"2") {
+	if !strings.Contains(lit, mcpOffOpen+" "+mcpOffMark+StrikeMCP+"2") {
 		t.Errorf("lit: the disabled suffix stays, got %q", lit)
 	}
 	if VisibleWidth(lit) != VisibleWidth(idle) {

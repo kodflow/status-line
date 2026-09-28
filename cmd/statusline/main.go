@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/florent/status-line/internal/adapter/activity"
 	"github.com/florent/status-line/internal/adapter/git"
@@ -17,6 +18,7 @@ import (
 	"github.com/florent/status-line/internal/adapter/system"
 	"github.com/florent/status-line/internal/adapter/tasks"
 	"github.com/florent/status-line/internal/adapter/terminal"
+	"github.com/florent/status-line/internal/adapter/trace"
 	"github.com/florent/status-line/internal/adapter/updater"
 	"github.com/florent/status-line/internal/adapter/usage"
 	"github.com/florent/status-line/internal/application"
@@ -65,11 +67,51 @@ func main() {
 	updateInfo := checkForUpdate()
 
 	// Generate and output status line with update notification
+	started := time.Now()
 	svc := buildService(input)
-	fmt.Print(svc.GenerateWithUpdate(input, updateInfo))
+	out := svc.GenerateWithUpdate(input, updateInfo)
+	written, err := emit(os.Stdout, out)
+	trace.Write(trace.Frame{
+		Out:     out,
+		Written: written,
+		Err:     err,
+		Elapsed: time.Since(started),
+		ChipLit: renderer.ChipLit(out),
+	})
 
 	// Download update if available (after output is displayed)
 	downloadUpdate(updateInfo)
+
+	// Exiting non-zero makes the host drop a cut frame rather than draw it,
+	// which costs one blank redraw and never a bled bar
+	if err != nil {
+		os.Exit(1)
+	}
+}
+
+// emit hands one frame to the host and says whether all of it went out.
+//
+// A frame that went out in part must never be reported as a success. The host
+// reads our stdout to end of file and draws it only when we exit zero, and it
+// carries any attribute still open at the end of one line onto the next: a
+// frame cut inside the lit MCP chip — the one ground in the line that is not
+// its segment's own — would paint the rest of the bar teal until the next
+// redraw. A short write with no error of its own is therefore an error here.
+//
+// Params:
+//   - w: where the frame goes, os.Stdout in production
+//   - out: the whole frame
+//
+// Returns:
+//   - int: bytes actually written
+//   - error: write error, or ErrShortWrite when the frame went out in part
+func emit(w io.Writer, out string) (int, error) {
+	written, err := io.WriteString(w, out)
+	// A writer that takes fewer bytes without saying why still cut the frame
+	if err == nil && written != len(out) {
+		return written, io.ErrShortWrite
+	}
+	return written, err
 }
 
 // checkForUpdate checks if an update is available.

@@ -19,6 +19,7 @@ internal/
 │   ├── sessionstate/        # Session occupée + pid hôte (<config>/sessions/<pid>.json)
 │   ├── system/              # Info système (OS, Docker)
 │   ├── terminal/            # Largeur du terminal (COLUMNS)
+│   ├── trace/               # STATUSLINE_TRACE : octets de chaque cadre
 │   ├── transcript/          # Lecture de la fin d'un transcript JSONL
 │   ├── updater/             # Auto-update binaire (GitHub releases)
 │   └── usage/               # Usage API Anthropic (OAuth, burn-rate)
@@ -45,7 +46,10 @@ renderer.
 ## Affichage
 
 `STATUSLINE_LINE_GAP` = lignes vides entre les deux rangées, 0-3 (défaut `0`)
+— **sans effet dans Claude Code**, qui supprime les lignes vides (voir
+« Contrat avec l'hôte »)
 `STATUS_LINE_NO_SELF_UPDATE` = `1` désactive l'auto-update (images managées)
+`STATUSLINE_TRACE` = fichier où tracer chaque cadre (voir « Tracer les octets »)
 
 L'auto-update vérifie le `.sha256` publié avec l'asset avant de remplacer le
 binaire : une somme absente, malformée ou différente annule la mise à jour.
@@ -138,17 +142,119 @@ palier déborde toujours ; l'hôte coupe alors la queue de la ligne.
 MCP si `STATUSLINE_MCP_LINE=2`, puis la mise à jour. Nous ne tronquons rien
 nous-mêmes ; c'est l'hôte qui coupe (voir ci-dessous), un titre long compris.
 
-**Ce que l'hôte fait de nos octets** (lu dans Claude Code 2.1.283) : il découpe
-la sortie sur `\n` et rend chaque ligne en `wrap: "truncate"`. La coupe est
-une tranche **par cellule** (`Bun.sliceAnsi`) suivie d'un `…` : elle ne peut
-donc jamais tomber au milieu d'un échappement. La largeur mesurée est
+## Tracer les octets
+
+Un fond qui déborde est soit mal écrit, soit coupé, et un screenshot ne
+permet pas de trancher. `STATUSLINE_TRACE=<fichier>` (`adapter/trace`) ajoute
+un enregistrement par cadre : en-tête d'une ligne puis **les octets du cadre,
+verbatim**.
+
+```bash
+# dans .claude/settings.json, env de la commande de status line, ou :
+STATUSLINE_TRACE=~/statusline.trace  # puis relancer la session
+```
+
+```
+\x1e frame ts=<RFC3339Nano> bytes=1166 wrote=1166 lines=2 cols=213 chip=lit render=14593us err=-
+<les 1166 octets du cadre>
+```
+
+- Le séparateur est `\x1e` (RS) : la charge utile contient des `\n` et des
+  échappements, donc un lecteur découpe là-dessus et se fie à `bytes=`.
+- `wrote=` est ce que l'écriture sur stdout a réellement pris. `wrote < bytes`
+  ou `err` ≠ `-` **est** la preuve d'un cadre coupé chez nous ; sinon le cadre
+  est parti entier et la coupure, s'il y en a une, est ailleurs.
+- `chip=lit` marque les cadres où la puce MCP était allumée
+  (`renderer.ChipLit`) : dans une trace d'une journée, ce sont les seuls à
+  regarder.
+- Plafond 192 Mio (≈ un jour à un cadre/seconde) puis la trace s'arrête ;
+  toute erreur d'écriture est avalée — la barre ne doit jamais casser à cause
+  de son propre journal.
+
+```bash
+# retrouver les cadres allumés, et ceux qui ont été coupés
+grep -a 'chip=lit' ~/statusline.trace | head
+grep -a -E 'wrote=[0-9]+ ' ~/statusline.trace | awk '$3 != "wrote="$2'
+```
+
+## Contrat avec l'hôte
+
+Lu dans Claude Code 2.1.283. À revérifier si l'hôte change de version : tout
+ce qui suit est du comportement observé, pas une API.
+
+**Cadre entier ou rien.** L'hôte lit notre stdout jusqu'à EOF (`close` du
+process **et** `end` des deux flux) puis ne dessine le cadre **que si notre
+code de sortie est 0**. Un process tué par un signal vaut `status: 1`, un tick
+annulé (`aborted`) n'atteint jamais l'écran et laisse le dernier bon cadre
+affiché. Il n'existe aucun chemin de rendu incrémental : le handler `stdout`
+ne renifle la première ligne que pour y chercher un marqueur de hook async.
+**Conséquence : l'hôte ne peut pas afficher un cadre partiel — sauf si nous
+sortons 0 après n'avoir écrit qu'une partie de la ligne.** C'est pour ça que
+`emit` (`cmd/statusline/main.go`) traite une écriture courte comme une erreur
+et que `main` sort 1 : mieux vaut un redraw vide qu'une barre bavée.
+
+**Budget d'octets.** Tout le cadre part en un seul `fmt`/`Write`. `os.File.Write`
+reboucle sur une écriture courte, donc `n < len` n'arrive qu'avec une erreur,
+et un `EPIPE` sur le fd 1 lève `SIGPIPE` qui tue le process (donc `status != 0`,
+donc cadre jeté). L'atomicité de `PIPE_BUF` (4096) n'est donc *pas* ce qui nous
+protège — c'est le code de sortie. Pour mémoire : cadre typique ≈ 1,2-1,5 Ko ;
+pire cas mesuré (40 serveurs MCP, 99 sous-agents, épic déplié, 24 bits,
+`COLUMNS=400`) = 2052 octets à 1 épic, **+140 octets par épic ouvert, donc
+4096 franchi à 16 épics ouverts**.
+
+**Timeout.** 600 000 ms par défaut pour la commande de status line (`Fa`). Un
+rendu prend 15-75 ms : le timeout n'est jamais la cause de quoi que ce soit.
+En revanche chaque tick **annule** le précédent, donc sous forte charge la
+barre gèle sur le dernier cadre au lieu de clignoter.
+
+**Troncature.** L'hôte découpe la sortie sur `\n` et rend chaque ligne en
+`wrap: "truncate"`. La coupe est une tranche **par cellule**
+(`Bun.sliceAnsi`) suivie d'un `…` : elle ne peut donc jamais tomber au milieu
+d'un échappement. La largeur mesurée est
 `Bun.stringWidth(ligne, {ambiguousIsNarrow: true})` — échappements ignorés,
-glyphes Nerd Font (PUA) à 1 cellule, comme `VisibleWidth`. Surtout : l'hôte
-**reporte nos attributs d'une ligne sur la suivante**, en préfixant chaque
-ligne de la concaténation de tous les échappements SGR des lignes
-précédentes. Le `\033[0m` final de la ligne 1 est donc la seule chose qui
-empêche la puce MCP allumée de peindre la ligne 2 — c'est un invariant, pas
-un hasard : `bleed_internal_test.go` le vérifie.
+glyphes Nerd Font (PUA) à 1 cellule, comme `VisibleWidth`.
+
+**Nettoyage.** Avant l'affichage l'hôte fait
+`stdout.trim().split("\n").map(trim).filter(non vide).join("\n")` : il
+**supprime les lignes vides**, donc `STATUSLINE_LINE_GAP` n'a aucun effet
+dans Claude Code, et il rogne l'espace de tête de la ligne 2.
+
+**Report d'attributs.** L'hôte **reporte nos attributs d'une ligne sur la
+suivante**, en préfixant chaque ligne de la concaténation de tous les
+échappements SGR des lignes précédentes. Le `\033[0m` final de la ligne 1 est
+donc la seule chose qui empêche la puce MCP allumée de peindre la ligne 2 —
+c'est un invariant, pas un hasard : `bleed_internal_test.go` le vérifie.
+
+## Règle des fonds : un seul fond par segment
+
+**La puce MCP allumée est le seul endroit de toute la ligne qui change de
+fond au milieu d'un segment.** Tous les autres accents (encre de quota, jauge
+d'effort, compteurs git, cases d'épic) ne changent que l'encre, sur le fond du
+segment. C'est donc le seul endroit où une coupure peut laisser un fond
+« étranger » ouvert sur le reste de la rangée — et la seule raison pour
+laquelle ce bug n'existe nulle part ailleurs.
+
+Règle à suivre pour tout nouveau segment :
+
+1. **Chaque écriture pose son propre fond et sa propre encre**, sans se fier à
+   l'état ambiant laissé par un `Reset` précédent. C'est déjà le cas partout ;
+   c'est ce qui rend 44 des 64 `Reset` du paquet redondants (retirer l'un
+   d'eux ne change aucun octet visible).
+2. **Fond et encre dans une seule séquence SGR** (`mergeSGR`, `mcppill.go`)
+   dès qu'il s'agit d'un fond qui n'est pas celui du segment. Deux séquences
+   laissent une fenêtre où le nouveau fond porte l'ancienne encre ; une seule
+   séquence est appliquée en entier ou, coupée, pas du tout. C'est aussi plus
+   court, donc plus loin du budget d'octets.
+3. **Fermer par un `Reset` nu collé au dernier octet utile.** `\033[0m` fait
+   4 octets, c'est la fermeture la plus courte possible ; la fondre avec
+   l'ouverture suivante l'allongerait et agrandirait la fenêtre.
+
+Résultat mesuré pour la puce : la plage d'octets où une coupure laisse la
+sarcelle ouverte passe de **25 à 10 octets** (glyphes Nerd) — la charge utile
+(`󰒍 7`, 6 octets) plus le reset (4). Ces 10 octets sont irréductibles : on ne
+peut pas dessiner du blanc sur sarcelle sans que la sarcelle soit ouverte
+au-dessus du glyphe. `TestACutNeverLeavesTealOpenBeyondTheChip` mesure cette
+plage et échoue si elle grandit.
 
 **Invariants de rendu** (`bleed_internal_test.go`) : un automate SGR rejoue
 chaque ligne comme un terminal et exige que chaque ligne finisse sur un reset
@@ -161,6 +267,12 @@ change pas la largeur de la ligne. La matrice couvre les deux jeux de glyphes,
 les deux profondeurs de couleur, les deux lignes possibles pour MCP, tous les
 états de santé, 16 formes de l'indicateur, les sous-agents, les formes de la
 ligne 2 et les paliers de condensation.
+
+À quoi s'ajoute `TestACutNeverLeavesTealOpenBeyondTheChip`, qui ne juge pas un
+cadre entier mais **tous ses préfixes** : pour chaque décalage d'octet de la
+ligne 1, il rejoue le préfixe et demande quel fond le terminal garderait en
+main. La réponse doit être « la sarcelle seulement à l'intérieur des octets de
+la puce », en une seule plage contiguë (voir « Règle des fonds »).
 
 ## Serveurs MCP
 
@@ -215,7 +327,10 @@ nom normalisé (`[^A-Za-z0-9_-]` → `_`), `plugin_<plugin>_<serveur>` → serve
 une clé inconnue est ajoutée, allumée, sans portée, comptée active. Un appel
 en vol (ou dans les 2 s) allume l'indicateur : glyphe et nombre deviennent
 une puce 255 gras sur 23 (7.5:1), sur exactement les mêmes cellules (la
-ligne ne bouge pas) ; `·N` reste, gris sur blanc. En pastille de ligne 2,
+ligne ne bouge pas) ; `·N` reste, gris sur blanc. Fond, encre et graisse
+partent en **une seule séquence** (`mcpLitOpen`) — voir « Règle des fonds :
+un seul fond par segment », c'est le seul fond non-segment de la ligne. En
+pastille de ligne 2,
 toute la pastille s'allume (capuchons 23) et `·N` passe en 116 sur 23
 (4.54:1). Lecture de queue partagée avec `activity` : `adapter/transcript`.
 

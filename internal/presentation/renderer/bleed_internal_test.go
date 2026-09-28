@@ -681,3 +681,96 @@ func TestLightingTheChipNeverMovesTheLine(t *testing.T) {
 		}
 	}
 }
+
+// TestACutNeverLeavesTealOpenBeyondTheChip measures how much of a frame a cut
+// can land in and still leave the chip's teal ground open behind it.
+//
+// The invariants above prove a *whole* frame is well formed. They say nothing
+// about a frame cut short — and the host renders each line up to whatever it
+// got, carrying anything still open onto the next line. So for every byte
+// offset in line one, this replays the prefix and asks what ground the
+// terminal would be left holding.
+//
+// The answer must be: teal only while the cut falls inside the chip's own
+// bytes — one contiguous stretch, exactly the chip's payload plus the
+// four-byte reset that closes it. That is irreducible: white on teal cannot be
+// drawn without teal being open over the glyph and the count. Anything more
+// means a ground and its ink were opened by two escapes instead of one, which
+// is the window this file exists to keep shut.
+func TestACutNeverLeavesTealOpenBeyondTheChip(t *testing.T) {
+	withMCPLine(t, false)
+	savedGlyphs := glyphs
+	t.Cleanup(func() { glyphs = savedGlyphs })
+	// Ask the parser what the chip's ground looks like once applied, rather
+	// than spelling its escape out a second time
+	teal := replayPrefix(BgMCPLabel).bg
+	for _, set := range []struct {
+		name    string
+		set     GlyphSet
+		payload string
+	}{
+		{name: "glyphs:nerd", set: nerdGlyphs, payload: nerdGlyphs.MCP + " 7"},
+		{name: "glyphs:text", set: textGlyphs, payload: textGlyphs.MCP + " 7"},
+	} {
+		glyphs = set.set
+		lit := servers(7, 2)
+		lit[0].Busy = true
+		for _, width := range []int{0, 200, 120, 80} {
+			data := busyLine(width)
+			data.MCP = lit
+			data.Tasks.Unattributed = 3
+			line, _, _ := strings.Cut((&Powerline{}).Render(data), "\n")
+			label := set.name + " COLUMNS=" + itoa(width)
+
+			// Every prefix of the line is a frame the host could have got
+			first, last, open := -1, -1, 0
+			for cut := range len(line) + 1 {
+				state := replayPrefix(line[:cut])
+				// Only the chip's ground is an accent; every other ground
+				// a cut leaves open is the segment's own
+				if state.bg != teal {
+					continue
+				}
+				open++
+				if first < 0 {
+					first = cut
+				}
+				last = cut
+			}
+			want := len(set.payload) + len(Reset)
+			// The stretch is the payload and its closing reset, no more
+			if open != want {
+				t.Errorf("%s: a cut leaves teal open at %d offsets, want %d (payload %d + reset %d)",
+					label, open, want, len(set.payload), len(Reset))
+			}
+			// And it is one stretch, not scattered pieces of the line
+			if open > 0 && last-first+1 != open {
+				t.Errorf("%s: the offsets that leave teal open run from %d to %d but there are only %d of them",
+					label, first, last, open)
+			}
+		}
+	}
+}
+
+// replayPrefix returns the attributes a terminal is left holding after the
+// first cut bytes of a line — the state a cut frame would bleed.
+func replayPrefix(prefix string) sgrState {
+	var state sgrState
+	for i := 0; i < len(prefix); {
+		// Anything but an escape prints and changes nothing
+		if prefix[i] != escapeByte {
+			_, size := utf8.DecodeRuneInString(prefix[i:])
+			i += size
+			continue
+		}
+		end := skipEscape(prefix, i)
+		seq := prefix[i:end]
+		// A sequence the cut left incomplete is never applied
+		if end > len(prefix) || len(seq) < 3 || seq[len(seq)-1] != 'm' {
+			break
+		}
+		state = applySGR(state, seq[2:len(seq)-1])
+		i = end
+	}
+	return state
+}
