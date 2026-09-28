@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/florent/status-line/internal/adapter/activity"
@@ -71,12 +72,15 @@ func main() {
 	svc := buildService(input)
 	out := svc.GenerateWithUpdate(input, updateInfo)
 	written, err := emit(os.Stdout, out)
+	line1, _, _ := strings.Cut(out, "\n")
 	trace.Write(trace.Frame{
 		Out:     out,
 		Written: written,
 		Err:     err,
 		Elapsed: time.Since(started),
 		ChipLit: renderer.ChipLit(out),
+		Budget:  renderer.LineBudget(terminal.NewProvider().Info().Width),
+		Emitted: renderer.VisibleWidth(line1),
 	})
 
 	// Download update if available (after output is displayed)

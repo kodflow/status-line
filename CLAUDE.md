@@ -91,10 +91,14 @@ famille de modèles ne s'affiche que si ce modèle est en cours d'utilisation.
 | coût / credits | Coût cumulé de la session, solde de crédits |
 
 **Largeur (ligne 1 seulement)** : `adapter/terminal` lit `COLUMNS` (posé
-par l'hôte pour la commande de status line) ; absent, non entier, ≤ 0 ou
-> 10000 → 120. Pas de `/dev/tty` ni d'exec. Budget = `COLUMNS − 4`
-(`lineMargin` : l'hôte rembourre la ligne, et une ligne pile au bord passe à
-la ligne au moindre désaccord sur un glyphe). Largeur visible
+par l'hôte pour la commande de status line, = `process.stdout.columns`, sans
+rien en retrancher) ; absent, non entier, ≤ 0 ou > 10000 → 120. Pas de
+`/dev/tty` ni d'exec. Budget = `COLUMNS − 4` (`lineMargin`). **Ce 4 n'est pas
+une marge de prudence : c'est exactement la largeur de la boîte où l'hôte
+pose la status line** — `colonnes − 2 × QK` avec `QK = 2`, mesuré dans
+2.1.283 — et l'hôte tronque chaque ligne à cette largeur. Une ligne qui tient
+dans le budget n'est donc **jamais** coupée ; une ligne qui déborde est
+coupée **à chaque redraw**. Largeur visible
 (`VisibleWidth`, `width.go`) : échappements CSI/OSC ignorés, glyphes Nerd
 Font (PUA) = 1 cellule, blocs larges CJK/emoji = 2 (petite table), marques
 combinantes = 0.
@@ -155,15 +159,19 @@ STATUSLINE_TRACE=~/statusline.trace  # puis relancer la session
 ```
 
 ```
-\x1e frame ts=<RFC3339Nano> bytes=1166 wrote=1166 lines=2 cols=213 chip=lit render=14593us err=-
+\x1e frame ts=<RFC3339Nano> bytes=1166 wrote=1166 lines=2 cols=213 budget=209 emitted=175 cut=no chip=lit render=14593us err=-
 <les 1166 octets du cadre>
 ```
 
 - Le séparateur est `\x1e` (RS) : la charge utile contient des `\n` et des
   échappements, donc un lecteur découpe là-dessus et se fie à `bytes=`.
 - `wrote=` est ce que l'écriture sur stdout a réellement pris. `wrote < bytes`
-  ou `err` ≠ `-` **est** la preuve d'un cadre coupé chez nous ; sinon le cadre
-  est parti entier et la coupure, s'il y en a une, est ailleurs.
+  ou `err` ≠ `-` **est** la preuve d'un cadre coupé chez nous.
+- `budget=` = ce que le condenseur visait, `emitted=` = la largeur visible que
+  la ligne 1 fait réellement, `cut=yes` quand la seconde dépasse la première.
+  Comme le budget **est** la largeur de la boîte de l'hôte (voir « Contrat
+  avec l'hôte »), `cut=yes` veut dire : l'hôte a tronqué ce cadre. Les deux
+  nombres répondent d'un coup d'œil à « est-ce l'hôte qui nous a coupés ».
 - `chip=lit` marque les cadres où la puce MCP était allumée
   (`renderer.ChipLit`) : dans une trace d'une journée, ce sont les seuls à
   regarder.
@@ -172,9 +180,10 @@ STATUSLINE_TRACE=~/statusline.trace  # puis relancer la session
   de son propre journal.
 
 ```bash
-# retrouver les cadres allumés, et ceux qui ont été coupés
-grep -a 'chip=lit' ~/statusline.trace | head
-grep -a -E 'wrote=[0-9]+ ' ~/statusline.trace | awk '$3 != "wrote="$2'
+# le cadre allumé qui a en plus été tronqué : le suspect
+grep -a 'chip=lit' ~/statusline.trace | grep 'cut=yes'
+# combien de cadres l'hôte tronque, et de combien
+grep -a -o 'budget=[0-9]* emitted=[0-9]* cut=yes' ~/statusline.trace | sort | uniq -c
 ```
 
 ## Contrat avec l'hôte
@@ -208,11 +217,25 @@ En revanche chaque tick **annule** le précédent, donc sous forte charge la
 barre gèle sur le dernier cadre au lieu de clignoter.
 
 **Troncature.** L'hôte découpe la sortie sur `\n` et rend chaque ligne en
-`wrap: "truncate"`. La coupe est une tranche **par cellule**
-(`Bun.sliceAnsi`) suivie d'un `…` : elle ne peut donc jamais tomber au milieu
-d'un échappement. La largeur mesurée est
+`wrap: "truncate"` dans une boîte de **`colonnes − 2 × QK`, `QK = 2`**, plus
+son propre `paddingX = statusLine.padding ?? 0` : sans `padding` configuré,
+la largeur de coupe est donc `COLUMNS − 4`, **le même nombre que notre
+budget**. La coupe est une tranche **par cellule** (`Bun.sliceAnsi(ligne, 0,
+largeur − 1)`) suivie d'un `…` : elle ne peut donc jamais tomber au milieu
+d'un échappement. Une ligne déjà assez courte n'est pas touchée du tout
+(`if (largeurVisible <= budget) return`). La largeur mesurée est
 `Bun.stringWidth(ligne, {ambiguousIsNarrow: true})` — échappements ignorés,
 glyphes Nerd Font (PUA) à 1 cellule, comme `VisibleWidth`.
+
+Corollaire opérationnel : **il ne faut jamais tendre à l'hôte une ligne qu'il
+doit couper.** Or c'est ce qui arrive dès que `fitLevels` est épuisé — avec
+`󰚩 N` à 80 colonnes (80 cellules émises pour un budget de 76), et à toute
+largeur sous 80. `STATUSLINE_TRACE` écrit `budget=`, `emitted=` et `cut=yes`
+précisément pour rendre ça visible sans avoir à le déduire. Ce qui reste
+**non mesuré** : si `Bun.sliceAnsi` referme ou non les attributs encore
+ouverts à l'endroit de la coupe. Ça ne se joue que dans les 10 octets de la
+puce allumée (voir « Règle des fonds »), et la coupe réelle tombe ~67
+cellules plus loin, dans le segment des changements — donc hors de la puce.
 
 **Nettoyage.** Avant l'affichage l'hôte fait
 `stdout.trim().split("\n").map(trim).filter(non vide).join("\n")` : il

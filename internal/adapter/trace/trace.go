@@ -45,6 +45,22 @@ type Frame struct {
 	// one place in the line that opens a ground of its own mid-segment, and
 	// so the only frame worth hunting for in a long trace.
 	ChipLit bool
+	// Budget is the cells the condenser was told line one could take. It is
+	// also the width the host lays the status line out in, so a frame wider
+	// than this is one the host truncates.
+	Budget int
+	// Emitted is the cells line one actually takes. Line two is never
+	// condensed, so only line one has a budget to be judged against.
+	Emitted int
+}
+
+// overflows reports whether line one came out wider than the host's box.
+//
+// Returns:
+//   - bool: true when the host has to truncate this frame
+func (f Frame) overflows() bool {
+	// An unknown width is no constraint, and neither is an unmeasured line
+	return f.Budget > 0 && f.Emitted > f.Budget
 }
 
 // Write appends one frame to the trace file, if one is configured.
@@ -92,6 +108,11 @@ func record(f Frame) string {
 	sb.WriteString(" wrote=" + strconv.Itoa(f.Written))
 	sb.WriteString(" lines=" + strconv.Itoa(strings.Count(f.Out, "\n")))
 	sb.WriteString(" cols=" + columns())
+	// The two numbers this whole hunt turned on: what the condenser aimed at,
+	// and what line one actually came out as
+	sb.WriteString(" budget=" + strconv.Itoa(f.Budget))
+	sb.WriteString(" emitted=" + strconv.Itoa(f.Emitted))
+	sb.WriteString(" cut=" + yesNo(f.overflows()))
 	sb.WriteString(" chip=" + chipState(f.ChipLit))
 	sb.WriteString(" render=" + strconv.FormatInt(f.Elapsed.Microseconds(), 10) + "us")
 	sb.WriteString(" err=" + writeError(f.Err) + "\n")
@@ -111,6 +132,21 @@ func columns() string {
 		return "-"
 	}
 	return cols
+}
+
+// yesNo renders a flag for the header.
+//
+// Params:
+//   - on: the flag
+//
+// Returns:
+//   - string: "yes" or "no"
+func yesNo(on bool) string {
+	// A grep for cut=yes is the first thing anyone will run on a trace
+	if on {
+		return "yes"
+	}
+	return "no"
 }
 
 // chipState names whether the MCP indicator was lit.

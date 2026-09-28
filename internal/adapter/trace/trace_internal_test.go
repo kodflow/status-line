@@ -30,8 +30,8 @@ func TestWriteAppendsTheFrameVerbatim(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "frames.trace")
 	t.Setenv(traceEnv, path)
 	t.Setenv(columnsEnv, "213")
-	Write(Frame{Out: litFrame, Written: len(litFrame), Elapsed: 37 * time.Millisecond, ChipLit: true})
-	Write(Frame{Out: "cut", Written: 1, Err: errors.New("broken\npipe"), ChipLit: false})
+	Write(Frame{Out: litFrame, Written: len(litFrame), Elapsed: 37 * time.Millisecond, ChipLit: true, Budget: 76, Emitted: 76})
+	Write(Frame{Out: "cut", Written: 1, Err: errors.New("broken\npipe"), Budget: 76, Emitted: 80})
 
 	raw, err := os.ReadFile(path)
 	// The file must exist and hold both records
@@ -53,11 +53,15 @@ func TestWriteAppendsTheFrameVerbatim(t *testing.T) {
 		t.Errorf("bytes = %s, want %d", got, len(litFrame))
 	}
 	for name, want := range map[string]string{
-		"wrote": strconv.Itoa(len(litFrame)),
-		"lines": "2",
-		"cols":  "213",
-		"chip":  "lit",
-		"err":   "-",
+		"wrote":   strconv.Itoa(len(litFrame)),
+		"lines":   "2",
+		"cols":    "213",
+		"chip":    "lit",
+		"err":     "-",
+		"budget":  "76",
+		"emitted": "76",
+		// A line that fits its budget is a line the host never truncates
+		"cut": "no",
 	} {
 		if got := field(t, head, name); got != want {
 			t.Errorf("%s = %s, want %s", name, got, want)
@@ -76,6 +80,10 @@ func TestWriteAppendsTheFrameVerbatim(t *testing.T) {
 	// A newline in the error would break the one-line header
 	if got := field(t, cut, "err"); got != "broken" || strings.Contains(cut, "\n") {
 		t.Errorf("the error must stay on the header line, got %q", cut)
+	}
+	// 80 cells emitted against a 76-cell budget is a frame the host truncates
+	if got := field(t, cut, "cut"); got != "yes" {
+		t.Errorf("an overflowing frame reports cut = %s, want yes", got)
 	}
 }
 

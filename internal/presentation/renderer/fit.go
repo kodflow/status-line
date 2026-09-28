@@ -340,7 +340,25 @@ func Condensed(data model.StatusLineData) []string {
 	return out
 }
 
+// LineBudget returns the columns line one may take, for a caller outside the
+// package — the byte trace, which records the budget beside the width actually
+// emitted so an overflowing frame says so on its own.
+//
+// Params:
+//   - width: terminal width, 0 or less when unknown
+//
+// Returns:
+//   - int: budget in cells, 0 when the width is unknown
+func LineBudget(width int) int {
+	return lineBudget(width)
+}
+
 // lineBudget returns the columns line one may take.
+//
+// The margin is not a guess: the host lays the status line out in a box of
+// `terminal columns - 2 * 2` (measured in Claude Code 2.1.283) and truncates
+// each line to it. Our budget is that same number, so a line that fits is
+// never cut and a line that does not is cut on every single redraw.
 //
 // Params:
 //   - width: terminal width, 0 or less when unknown
