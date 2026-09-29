@@ -99,7 +99,15 @@ func (r *Powerline) renderLine1Fit(sb *strings.Builder, data model.StatusLineDat
 	if !mcpOnLine2 {
 		mcp = data.MCP
 	}
-	r.renderOSSegment(sb, data.System, data.Icons.OS, data.Health, mcp, data.Tasks.Unattributed, modelBg)
+	r.renderOSSegment(sb, &OSSegmentData{
+		System:    data.System,
+		ShowIcon:  data.Icons.OS,
+		Health:    data.Health,
+		MCP:       mcp,
+		Subagents: data.Tasks.Unattributed,
+		NextBg:    modelBg,
+		Fit:       fit,
+	})
 
 	// Build the quota chain first: each segment needs to know the colour of the
 	// one that follows it to draw its separator
@@ -310,22 +318,40 @@ func pulseOn() bool {
 	return clockNow().Unix()%2 == 0
 }
 
+// OSSegmentData is everything the OS segment draws.
+type OSSegmentData struct {
+	// System names the operating system behind the icon.
+	System model.SystemInfo
+	// ShowIcon tells whether the OS icon is drawn.
+	ShowIcon bool
+	// Health is the state of Claude's services, beside the icon when known.
+	Health model.ServiceHealth
+	// MCP holds the servers to sum up after the health glyph, nil for none.
+	MCP model.MCPServers
+	// Subagents counts the running subagents tied to no epic on line two.
+	Subagents int
+	// NextBg is the background of the segment that follows.
+	NextBg string
+	// Fit says how much of the segment the line has room for.
+	Fit lineFit
+}
+
 // renderOSSegment renders the operating system segment.
+//
+// It gives way in four steps, richest to soberest: the subagent count, the
+// MCP count, the MCP glyph, then the health light. The OS icon always stays —
+// it is what tells the reader the bar is the bar.
 //
 // Params:
 //   - sb: string builder to write to
-//   - sys: system information
-//   - showIcon: whether to show the OS icon
-//   - health: state of Claude's services, drawn beside the icon when known
-//   - mcp: MCP servers to sum up after the health glyph, nil for none
-//   - subagents: running subagents tied to no epic on line 2
-//   - nextBg: background color of the next segment
-func (r *Powerline) renderOSSegment(sb *strings.Builder, sys model.SystemInfo, showIcon bool, health model.ServiceHealth, mcp model.MCPServers, subagents int, nextBg string) {
+//   - data: OS segment rendering data
+func (r *Powerline) renderOSSegment(sb *strings.Builder, data *OSSegmentData) {
+	fit := data.Fit
 	// Write left rounded cap
 	sb.WriteString(FgWhite + LeftRound + Reset)
 	// Check if icon should be shown
-	if showIcon {
-		icon := GetOSIcon(sys.OS, sys.IsDocker)
+	if data.ShowIcon {
+		icon := GetOSIcon(data.System.OS, data.System.IsDocker)
 		// Write icon with background
 		sb.WriteString(BgWhite + FgBlack + Bold + " " + icon + " " + Reset)
 	} else {
@@ -333,17 +359,17 @@ func (r *Powerline) renderOSSegment(sb *strings.Builder, sys model.SystemInfo, s
 		sb.WriteString(BgWhite + FgBlack + Bold + "  " + Reset)
 	}
 	// The health glyph sits inside the same white ground, coloured by state
-	if color := healthColor(health); color != "" && !isHidden(hideHealth) {
+	if color := healthColor(data.Health); color != "" && !isHidden(hideHealth) && !fit.dropHealth() {
 		sb.WriteString(BgWhite + color + glyphs.Health + " " + Reset)
 	}
 	// The MCP servers the session can reach, between health and subagents
-	writeMCPInline(sb, summarizeMCP(mcp))
+	writeMCPInline(sb, summarizeMCP(data.MCP), fit)
 	// Subagents working for no epic on show belong to the session as a whole
-	if subagents > 0 {
-		sb.WriteString(BgWhite + FgBlack + Bold + glyphs.Subagents + " " + itoa(subagents) + " " + Reset)
+	if data.Subagents > 0 && !fit.dropSubagents() {
+		sb.WriteString(BgWhite + FgBlack + Bold + glyphs.Subagents + " " + itoa(data.Subagents) + " " + Reset)
 	}
 	// Write separator to next segment
-	sb.WriteString(nextBg + FgWhite + SepRight + Reset)
+	sb.WriteString(data.NextBg + FgWhite + SepRight + Reset)
 }
 
 // healthColor returns the glyph colour for a service health level.

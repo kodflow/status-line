@@ -73,19 +73,19 @@ func pillOf(list model.MCPServers) string {
 
 func TestPowerline_renderMCPPillStyling(t *testing.T) {
 	idle := pillOf(servers(2, 1))
-	if !strings.HasPrefix(idle, " "+FgMCPEnabled+LeftRound+Reset+BgMCPEnabled+FgMCPEnabledText+Bold+" "+glyphs.MCP+" 2") {
+	if !strings.HasPrefix(idle, " "+FgMCPEnabled+LeftRound+Reset+mergeSGR(BgMCPEnabled, FgMCPEnabledText, Bold)+" "+glyphs.MCP+" 2") {
 		t.Errorf("at rest: bold dark ink on pale teal, got %q", idle)
 	}
-	if !strings.Contains(idle, BgMCPEnabled+FgMCPMuted+" "+mcpOffMark+StrikeMCP+"1"+Reset) {
+	if !strings.Contains(idle, mergeSGR(BgMCPEnabled, FgMCPMuted)+" "+mcpOffMark+StrikeMCP+"1"+Reset) {
 		t.Errorf("at rest: the disabled count is muted and crossed out, got %q", idle)
 	}
 	list := servers(2, 1)
 	list[0].Busy = true
 	lit := pillOf(list)
-	if !strings.HasPrefix(lit, " "+FgMCPEnabledText+LeftRound+Reset+BgMCPLabel+FgWhite+Bold+" "+glyphs.MCP+" 2") {
+	if !strings.HasPrefix(lit, " "+FgMCPEnabledText+LeftRound+Reset+mcpLitOpen+" "+glyphs.MCP+" 2") {
 		t.Errorf("lit: the whole pill is bold white on dark teal, got %q", lit)
 	}
-	if !strings.Contains(lit, BgMCPLabel+FgMCPEnabled+" "+mcpOffMark+StrikeMCP+"1"+Reset) {
+	if !strings.Contains(lit, mergeSGR(BgMCPLabel, FgMCPEnabled)+" "+mcpOffMark+StrikeMCP+"1"+Reset) {
 		t.Errorf("lit: the disabled count stays, pale teal on dark teal, got %q", lit)
 	}
 }
@@ -93,7 +93,7 @@ func TestPowerline_renderMCPPillStyling(t *testing.T) {
 // inlineOf renders the OS-segment indicator on its own.
 func inlineOf(list model.MCPServers) string {
 	var sb strings.Builder
-	writeMCPInline(&sb, summarizeMCP(list))
+	writeMCPInline(&sb, summarizeMCP(list), lineFit{})
 	return sb.String()
 }
 
@@ -109,9 +109,9 @@ func TestWriteMCPInline(t *testing.T) {
 	}
 	idle := inlineOf(servers(7, 2))
 	for what, piece := range map[string]string{
-		"the glyph in dark teal on white":       BgWhite + FgMCPOnWhite + Bold + glyphs.MCP + " " + Reset,
-		"the count in the OS ink":               BgWhite + FgBlack + Bold + "7" + Reset,
-		"the disabled count muted, crossed out": BgWhite + FgMCPMutedOnWhite + " " + mcpOffMark + StrikeMCP + "2" + Reset,
+		"the glyph in dark teal on white":       mcpGlyphOpen + glyphs.MCP + " " + Reset,
+		"the count in the OS ink":               mcpCountOpen + "7" + Reset,
+		"the disabled count muted, crossed out": mcpOffOpen + " " + mcpOffMark + StrikeMCP + "2" + Reset,
 		"closed by a space on the white ground": BgWhite + " " + Reset,
 	} {
 		if !strings.Contains(idle, piece) {
@@ -125,10 +125,10 @@ func TestWriteMCPInline(t *testing.T) {
 	list := servers(7, 2)
 	list[1].Busy = true
 	lit := inlineOf(list)
-	if !strings.HasPrefix(lit, BgMCPLabel+FgWhite+Bold+glyphs.MCP+" 7"+Reset) {
+	if !strings.HasPrefix(lit, mcpLitOpen+glyphs.MCP+" 7"+Reset) {
 		t.Errorf("lit: glyph and count are one bold white chip on dark teal, got %q", lit)
 	}
-	if !strings.Contains(lit, BgWhite+FgMCPMutedOnWhite+" "+mcpOffMark+StrikeMCP+"2") {
+	if !strings.Contains(lit, mcpOffOpen+" "+mcpOffMark+StrikeMCP+"2") {
 		t.Errorf("lit: the disabled suffix stays, got %q", lit)
 	}
 	if VisibleWidth(lit) != VisibleWidth(idle) {
@@ -169,7 +169,7 @@ func withMCPLine(t *testing.T, line2 bool) {
 
 func TestOSSegmentOrder(t *testing.T) {
 	var sb strings.Builder
-	(&Powerline{}).renderOSSegment(&sb, model.SystemInfo{OS: model.OSLinux}, true, model.HealthOK, servers(7, 1), 2, BgBlue)
+	osSegment(&sb, model.HealthOK, servers(7, 1), 2)
 	got := stripSGR(sb.String())
 	health, mcp, agents := strings.Index(got, glyphs.Health), strings.Index(got, glyphs.MCP+" 7"), strings.Index(got, glyphs.Subagents+" 2")
 	if health < 0 || mcp < 0 || agents < 0 || !(health < mcp && mcp < agents) {
@@ -182,7 +182,8 @@ func TestOSSegmentOrder(t *testing.T) {
 
 func TestMCPIndicatorInTheOSSegment(t *testing.T) {
 	withMCPLine(t, false)
-	for _, width := range []int{0, 200, 160, 120, 100, 80} {
+	// Wide enough that the OS segment has given nothing up yet
+	for _, width := range []int{0, 200, 160} {
 		data := busyLine(width)
 		data.MCP = servers(7, 1)
 		out := (&Powerline{}).Render(data)
@@ -194,8 +195,25 @@ func TestMCPIndicatorInTheOSSegment(t *testing.T) {
 		if strings.Contains(line2, glyphs.MCP) {
 			t.Errorf("COLUMNS=%d: never on line two by default, got %q", width, stripSGR(line2))
 		}
-		if width > 0 && VisibleWidth(line1) > lineBudget(width) {
-			t.Errorf("COLUMNS=%d: line one is %d wide, over %d", width, VisibleWidth(line1), lineBudget(width))
+	}
+}
+
+func TestMCPIndicatorNeverMovesOutOfTheOSSegment(t *testing.T) {
+	withMCPLine(t, false)
+	// The indicator may be given up as the line narrows, but while it is
+	// drawn it is drawn in the OS segment and never on line two
+	for _, width := range []int{0, 200, 160, 120, 100, 80, 60, 40} {
+		data := busyLine(width)
+		data.MCP = servers(7, 1)
+		data.Tasks.Unattributed = 3
+		line1, line2, _ := strings.Cut((&Powerline{}).Render(data), "\n")
+		os, _, _ := strings.Cut(line1, SepRight)
+		// Drawn at all, it is inside the OS segment and nowhere else
+		if strings.Contains(stripSGR(line1), glyphs.MCP) && !strings.Contains(stripSGR(os), glyphs.MCP) {
+			t.Errorf("COLUMNS=%d: the indicator left the OS segment, got %q", width, stripSGR(line1))
+		}
+		if strings.Contains(line2, glyphs.MCP) {
+			t.Errorf("COLUMNS=%d: never on line two by default, got %q", width, stripSGR(line2))
 		}
 	}
 }

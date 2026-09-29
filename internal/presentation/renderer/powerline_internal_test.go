@@ -66,6 +66,19 @@ func TestItoa(t *testing.T) {
 	}
 }
 
+// osSegment renders the OS segment at its richest level, for the tests that
+// only care what it draws rather than what it gives up.
+func osSegment(sb *strings.Builder, health model.ServiceHealth, mcp model.MCPServers, subagents int) {
+	(&Powerline{}).renderOSSegment(sb, &OSSegmentData{
+		System:    model.SystemInfo{OS: model.OSLinux},
+		ShowIcon:  true,
+		Health:    health,
+		MCP:       mcp,
+		Subagents: subagents,
+		NextBg:    BgBlue,
+	})
+}
+
 func TestPowerline_renderOSSegment(t *testing.T) {
 	tests := []struct {
 		name string
@@ -74,9 +87,8 @@ func TestPowerline_renderOSSegment(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := &Powerline{}
 			var sb strings.Builder
-			r.renderOSSegment(&sb, model.SystemInfo{OS: model.OSLinux}, true, model.HealthUnknown, nil, 0, BgBlue)
+			osSegment(&sb, model.HealthUnknown, nil, 0)
 			if sb.Len() == 0 {
 				t.Error("renderOSSegment() produced empty output")
 			}
@@ -242,7 +254,7 @@ func TestPowerline_renderOSSegmentHealth(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var sb strings.Builder
-			(&Powerline{}).renderOSSegment(&sb, model.SystemInfo{OS: model.OSLinux}, true, tt.health, nil, 0, BgBlue)
+			osSegment(&sb, tt.health, nil, 0)
 			if !strings.Contains(sb.String(), tt.want) {
 				t.Errorf("health glyph not drawn in its colour")
 			}
@@ -251,7 +263,7 @@ func TestPowerline_renderOSSegmentHealth(t *testing.T) {
 
 	t.Run("unknown draws nothing", func(t *testing.T) {
 		var sb strings.Builder
-		(&Powerline{}).renderOSSegment(&sb, model.SystemInfo{OS: model.OSLinux}, true, model.HealthUnknown, nil, 0, BgBlue)
+		osSegment(&sb, model.HealthUnknown, nil, 0)
 		if strings.Contains(sb.String(), glyphs.Health) {
 			t.Errorf("an unknown state must not be drawn")
 		}
@@ -470,7 +482,7 @@ func TestPowerline_subagentsPlacement(t *testing.T) {
 	}
 
 	var line1 strings.Builder
-	(&Powerline{}).renderOSSegment(&line1, model.SystemInfo{OS: model.OSLinux}, true, model.HealthOK, nil, 3, BgBlue)
+	osSegment(&line1, model.HealthOK, nil, 3)
 	health, agents := strings.Index(line1.String(), glyphs.Health), strings.Index(line1.String(), BgWhite+FgBlack+Bold+glyphs.Subagents+" 3 ")
 	if health < 0 || agents < 0 || agents < health {
 		t.Errorf("unattributed subagents follow the health glyph in the OS segment, got %q", line1.String())
@@ -482,7 +494,7 @@ func TestPowerline_subagentsPlacement(t *testing.T) {
 	}
 
 	var none strings.Builder
-	(&Powerline{}).renderOSSegment(&none, model.SystemInfo{OS: model.OSLinux}, true, model.HealthOK, nil, 0, BgBlue)
+	osSegment(&none, model.HealthOK, nil, 0)
 	if strings.Contains(none.String(), glyphs.Subagents) {
 		t.Error("no unattributed subagent must draw nothing on line 1")
 	}

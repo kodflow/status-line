@@ -23,6 +23,62 @@ const (
 // Resolved once at startup; tests replace it.
 var mcpOnLine2 = os.Getenv(mcpLineEnv) == mcpLineTwo
 
+// mergeSGR folds several SGR escapes into one sequence.
+//
+// Two escapes that set a ground and then its ink leave the terminal, for the
+// length of the second one, showing the new ground under the old ink. A frame
+// the host only ever renders whole makes that window harmless — but a frame
+// cut inside it paints the rest of the row that way, and the MCP indicator is
+// the one place in the line that opens a ground of its own in the middle of a
+// segment. One sequence has no such window: a terminal applies it whole or,
+// cut, not at all. It is also shorter, which keeps the frame further from the
+// pipe's atomic-write limit.
+//
+// Params:
+//   - escapes: SGR escapes to fold, in the order they apply
+//
+// Returns:
+//   - string: one SGR sequence carrying every parameter
+func mergeSGR(escapes ...string) string {
+	params := make([]string, 0, len(escapes))
+	// Keep the parameters, drop each sequence's opener and final byte
+	for _, esc := range escapes {
+		params = append(params, strings.TrimSuffix(strings.TrimPrefix(esc, "\033["), "m"))
+	}
+	return "\033[" + strings.Join(params, ";") + "m"
+}
+
+// Openings of the MCP indicator, each folded into one sequence. They are also
+// what tells a lit frame apart in a trace, which is why they are named rather
+// than built where they are written.
+var (
+	// mcpLitOpen opens the lit chip: bold white on dark teal. Shared with
+	// the line-two pill, which lights up in the same colours.
+	mcpLitOpen = mergeSGR(BgMCPLabel, FgWhite, Bold)
+	// mcpGlyphOpen opens the glyph at rest: dark teal on the OS white.
+	mcpGlyphOpen = mergeSGR(BgWhite, FgMCPOnWhite, Bold)
+	// mcpCountOpen opens the count at rest, in the OS ink.
+	mcpCountOpen = mergeSGR(BgWhite, FgBlack, Bold)
+	// mcpOffOpen opens the disabled suffix, muted on the OS white.
+	mcpOffOpen = mergeSGR(BgWhite, FgMCPMutedOnWhite)
+)
+
+// ChipLit reports whether a rendered status line drew the MCP indicator lit.
+//
+// The lit chip is the only place in the line that opens a ground of its own
+// mid-segment, so it is the only frame a byte trace has to hunt for. The
+// predicate lives here because only this package knows the bytes it writes.
+//
+// Params:
+//   - out: a rendered status line, both rows
+//
+// Returns:
+//   - bool: true when a call was in flight as the line was drawn
+func ChipLit(out string) bool {
+	// Both the inline chip and the line-two pill light up with this opening
+	return strings.Contains(out, mcpLitOpen)
+}
+
 // mcpSummary is everything the MCP pill says.
 type mcpSummary struct {
 	// on counts the enabled servers, undeclared ones being called included
@@ -62,26 +118,53 @@ func summarizeMCP(servers model.MCPServers) mcpSummary {
 // white on dark teal, taking exactly the cells they took at rest so the
 // line does not shift. No server, nothing.
 //
+// The lit chip is the only ground in the whole line that is not its
+// segment's own, so it is the only one a cut frame could leave open over the
+// rest of the row. Its ground, ink and weight are therefore opened in one
+// sequence and closed by a bare Reset placed immediately after the last
+// payload byte: the stretch of bytes a cut can land in and leave teal behind
+// is then exactly the payload plus that four-byte reset, which is as small as
+// white-on-teal can be drawn. `TestACutNeverLeavesTealOpenBeyondTheChip`
+// measures that stretch and fails if it grows.
+//
+// The indicator gives way in two steps of the OS segment's ladder: the count
+// goes first and the glyph stands alone, then the glyph goes too. Lit or at
+// rest, each step takes the same cells as the other, so a call landing
+// mid-frame never shifts the line whatever the level.
+//
 // Params:
 //   - sb: string builder to write to
 //   - s: servers summed up
-func writeMCPInline(sb *strings.Builder, s mcpSummary) {
-	// Nothing configured draws nothing
-	if s.on+s.off == 0 {
+//   - fit: how much of the OS segment the line has room for
+func writeMCPInline(sb *strings.Builder, s mcpSummary, fit lineFit) {
+	// Nothing configured, or the indicator given up altogether, draws nothing
+	if s.on+s.off == 0 || fit.dropMCPIndicator() {
+		return
+	}
+	// Without its count the glyph stands alone: it still says the servers are
+	// there, and it still lights up while a call is in flight. The disabled
+	// suffix counts servers too, so it goes with the count.
+	if fit.dropMCPCount() {
+		open := mcpGlyphOpen
+		// Lit, the glyph alone becomes the chip
+		if s.busy {
+			open = mcpLitOpen
+		}
+		sb.WriteString(open + glyphs.MCP + Reset)
+		sb.WriteString(BgWhite + " " + Reset)
 		return
 	}
 	// Lit: one chip for glyph and count; at rest: each in its own ink
 	if s.busy {
-		sb.WriteString(BgMCPLabel + FgWhite + Bold + Labelled(glyphs.MCP, itoa(s.on)) + Reset)
+		sb.WriteString(mcpLitOpen + Labelled(glyphs.MCP, itoa(s.on)) + Reset)
 	} else {
-		glyph := glyphs.MCP
 		// The text set spells the glyph out; it still needs its space
-		sb.WriteString(BgWhite + FgMCPOnWhite + Bold + glyph + " " + Reset)
-		sb.WriteString(BgWhite + FgBlack + Bold + itoa(s.on) + Reset)
+		sb.WriteString(mcpGlyphOpen + glyphs.MCP + " " + Reset)
+		sb.WriteString(mcpCountOpen + itoa(s.on) + Reset)
 	}
 	// The disabled servers are a discreet suffix, never a label of their own
 	if s.off > 0 {
-		sb.WriteString(BgWhite + FgMCPMutedOnWhite + " " + mcpOffMark + StrikeMCP + itoa(s.off) + Reset)
+		sb.WriteString(mcpOffOpen + " " + mcpOffMark + StrikeMCP + itoa(s.off) + Reset)
 	}
 	sb.WriteString(BgWhite + " " + Reset)
 }
@@ -108,10 +191,12 @@ func (r *Powerline) renderMCPPill(sb *strings.Builder, servers model.MCPServers)
 		bg, ink, cap, offInk = BgMCPLabel, FgWhite, FgMCPEnabledText, FgMCPEnabled
 	}
 	sb.WriteString(" " + cap + LeftRound + Reset)
-	sb.WriteString(bg + ink + Bold + " " + Labelled(glyphs.MCP, itoa(s.on)) + Reset)
+	// Ground and ink in one sequence, as in the inline chip: a pill ground is
+	// never the terminal's own, so a cut between the two would show through
+	sb.WriteString(mergeSGR(bg, ink, Bold) + " " + Labelled(glyphs.MCP, itoa(s.on)) + Reset)
 	// The disabled servers are a discreet suffix, never a label of their own
 	if s.off > 0 {
-		sb.WriteString(bg + offInk + " " + mcpOffMark + StrikeMCP + itoa(s.off) + Reset)
+		sb.WriteString(mergeSGR(bg, offInk) + " " + mcpOffMark + StrikeMCP + itoa(s.off) + Reset)
 	}
 	sb.WriteString(bg + " " + Reset + cap + RightRound + Reset)
 }
