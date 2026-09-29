@@ -49,7 +49,8 @@ renderer.
 — **sans effet dans Claude Code**, qui supprime les lignes vides (voir
 « Contrat avec l'hôte »)
 `STATUS_LINE_NO_SELF_UPDATE` = `1` désactive l'auto-update (images managées)
-`STATUSLINE_TRACE` = fichier où tracer chaque cadre (voir « Tracer les octets »)
+`STATUSLINE_TRACE` = fichier où tracer les cadres qui prouvent quelque chose
+(puce allumée, écriture courte, erreur, `cut=yes`) — voir « Tracer les octets »
 
 L'auto-update vérifie le `.sha256` publié avec l'asset avant de remplacer le
 binaire : une somme absente, malformée ou différente annule la mise à jour.
@@ -172,6 +173,14 @@ incompressibles avec les paliers actuels.
 partout où le budget le permet, et là où c'est impossible la ligne est
 exactement le palier le plus serré — jamais un cran de trop.
 
+**Mais ce n'était pas la cause du bug de fond vert.** Le terminal du poste
+fait **344 colonnes** : la ligne y émet 120 à 200 cellules pour un budget de
+340, donc elle n'a jamais été près d'une coupure sur cette machine. Le
+débordement corrigé ci-dessus était un vrai défaut — coupé à chaque redraw
+sous 71 colonnes — mais il ne s'est jamais produit là où le bug a été
+observé. C'est la trace qui l'a établi : 15 h d'enregistrement, aucun cadre
+avec `cut=yes`.
+
 **Ligne 2 :** une pastille par épic ouvert mène la ligne, puis la pastille
 MCP si `STATUSLINE_MCP_LINE=2`, puis la mise à jour. Nous ne tronquons rien
 nous-mêmes ; c'est l'hôte qui coupe (voir ci-dessous), un titre long compris.
@@ -206,9 +215,39 @@ STATUSLINE_TRACE=~/statusline.trace  # puis relancer la session
   (`renderer.ChipLit`) : dans une trace d'une journée, ce sont les seuls à
   regarder. `chip=rest` couvre les deux autres cas — au repos, ou pas
   dessinée du tout parce que le segment OS a cédé son indicateur.
-- Plafond 192 Mio (≈ un jour à un cadre/seconde) puis la trace s'arrête ;
-  toute erreur d'écriture est avalée — la barre ne doit jamais casser à cause
-  de son propre journal.
+- Toute erreur d'écriture est avalée — la barre ne doit jamais casser à cause
+  de son propre journal. Plafond 192 Mio en garde-fou (voir le filtre : une
+  journée coûte désormais des kilo-octets, mais une session qui rendrait tous
+  ses cadres intéressants doit quand même s'arrêter).
+
+**La trace ne garde que les cadres qui prouvent quelque chose**
+(`Frame.worthKeeping`). La barre se redessine chaque seconde et a presque
+toujours raison ; garder ces cadres-là, c'est remplir un disque avec la preuve
+que tout va bien. Quatre cas seuls sont retenus :
+
+| Gardé quand | Ce que ça prouve |
+|-------------|------------------|
+| `chip=lit` | la puce MCP était allumée — le seul fond non-segment de la ligne, donc le seul qu'une coupure pourrait laisser ouvert (à n'importe quel palier de l'échelle OS : la puce sans son nombre compte aussi, `TestChipLitAtEveryRungItIsDrawn`) |
+| `wrote < bytes` | l'écriture est partie en morceaux : la coupure est chez nous |
+| `err` ≠ `-` | idem, avec la raison |
+| `cut=yes` | la ligne dépassait la boîte de l'hôte : c'est l'hôte qui a coupé |
+
+**Mesuré** (400 cadres au repos à 344 colonnes, la largeur réelle du poste) :
+**0 octet** — le fichier n'est même pas créé. Sans filtre, les mêmes 400
+cadres font 523 600 octets (1 309 octets par enregistrement). Sur les 15 h
+réellement enregistrées sur le poste — 152 367 cadres, 192 Mio, plafond
+atteint, dont **9** avec la puce allumée — le filtre aurait écrit ces 9
+cadres, soit **≈ 11,5 Kio au lieu de 192 Mio**.
+
+Conséquence pratique : un fichier absent ou vide **est** le résultat normal,
+pas une panne de câblage. Pour vérifier que la trace est bien armée, forcer un
+cadre intéressant :
+
+```bash
+# COLUMNS minuscule => cut=yes => un enregistrement apparaît
+echo '{}' | COLUMNS=20 STATUSLINE_TRACE=~/statusline.trace status-line >/dev/null
+grep -a -c 'frame ts=' ~/statusline.trace
+```
 
 ```bash
 # le cadre allumé qui a en plus été tronqué : le suspect
@@ -216,6 +255,49 @@ grep -a 'chip=lit' ~/statusline.trace | grep 'cut=yes'
 # combien de cadres l'hôte tronque, et de combien
 grep -a -o 'budget=[0-9]* emitted=[0-9]* cut=yes' ~/statusline.trace | sort | uniq -c
 ```
+
+## État de l'enquête : fond vert du segment OS
+
+Épic #6. Symptôme rapporté : le fond sarcelle de la puce MCP (`BgMCPLabel`,
+lu « vert » à l'écran) s'étend au-delà de la puce et remplit la fin du segment
+blanc, texte en blanc. Intermittent, « régulièrement », uniquement sur ce
+fragment.
+
+**Écarté, avec preuve :**
+
+| Hypothèse | Ce qui l'écarte |
+|-----------|-----------------|
+| Un `Reset` manquant dans le renderer | Balayage par mutation des 64 `Reset` du paquet : 20 sont porteurs, 44 sont redondants parce que chaque écriture repose son propre fond et sa propre encre. Retirer celui qui ferme la puce ne change **aucun octet visible**. |
+| Le condenseur qui couperait une ligne | Aucun palier ne coupe : `fitLine1` re-rend et rend un rendu entier, vérifié sur les 22 paliers. |
+| Un cadre partiel affiché par l'hôte | L'hôte lit stdout jusqu'à EOF et ne dessine que si on sort 0 ; aucun rendu incrémental. Et `emit` sort 1 sur écriture courte. |
+| Une coupure de l'hôte au milieu d'un échappement | La coupe est une tranche **par cellule** (`Bun.sliceAnsi`), elle ne peut pas tomber dans un échappement. |
+| Un débordement de notre ligne chez l'utilisateur | 344 colonnes, 120-200 cellules émises pour 340 : jamais `cut=yes` en 15 h. |
+| Un timeout | 600 000 ms côté hôte, 15-75 ms de rendu. |
+
+**Les 9 cadres allumés capturés en 15 h étaient tous parfaits au niveau
+octet** : `48;5;23;38;5;255;1m 󰒍 7 ␛[0m ␛[48;5;255m` — une seule séquence
+d'ouverture, charge utile, reset, puis le fond blanc reposé.
+
+**Suspects restants**, dans cet ordre :
+
+1. **Le terminal.** C'est le seul acteur qui n'a pas été instrumenté. Il
+   reçoit des octets corrects et pourrait les mal rendre (redimensionnement
+   en cours de dessin, `ambiguousIsNarrow` divergent sur le glyphe PUA,
+   effacement de fin de ligne peint avec le fond courant). Il faudrait savoir
+   quel émulateur, et si le bug survit à un autre.
+2. **Le report d'attributs entre lignes par l'hôte** (voir « Contrat avec
+   l'hôte ») : il préfixe chaque ligne de tous les échappements SGR des
+   lignes précédentes. Notre `\033[0m` final l'empêche aujourd'hui, et un
+   invariant le verrouille — mais ce mécanisme est le seul chemin connu par
+   lequel un fond peut voyager au-delà de là où il a été ouvert.
+
+**Non mesuré**, assumé comme tel : si `Bun.sliceAnsi` referme les attributs
+ouverts à l'endroit d'une coupe. Sans pertinence tant qu'aucun cadre ne
+déborde, et la trace le dira — un cadre bavé avec `cut=no` écarte la coupe
+définitivement.
+
+**Prochain pas** : la trace est armée et ne coûte plus rien. Le premier cadre
+bavé donnera ses octets ; s'ils sont corrects, l'enquête passe au terminal.
 
 ## Contrat avec l'hôte
 

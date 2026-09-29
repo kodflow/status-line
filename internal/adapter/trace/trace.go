@@ -1,9 +1,13 @@
 // Package trace records the exact bytes the status line hands the host.
 //
 // A colour that escapes its segment is either written wrong or cut short, and
-// the two cannot be told apart from a screenshot. This appends every frame
+// the two cannot be told apart from a screenshot. This appends a frame
 // verbatim, with what the write to stdout actually took, so a bled frame can
 // be read back byte for byte instead of described.
+//
+// Only a frame that can prove something is kept — see Frame.worthKeeping. The
+// bar redraws every second and is almost always right; a trace of those
+// frames is a disk full of the bar working.
 package trace
 
 import (
@@ -18,9 +22,10 @@ const (
 	// traceEnv names the file frames are appended to. Unset, nothing is
 	// written and nothing is opened.
 	traceEnv string = "STATUSLINE_TRACE"
-	// maxTraceBytes caps the file so the trace can be left on for a day
-	// without filling a disk: a frame is around 1.5 KB and the host redraws
-	// every second, so a day of frames is about 130 MB.
+	// maxTraceBytes is the backstop under the filter: with only the frames
+	// that prove something kept, a day costs kilobytes, but a session that
+	// somehow made every frame interesting must still stop rather than fill
+	// a disk.
 	maxTraceBytes int64 = 192 << 20
 	// recordSep opens every record. The payload holds newlines and escapes,
 	// so a reader cannot split on either; it splits on this and trusts the
@@ -63,6 +68,36 @@ func (f Frame) overflows() bool {
 	return f.Budget > 0 && f.Emitted > f.Budget
 }
 
+// cutShort reports whether the frame went out in part, or not at all.
+//
+// Returns:
+//   - bool: true when the write errored or took fewer bytes than the frame
+func (f Frame) cutShort() bool {
+	// A writer that took fewer bytes without an error of its own still cut it
+	return f.Err != nil || f.Written != len(f.Out)
+}
+
+// worthKeeping reports whether the frame can prove anything.
+//
+// Almost every frame is the bar being right, and a trace of those proves
+// nothing while filling a disk: 152 367 records over fifteen hours on the
+// workstation, 192 MB, the cap reached — and nine of them carried a lit chip.
+// Only four kinds of frame can settle where a colour that escaped its segment
+// came from:
+//
+//   - the MCP chip lit, at any rung of the OS ladder: the one ground in the
+//     line that is not its segment's own, so the only one a cut could leave
+//     open over the rest of the row;
+//   - a write that went out in part, which is the cut being ours;
+//   - a write that errored, for the same reason;
+//   - a line wider than the host's box, which is the host cutting it.
+//
+// Returns:
+//   - bool: true when the frame is worth the disk it would take
+func (f Frame) worthKeeping() bool {
+	return f.ChipLit || f.cutShort() || f.overflows()
+}
+
 // Write appends one frame to the trace file, if one is configured.
 //
 // Every failure is swallowed: the trace is a diagnostic, and a status line
@@ -75,6 +110,10 @@ func Write(f Frame) {
 	path := os.Getenv(traceEnv)
 	// No trace asked for: open nothing, write nothing
 	if path == "" {
+		return
+	}
+	// A conforming frame at rest proves nothing: not even open the file
+	if !f.worthKeeping() {
 		return
 	}
 	// Append-only: one process runs per redraw, and a single write under

@@ -238,3 +238,34 @@ func TestMCPIndicatorAbsentWithoutServers(t *testing.T) {
 		t.Errorf("no server, no indicator, got %q", stripSGR(out))
 	}
 }
+
+func TestChipLitAtEveryRungItIsDrawn(t *testing.T) {
+	withMCPLine(t, false)
+	lit := servers(7, 2)
+	lit[0].Busy = true
+	rest := servers(7, 2)
+	// The byte trace keeps a frame only when it can prove something, and a
+	// lit chip is one of those things. It asks ChipLit, so a chip that lost
+	// its count but is still lit has to answer yes or the frames that matter
+	// most are the ones thrown away.
+	for level := range condensePolicy[segOS].levels {
+		var fit lineFit
+		fit[segOS] = level
+		var litLine, restLine strings.Builder
+		data := busyLine(0)
+		data.MCP, data.Tasks.Unattributed = lit, 3
+		(&Powerline{}).renderLine1Fit(&litLine, data, fit)
+		data.MCP = rest
+		(&Powerline{}).renderLine1Fit(&restLine, data, fit)
+
+		drawn := strings.Contains(stripSGR(restLine.String()), glyphs.MCP)
+		// While the indicator is drawn at all, a call in flight lights it
+		if got := ChipLit(litLine.String()); got != drawn {
+			t.Errorf("os level %d: ChipLit = %v, but the indicator is drawn = %v", level, got, drawn)
+		}
+		// At rest it is never reported lit, whatever the rung
+		if ChipLit(restLine.String()) {
+			t.Errorf("os level %d: a line with no call in flight is reported lit", level)
+		}
+	}
+}
