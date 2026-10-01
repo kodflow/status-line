@@ -112,9 +112,16 @@ func TestBusyMainTranscript(t *testing.T) {
 		{
 			name: "plugin server keeps its tool-name key",
 			lines: func(t *testing.T) []string {
-				return []string{use(t, "a", "mcp__plugin_kodflow-hooks_tasks__task_list", -time.Second)}
+				return []string{use(t, "a", "mcp__plugin_acme_search__query", -time.Second)}
 			},
-			want: "plugin_kodflow-hooks_tasks",
+			want: "plugin_acme_search",
+		},
+		{
+			name: "task list bookkeeping never lights the indicator",
+			lines: func(t *testing.T) []string {
+				return []string{use(t, "a", "mcp__plugin_kodflow-hooks_tasks__task_update", -time.Second)}
+			},
+			want: "",
 		},
 	})
 }
@@ -222,7 +229,7 @@ func TestNewProviderPaths(t *testing.T) {
 func TestServerKey(t *testing.T) {
 	tests := map[string]string{
 		"mcp__github__get_me":                        "github",
-		"mcp__plugin_kodflow-hooks_tasks__task_list": "plugin_kodflow-hooks_tasks",
+		"mcp__plugin_kodflow-hooks_tasks__task_list": "",
 		"mcp__claude_ai_Claude_Docs__guide":          "claude_ai_Claude_Docs",
 		"mcp__nameonly":                              "",
 		"Read":                                       "",

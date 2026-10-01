@@ -33,6 +33,10 @@ const (
 	staleAgent time.Duration = 12 * time.Hour
 	// toolPrefix opens every MCP tool name: mcp__<server>__<tool>.
 	toolPrefix string = "mcp__"
+	// tasksServer is the kodflow-hooks task list: the harness calls it on
+	// nearly every turn to keep the status line itself up to date, so lighting
+	// the indicator for it would flip the colors with no call of the user's.
+	tasksServer string = "plugin_kodflow-hooks_tasks"
 )
 
 // Byte markers used to skip lines without decoding them.
@@ -276,6 +280,10 @@ func serverKey(name string) string {
 	server, _, found := strings.Cut(rest, "__")
 	// A name without the tool part is not a well-formed MCP tool
 	if !found {
+		return ""
+	}
+	// Bookkeeping calls are not activity worth showing
+	if server == tasksServer {
 		return ""
 	}
 	return server
