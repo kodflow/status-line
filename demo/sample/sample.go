@@ -41,7 +41,7 @@ func Data() model.StatusLineData {
 			{Name: "gitlab", Enabled: true, Source: model.MCPSourceCLI},
 			{Name: "context7", Enabled: true, Source: model.MCPSourceCLI},
 			{Name: "playwright", Enabled: true, Source: model.MCPSourceCLI},
-			{Name: "codacy", Enabled: true, Source: model.MCPSourceCLI},
+			{Name: "grepai", Enabled: true, Source: model.MCPSourceCLI},
 			{Name: "GitKraken", Enabled: true, Source: model.MCPSourceUser},
 			{Name: "tasks", Enabled: true, Source: model.MCPSourcePlugin, Plugin: "kodflow-hooks"},
 			{Name: "legacy", Enabled: false, Source: model.MCPSourceUser},

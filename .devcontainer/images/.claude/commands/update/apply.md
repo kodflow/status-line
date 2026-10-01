@@ -575,7 +575,7 @@ done
 
 # Migration: remove deprecated MCP servers from runtime mcp.json
 if [ -f "$HOME/.claude/mcp.json" ] && command -v jq &>/dev/null; then
-    for server in codacy taskmaster grepai; do
+    for server in taskmaster grepai; do
         if jq -e ".mcpServers.$server" "$HOME/.claude/mcp.json" &>/dev/null; then
             jq "del(.mcpServers.$server)" "$HOME/.claude/mcp.json" > "$HOME/.claude/mcp.json.tmp" && \
                 mv "$HOME/.claude/mcp.json.tmp" "$HOME/.claude/mcp.json"
