@@ -123,6 +123,13 @@ func TestBusyMainTranscript(t *testing.T) {
 			},
 			want: "",
 		},
+		{
+			name: "task list of the mod never lights the indicator",
+			lines: func(t *testing.T) []string {
+				return []string{use(t, "a", "mcp__kodflow-hooks__task_update", -time.Second)}
+			},
+			want: "",
+		},
 	})
 }
 
@@ -230,6 +237,10 @@ func TestServerKey(t *testing.T) {
 	tests := map[string]string{
 		"mcp__github__get_me":                        "github",
 		"mcp__plugin_kodflow-hooks_tasks__task_list": "",
+		"mcp__kodflow-hooks__task_list":              "",
+		"mcp__kodflow-hooks__task_create":            "",
+		"mcp__plugin_kodflow-hooks_other__x":         "plugin_kodflow-hooks_other",
+		"mcp__kodflow-hooks-extra__x":                "kodflow-hooks-extra",
 		"mcp__claude_ai_Claude_Docs__guide":          "claude_ai_Claude_Docs",
 		"mcp__nameonly":                              "",
 		"Read":                                       "",

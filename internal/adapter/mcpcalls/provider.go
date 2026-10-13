@@ -33,11 +33,19 @@ const (
 	staleAgent time.Duration = 12 * time.Hour
 	// toolPrefix opens every MCP tool name: mcp__<server>__<tool>.
 	toolPrefix string = "mcp__"
-	// tasksServer is the kodflow-hooks task list: the harness calls it on
-	// nearly every turn to keep the status line itself up to date, so lighting
-	// the indicator for it would flip the colors with no call of the user's.
-	tasksServer string = "plugin_kodflow-hooks_tasks"
 )
+
+// tasksServers are the kodflow-hooks task list, under both of its names: the
+// harness calls it on nearly every turn to keep the status line itself up to
+// date, so lighting the indicator for it would flip the colors with no call
+// of the user's. The plugin's MCP server named its tools
+// mcp__plugin_kodflow-hooks_tasks__task_*; the mod that replaces it registers
+// mcp__kodflow-hooks__task_*. Both stay, for good: a marketplace rolled back
+// to the server must not light the indicator again.
+var tasksServers = map[string]bool{
+	"plugin_kodflow-hooks_tasks": true,
+	"kodflow-hooks":              true,
+}
 
 // Byte markers used to skip lines without decoding them.
 var (
@@ -283,7 +291,7 @@ func serverKey(name string) string {
 		return ""
 	}
 	// Bookkeeping calls are not activity worth showing
-	if server == tasksServer {
+	if tasksServers[server] {
 		return ""
 	}
 	return server
