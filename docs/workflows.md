@@ -120,8 +120,7 @@ This project uses `kodflow/devcontainer-template` skills:
 - `/review` — local multi-agent review against `main`.
 - `/update` — sync `.devcontainer/` from upstream template.
 
-Two AI review tools are wired but **label-triggered**:
+One AI review tool is wired, **label-triggered**:
 
 - **CodeRabbit** — add label `coderabbit` on a PR to request a review;
   no automatic noise on every push.
-- **Qodo Merge** — add label `qodo` on a PR to request a Qodo review.

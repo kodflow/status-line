@@ -593,16 +593,15 @@ détaché — l'affichage n'attend jamais le réseau.
 
 ## Reviews IA (label-triggered)
 
-CodeRabbit et Qodo Merge ne tournent **pas** automatiquement sur chaque PR
-(trop bruyant alongside l'un de l'autre). Ils sont déclenchés par label :
+CodeRabbit ne tourne **pas** automatiquement sur chaque PR (trop bruyant).
+Il est déclenché par label :
 
 | Label | Outil | Quand l'utiliser |
 |-------|-------|------------------|
 | `coderabbit` | CodeRabbit | Review approfondie (89 règles ast-grep + path_instructions) |
-| `qodo` | Qodo Merge | Second avis indépendant (security review + tests review) |
 
-Les chemins `.devcontainer/**`, `.github/**`, `vendor/**` sont exclus des
-deux outils — c'est du contenu template-managed, pas du code projet.
+Les chemins `.devcontainer/**`, `.github/**`, `vendor/**` sont exclus de
+la review — c'est du contenu template-managed, pas du code projet.
 
 ## Branch protection (main)
 
