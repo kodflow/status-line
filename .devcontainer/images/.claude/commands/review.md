@@ -252,7 +252,7 @@ Output:
   Run /do to apply fixes
 
 Workflow:
-  /review → /do (apply fixes) → /git --commit
+  /review → /do (apply fixes)
 
 ═══════════════════════════════════════════════════════════════
 ```

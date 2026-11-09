@@ -58,8 +58,8 @@ principles:
 
   no_superficial_content:
     rule: "NEVER list without explaining"
-    bad: "Available commands: /git, /review, /plan"
-    good: "### /git - Full workflow with phases, arguments, examples"
+    bad: "Available commands: /review, /plan"
+    good: "### /review - Full workflow with phases, arguments, examples"
 
   product_pitch_first:
     rule: "index.md MUST answer 'What problem does this solve?' before anything technical"

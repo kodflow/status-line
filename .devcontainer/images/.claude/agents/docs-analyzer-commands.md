@@ -66,7 +66,7 @@ For the commands system overall:
   "agent": "commands",
   "commands": [
     {
-      "name": "/git",
+      "name": "/review",
       "description": "Git workflow automation",
       "arguments": ["--commit", "--push", "--pr"],
       "phases": ["branch", "commit", "pr"],

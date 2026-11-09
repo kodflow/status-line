@@ -41,7 +41,7 @@ Updates the DevContainer environment from the official template.
 **Updated components (devcontainer - always):**
 
 - **Hooks** - Claude scripts (format, lint, security, etc.)
-- **Commands** - Slash commands (/git, /search, etc.)
+- **Commands** - Slash commands (/search, etc.)
 - **Agents** - Agent definitions (specialists, executors)
 - **Image-hooks** - Lifecycle hooks embedded in Docker image
 - **Shared-utils** - Shared utilities (utils.sh)
@@ -145,7 +145,7 @@ Options:
 
 Components:
   hooks        Claude scripts (format, lint...)
-  commands     Slash commands (/git, /search)
+  commands     Slash commands (/search)
   agents       Agent definitions (specialists)
   image-hooks  Lifecycle hooks (image-embedded)
   shared-utils Shared hook utilities (utils.sh)

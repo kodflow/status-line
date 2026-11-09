@@ -209,7 +209,6 @@ Task detected as OS-level
 
 | Before /do | After /do |
 |-----------|-----------|
-| `/plan` (optional but recommended) | `/git --commit` |
 | `/review` (generates plan) | `/review` (re-validate if --loop) |
 | `/search` (if research needed) | N/A |
 
@@ -225,8 +224,6 @@ Task detected as OS-level
 /do                                    # Detects the plan → executes
     ↓
 (review diff)                          # Verify changes
-    ↓
-/git --commit                          # Commit + PR
 ```
 
 **Cyclic workflow (with /review --loop):**
@@ -239,8 +236,6 @@ Task detected as OS-level
 /review (auto-triggered)               # Re-validate corrections
     ↓
 (loop until no CRITICAL/HIGH OR limit)
-    ↓
-/git --commit                          # Commit corrections
 ```
 
 **Quick workflow (without plan):**
@@ -249,8 +244,6 @@ Task detected as OS-level
 /do "Fix all lint bugs"               # Simple + measurable task
     ↓
 (iterations until success)
-    ↓
-/git --commit
 ```
 
 **Note**: `/do` replaces `/apply`. The `/apply` skill is deprecated.

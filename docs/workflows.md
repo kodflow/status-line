@@ -22,7 +22,7 @@ make demo       # render once with sample input
 ## Development Loop
 
 ```
-edit → make build → make demo (sanity check) → make test → make lint → commit via /git
+edit → make build → make demo (sanity check) → make test → make lint → commit on a branch and open a PR
 ```
 
 | Command       | Purpose                                                              |
@@ -34,7 +34,7 @@ edit → make build → make demo (sanity check) → make test → make lint →
 | `make run`    | Build + demo (alias)                                                 |
 | `make clean`  | Remove `bin/`                                                        |
 
-Use the `/git` skill for commits (conventional format, branch creation,
+Commit on a branch with a conventional message and open a PR (branch creation,
 PR open). Never commit to `main` directly — branch protection enforces
 this.
 
@@ -113,8 +113,6 @@ This project uses `kodflow/devcontainer-template` skills:
 - `/init` — project bootstrap (run once; you ran it).
 - `/feature <name>` — plan + apply a feature in one flow.
 - `/fix <bug>` — same flow, scoped to a bug.
-- `/git --commit` — branch + conventional commit + PR.
-- `/git --merge` — readiness check + squash merge.
 - `/lint` — ktn-linter run scoped to changed files.
 - `/test` — incremental test loop scoped to changed files.
 - `/review` — local multi-agent review against `main`.
