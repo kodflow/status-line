@@ -72,7 +72,7 @@ apply_devcontainer_tarball() {
         echo "  ✓ commands"
     fi
 
-    # Command sub-modules (subdirectories like commands/git/, commands/search/, etc.)
+    # Command sub-modules (subdirectories like commands/search/, commands/review/, etc.)
     if [ -d "$src/.devcontainer/images/.claude/commands" ]; then
         while IFS= read -r -d '' subdir; do
             local rel="${subdir#$src/.devcontainer/images/.claude/}"

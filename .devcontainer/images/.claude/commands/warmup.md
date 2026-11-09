@@ -94,7 +94,7 @@ Examples:
   /warmup --update --dry-run    Preview changes
 
 Workflow:
-  /warmup → /plan → /do → /git
+  /warmup → /plan → /do
 
 ═══════════════════════════════════════════════════════════════
 ```
@@ -175,8 +175,6 @@ Workflow:
 /do                         # Execute the plan
     ↓
 /warmup --update            # Update documentation
-    ↓
-/git --commit               # Commit changes
 ```
 
 **Integration with other skills:**

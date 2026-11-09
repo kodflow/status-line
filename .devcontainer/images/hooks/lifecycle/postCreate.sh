@@ -128,8 +128,8 @@ step_gpg_signing() {
         git config --global gpg.program gpg
         log_success "Git GPG signing configured with key: $gpg_key (matching $git_email)"
     else
-        # No matching key found - GPG signing will be configured via /git skill
-        log_warning "No GPG key found for email '$git_email' - configure via /git skill"
+        # No matching key found - GPG signing must be configured manually
+        log_warning "No GPG key found for email '$git_email' - configure GPG signing manually"
     fi
 }
 

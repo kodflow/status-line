@@ -569,5 +569,4 @@ Afficher ce qui serait exécuté sans rien modifier :
 
 - `/plan` - Créer un plan
 - `/review` - Demander une code review
-- `/git --merge` - Merger la PR
 

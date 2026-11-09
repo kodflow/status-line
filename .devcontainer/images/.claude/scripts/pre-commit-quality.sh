@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================================
-# pre-commit-quality.sh - Incremental quality gate for /git --commit
+# pre-commit-quality.sh - Incremental quality gate before a commit
 # Runs lint + test in PARALLEL, scoped to changed files/packages only.
 #
 # Usage: pre-commit-quality.sh [base_branch]

@@ -64,7 +64,7 @@ worktree_dispatch:
       - "CLAUDE.md → merge both sections"
 
   5_pre_merge_test:
-    action: "Test merge before committing (like /git --merge Phase 5.0)"
+    action: "Test merge before committing"
     trigger: "For EACH branch before actual merge"
     steps:
       - "git merge --no-commit --no-ff <worktree-branch>"
