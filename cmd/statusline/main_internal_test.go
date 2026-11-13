@@ -12,10 +12,15 @@ import (
 type shortWriter struct {
 	limit int
 	got   strings.Builder
+	// extra lets writes past the limit through, to catch a second text
+	extra bool
 }
 
 // Write takes what fits under the limit and says so without an error.
 func (w *shortWriter) Write(p []byte) (int, error) {
+	if w.extra && w.got.Len() >= w.limit {
+		return w.got.Write(p)
+	}
 	n := min(len(p), w.limit-w.got.Len())
 	w.got.Write(p[:n])
 	return n, nil

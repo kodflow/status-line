@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // serveRelease stands in for the GitHub release endpoint, serving one asset and
@@ -59,7 +60,7 @@ func TestFetchChecksum(t *testing.T) {
 			}))
 			defer srv.Close()
 
-			u := NewUpdater("v1.0.0")
+			u := newUpdater("v1.0.0", "", checkTimeout)
 			saved := downloadURLFor
 			downloadURLFor = func(_, _, _, _ string) string { return srv.URL }
 			defer func() { downloadURLFor = saved }()
@@ -97,7 +98,7 @@ func TestDownloadAndReplace_RejectsMismatch(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	u := NewUpdater("v1.0.0")
+	u := newUpdater("v1.0.0", "", checkTimeout)
 	u.execPath = exe
 
 	err := u.downloadAndReplace("v1.0.1")
@@ -141,7 +142,7 @@ func TestDownloadAndReplace_AcceptsMatch(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	u := NewUpdater("v1.0.0")
+	u := newUpdater("v1.0.0", "", checkTimeout)
 	u.execPath = exe
 
 	// A payload matching its digest is the one case that should go through
@@ -157,12 +158,13 @@ func TestDownloadAndReplace_AcceptsMatch(t *testing.T) {
 	}
 }
 
-func TestCheckForUpdate_HonoursOptOut(t *testing.T) {
-	t.Setenv(disableEnv, "1")
+func TestPillHonoursOptOut(t *testing.T) {
+	t.Setenv(DisableEnv, "yes")
 
-	// A managed image verifies this binary at build time; replacing it at
-	// runtime would void that guarantee, so the switch must win outright
-	if info := NewUpdater("v1.0.0").CheckForUpdate(); info.Available {
-		t.Error("CheckForUpdate() reported an update while self-update is disabled")
+	// A managed image verifies this binary at build time; the switch must
+	// hide the pill outright, whatever value it carries
+	st := State{Tag: "v9.0.0", ApplyError: "boom"}
+	if info := st.Pill("v1.0.0", time.Now()); info.Available {
+		t.Error("Pill() lit while self-update is disabled")
 	}
 }

@@ -23,16 +23,12 @@ const (
 	repoOwner string = "kodflow"
 	// repoName is the GitHub repository name.
 	repoName string = "status-line"
-	// apiURL is the GitHub releases API endpoint.
-	apiURL string = "https://api.github.com/repos/%s/%s/releases/latest"
 	// downloadURL is the release asset download URL pattern.
 	downloadURL string = "https://github.com/%s/%s/releases/download/%s/%s"
-	// httpTimeout is the timeout for HTTP requests.
-	httpTimeout time.Duration = 10 * time.Second
-	// checkInterval is the minimum time between update checks.
-	checkInterval time.Duration = 1 * time.Hour
-	// cacheFileName is the name of the update check cache file.
-	cacheFileName string = ".status-line-update-check"
+	// checkTimeout bounds the release lookup: one small JSON document.
+	checkTimeout time.Duration = 10 * time.Second
+	// applyTimeout bounds the download of a whole binary and its checksum.
+	applyTimeout time.Duration = 2 * time.Minute
 	// semverMajorIdx is the index of major version component.
 	semverMajorIdx int = 0
 	// semverMinorIdx is the index of minor version component.
@@ -45,12 +41,17 @@ const (
 	executablePerm os.FileMode = 0755
 	// checksumSuffix is appended to an asset name to reach its checksum file.
 	checksumSuffix string = ".sha256"
-	// disableEnv switches the self-updater off entirely.
-	disableEnv string = "STATUS_LINE_NO_SELF_UPDATE"
+	// DisableEnv switches the self-updater off entirely when non-empty.
+	DisableEnv string = "STATUS_LINE_NO_SELF_UPDATE"
 	// checksumMaxBytes bounds the checksum file read.
 	checksumMaxBytes int64 = 1024
 	// sha256HexLen is the length of a SHA-256 digest in hex.
 	sha256HexLen int = 64
+	// releaseMaxBytes bounds the release document read.
+	releaseMaxBytes int64 = 1 << 20
+	// tempPrefix names the partial downloads beside the binary; the sweep
+	// removes the stale ones and nothing else carries this prefix.
+	tempPrefix string = "status-line-update-"
 )
 
 // Updater handles self-update logic for status-line binary.
@@ -58,165 +59,54 @@ const (
 type Updater struct {
 	version string
 	client  *http.Client
-	// execPath overrides the binary to replace. Empty means the running one,
-	// which is what production always uses; tests point it at a throwaway file
-	// so a swap can be asserted without replacing the test binary itself.
+	// execPath is the binary to replace: the running one resolved through
+	// its symlinks in production, a throwaway file in tests.
 	execPath string
 }
 
-// downloadURLFor builds the URL of a release asset. It is a variable so tests
-// can point the updater at a local server: the alternative is reaching the real
-// release endpoint, which would make these tests depend on the network and on
-// whatever is currently published.
-var downloadURLFor = func(owner, repo, version, asset string) string {
-	return fmt.Sprintf(downloadURL, owner, repo, version, asset)
-}
+// Endpoints are variables so tests can point the updater at a local server:
+// the alternative is reaching the real API, which would make these tests
+// depend on the network and on whatever is currently published.
+var (
+	// apiURL is the GitHub endpoint naming the latest release.
+	apiURL = fmt.Sprintf("https://api.github.com/repos/%s/%s/releases/latest", repoOwner, repoName)
+	// downloadURLFor builds the URL of a release asset.
+	downloadURLFor = func(owner, repo, version, asset string) string {
+		return fmt.Sprintf(downloadURL, owner, repo, version, asset)
+	}
+)
 
-// NewUpdater creates a new updater instance.
+// newUpdater creates an updater with its own HTTP timeout.
 //
 // Params:
 //   - version: current binary version (empty means dev build)
+//   - execPath: binary to replace
+//   - timeout: bound on every request this updater makes
 //
 // Returns:
 //   - *Updater: configured updater instance
-func NewUpdater(version string) *Updater {
+func newUpdater(version, execPath string, timeout time.Duration) *Updater {
 	// Return configured updater
 	return &Updater{
-		version: version,
-		client:  &http.Client{Timeout: httpTimeout},
+		version:  version,
+		client:   &http.Client{Timeout: timeout},
+		execPath: execPath,
 	}
 }
 
-// CheckForUpdate checks if an update is available without downloading.
-// Uses a cache file to limit checks to once per hour.
+// getLatestVersion fetches the latest release tag from GitHub.
 //
-// Returns:
-//   - UpdateInfo: information about available update
-func (u *Updater) CheckForUpdate() UpdateInfo {
-	// Honour an explicit opt-out before anything else. A managed image verifies
-	// this binary at build time and rebuilds on its own schedule; replacing it
-	// at runtime would silently void that verification.
-	if os.Getenv(disableEnv) != "" {
-		// Self-update switched off by the environment
-		return UpdateInfo{}
-	}
-
-	// Skip update for dev builds
-	if u.version == "" {
-		// Dev build detected, skip update
-		return UpdateInfo{}
-	}
-
-	// Check if we should perform an update check
-	if !u.shouldCheck() {
-		// Cache is still fresh, skip check
-		return UpdateInfo{}
-	}
-
-	// Update cache timestamp
-	u.updateCache()
-
-	// Get latest release info
-	latest, err := u.getLatestVersion()
-	// Check for API errors
-	if err != nil {
-		// Return empty info on error
-		return UpdateInfo{}
-	}
-
-	// Compare versions
-	if !u.isNewer(latest) {
-		// Already up to date
-		return UpdateInfo{}
-	}
-
-	// Return update info
-	return UpdateInfo{Available: true, Version: latest}
-}
-
-// DownloadUpdate downloads and applies the specified version.
+// A refusal carrying a rate-limit hint comes back as a *statusError, so the
+// caller can wait as long as the API asked rather than its own backoff.
 //
 // Params:
-//   - version: the version to download
+//   - now: clock used to turn a relative Retry-After into a date
 //
 // Returns:
-//   - error: any download or replacement error
-func (u *Updater) DownloadUpdate(version string) error {
-	// Perform update
-	return u.downloadAndReplace(version)
-}
-
-// CheckAndUpdate checks for updates and applies them if available.
-// Uses a cache file to limit checks to once per hour.
-//
-// Returns:
-//   - bool: true if update was applied
-//   - error: any error during update process
-func (u *Updater) CheckAndUpdate() (bool, error) {
-	info := u.CheckForUpdate()
-	// Check if update is available
-	if !info.Available {
-		// No update available
-		return false, nil
-	}
-
-	// Perform update
-	err := u.DownloadUpdate(info.Version)
-	// Check for update errors
-	if err != nil {
-		// Return update error
-		return false, err
-	}
-
-	// Update successful
-	return true, nil
-}
-
-// shouldCheck returns true if enough time has passed since last check.
-//
-// Returns:
-//   - bool: true if we should check for updates
-func (u *Updater) shouldCheck() bool {
-	cachePath := u.getCachePath()
-	info, err := os.Stat(cachePath)
-	// If file doesn't exist, we should check
-	if err != nil {
-		// Cache missing, should check
-		return true
-	}
-
-	// Check if enough time has passed
-	return time.Since(info.ModTime()) > checkInterval
-}
-
-// updateCache updates the cache file timestamp.
-func (u *Updater) updateCache() {
-	cachePath := u.getCachePath()
-	// Create or touch the cache file
-	file, err := os.Create(cachePath)
-	// Ignore errors, not critical
-	if err == nil {
-		file.Close()
-	}
-}
-
-// getCachePath returns the path to the cache file.
-//
-// Returns:
-//   - string: full path to cache file
-func (u *Updater) getCachePath() string {
-	// Return path in temp directory
-	return filepath.Join(os.TempDir(), cacheFileName)
-}
-
-// getLatestVersion fetches the latest release version from GitHub.
-//
-// Returns:
-//   - string: latest version tag
+//   - string: latest version tag, validated
 //   - error: any API error
-func (u *Updater) getLatestVersion() (string, error) {
-	url := fmt.Sprintf(apiURL, repoOwner, repoName)
-	resp, err := u.client.Get(url)
+func (u *Updater) getLatestVersion(now time.Time) (string, error) {
+	resp, err := u.client.Get(apiURL)
 	// Check for HTTP errors
 	if err != nil {
 		// Return HTTP error
@@ -226,15 +116,20 @@ func (u *Updater) getLatestVersion() (string, error) {
 
 	// Check response status
 	if resp.StatusCode != http.StatusOK {
-		// Return status error
-		return "", fmt.Errorf("unexpected status: %d", resp.StatusCode)
+		// Return status error, with the date the API asked us to wait until
+		return "", &statusError{code: resp.StatusCode, retryAt: retryAt(resp.Header, now)}
 	}
 
 	var release releaseInfo
 	// Check for JSON decode errors
-	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, releaseMaxBytes)).Decode(&release); err != nil {
 		// Return decode error
 		return "", fmt.Errorf("parsing release info: %w", err)
+	}
+	// A tag that is not a plain release version is never installed
+	if !validTag(release.TagName) {
+		// Return validation error
+		return "", fmt.Errorf("invalid release tag %q", release.TagName)
 	}
 
 	// Return parsed tag name
@@ -337,26 +232,10 @@ func (u *Updater) downloadAndReplace(version string) error {
 		return fmt.Errorf("download failed: status %d", resp.StatusCode)
 	}
 
-	// Resolve what to replace: the running binary, unless a test pointed us
-	// somewhere else
 	execPath := u.execPath
-	if execPath == "" {
-		execPath, err = os.Executable()
-		// Check for path resolution errors
-		if err != nil {
-			// Return path error
-			return fmt.Errorf("getting executable path: %w", err)
-		}
-		execPath, err = filepath.EvalSymlinks(execPath)
-		// Check for symlink resolution errors
-		if err != nil {
-			// Return symlink error
-			return fmt.Errorf("resolving symlinks: %w", err)
-		}
-	}
 
 	// Create temporary file
-	tmpFile, err := os.CreateTemp(filepath.Dir(execPath), "status-line-update-*")
+	tmpFile, err := os.CreateTemp(filepath.Dir(execPath), tempPrefix+"*")
 	// Check for temp file creation errors
 	if err != nil {
 		// Return temp file error

@@ -213,6 +213,23 @@ func TestPowerline_renderUpdatePill(t *testing.T) {
 	}
 }
 
+func TestPowerline_renderUpdatePillFailureVariant(t *testing.T) {
+	r := &Powerline{}
+	var lit, failed, failedNoTag strings.Builder
+	r.renderUpdatePill(&lit, model.UpdateInfo{Available: true, Version: "v1.1.0"})
+	r.renderUpdatePill(&failed, model.UpdateInfo{Available: true, Version: "v1.1.0", Failed: true})
+	r.renderUpdatePill(&failedNoTag, model.UpdateInfo{Available: true, Failed: true})
+	if !strings.Contains(lit.String(), IconUpdate) || strings.Contains(lit.String(), IconUpdateFailed) {
+		t.Errorf("lit pill = %q, want the download glyph", lit.String())
+	}
+	if !strings.Contains(failed.String(), IconUpdateFailed+" v1.1.0") || !strings.Contains(failed.String(), BgRed) {
+		t.Errorf("failed pill = %q, want the warning glyph on red with the release", failed.String())
+	}
+	if strings.Contains(failedNoTag.String(), " v") || !strings.Contains(failedNoTag.String(), IconUpdateFailed) {
+		t.Errorf("failed pill without a release = %q", failedNoTag.String())
+	}
+}
+
 func TestPowerline_renderModelSegmentCursorTakesTheInk(t *testing.T) {
 	// The even-burn cursor used to be one orange for every model; on the pink
 	// and lavender grounds it measured 2.2:1 and clashed in hue. It now takes
