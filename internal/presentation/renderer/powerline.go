@@ -3,7 +3,6 @@ package renderer
 
 import (
 	"strings"
-	"time"
 
 	"github.com/florent/status-line/internal/domain/model"
 	"github.com/florent/status-line/internal/domain/port"
@@ -43,47 +42,33 @@ func NewPowerline() *Powerline {
 func (r *Powerline) Render(data model.StatusLineData) string {
 	var sb strings.Builder
 
-	r.renderCompact(&sb, data)
+	// One line carries everything the session is: identity, quotas,
+	// repository, and an update notice at its end
+	r.renderLine1(&sb, data)
+	sb.WriteString("\n")
 
 	// Return complete status line
 	return sb.String()
 }
 
-// renderCompact renders the two-line shape: everything about the session on
-// the first line, the ambient pills on the second.
-//
-// Params:
-//   - sb: string builder to write to
-//   - data: status line data
-func (r *Powerline) renderCompact(sb *strings.Builder, data model.StatusLineData) {
-	// Line one carries everything the session is: identity, MCP servers,
-	// quotas, repository. Line two carries the epics, the MCP pill when it
-	// is asked there, and an update notice.
-	r.renderLine1(sb, data)
-	sb.WriteString("\n" + LineGap())
-	r.renderLine2With(sb, data, mcpOnLine2)
-	sb.WriteString("\n")
-}
-
-// renderLine1 renders the first line, condensed to the terminal width.
+// renderLine1 renders the line, condensed to the terminal width.
 //
 // The line is drawn whole first; while it is wider than the terminal
-// allows, it is drawn again one degradation step further (fitLevels). The
-// MCP indicator inside the OS segment is part of every level, never given
-// up. The second line is never condensed: a long task title wraps instead.
+// allows, it is drawn again one degradation step further (fitLevels, or
+// failLevels while the update pill shows a failure).
 //
 // Params:
 //   - sb: string builder to write to
 //   - data: status line data
 func (r *Powerline) renderLine1(sb *strings.Builder, data model.StatusLineData) {
-	line, _, _ := fitLine1(lineBudget(data.Terminal.Width), func(buf *strings.Builder, fit lineFit) {
+	line, _, _ := fitLine1(lineBudget(data.Terminal.Width), levelsFor(data), func(buf *strings.Builder, fit lineFit) {
 		r.renderLine1Fit(buf, data, fit)
 	})
 	sb.WriteString(line)
 }
 
-// renderLine1Fit renders the first line with OS, Model, quota, Path, Git and
-// Changes segments, giving up what fit says.
+// renderLine1Fit renders the line with OS, Model, quota, Path, Git and
+// Changes segments, then the update pill, giving up what fit says.
 //
 // Params:
 //   - sb: string builder to write to
@@ -94,19 +79,12 @@ func (r *Powerline) renderLine1Fit(sb *strings.Builder, data model.StatusLineDat
 	modelBg, _, _ := GetModelColors(data.Model.FullName())
 
 	// Render OS segment (transitions to Model segment)
-	var mcp model.MCPServers
-	// The MCP indicator lives in the OS segment unless asked onto line two
-	if !mcpOnLine2 {
-		mcp = data.MCP
-	}
 	r.renderOSSegment(sb, &OSSegmentData{
-		System:    data.System,
-		ShowIcon:  data.Icons.OS,
-		Health:    data.Health,
-		MCP:       mcp,
-		Subagents: data.Tasks.Unattributed,
-		NextBg:    modelBg,
-		Fit:       fit,
+		System:   data.System,
+		ShowIcon: data.Icons.OS,
+		Health:   data.Health,
+		NextBg:   modelBg,
+		Fit:      fit,
 	})
 
 	// Build the quota chain first: each segment needs to know the colour of the
@@ -152,6 +130,11 @@ func (r *Powerline) renderLine1Fit(sb *strings.Builder, data model.StatusLineDat
 	}
 
 	r.renderRepoSegments(sb, data, fit)
+
+	// The update notice closes the line, after the changes
+	if !fit.dropUpdate() {
+		r.renderUpdatePill(sb, data.Update)
+	}
 }
 
 // renderRepoSegments renders where the session works: path, git and
@@ -193,131 +176,6 @@ func (r *Powerline) renderRepoSegments(sb *strings.Builder, data model.StatusLin
 	r.renderChangesSegment(sb, changes)
 }
 
-// renderLine2 renders the second line with the MCP pill on it.
-//
-// Params:
-//   - sb: string builder to write to
-//   - data: status line data
-func (r *Powerline) renderLine2(sb *strings.Builder, data model.StatusLineData) {
-	r.renderLine2With(sb, data, true)
-}
-
-// renderLine2With renders the second line with dynamic pills (epics, MCP,
-// Update).
-//
-// Params:
-//   - sb: string builder to write to
-//   - data: status line data
-//   - withMCP: whether the MCP pill goes on this line
-func (r *Powerline) renderLine2With(sb *strings.Builder, data model.StatusLineData, withMCP bool) {
-	// Track if we've rendered anything
-	hasContent := false
-
-	// The epics lead the line: they are the work in progress, the rest is
-	// ambient. Nothing is shortened; a long title wraps rather than hides.
-	for _, epic := range data.Tasks.Epics {
-		r.renderEpicPill(sb, epic, epic.Active && data.Working)
-		hasContent = true
-	}
-
-	// One MCP pill sums up every server, after the epics, unless line one
-	// already carries it
-	if withMCP && len(data.MCP) > 0 {
-		// Add separator space if previous content exists
-		if hasContent {
-			sb.WriteString(" ")
-		}
-		r.renderMCPPill(sb, data.MCP)
-		hasContent = true
-	}
-
-	// Render update pill if update is available
-	if data.Update.Available {
-		// Add separator space if previous content exists
-		if hasContent {
-			sb.WriteString(" ")
-		}
-		r.renderUpdatePill(sb, data.Update)
-	}
-}
-
-// noEpicLabel names the pill of the tasks filed under no epic.
-const noEpicLabel string = "T\u00e2ches"
-
-// renderEpicPill renders one epic as a mauve pill.
-//
-// Collapsed, the pill says what the epic is and how far it went: its title
-// and done/total. Expanded — the active epic while the session works — it
-// adds one cell per task and names the task that matters now.
-//
-// Params:
-//   - sb: string builder to write to
-//   - epic: open epic to draw
-//   - expanded: whether to draw the cells and the headline
-func (r *Powerline) renderEpicPill(sb *strings.Builder, epic model.Epic, expanded bool) {
-	label := epic.Title
-	// The tasks filed under no epic, and a nameless epic, still get a name
-	if epic.ID == model.NoEpic {
-		label = noEpicLabel
-	} else if label == "" {
-		label = "#" + itoa(epic.ID)
-	}
-	list := epic.Tasks
-	sb.WriteString(" " + FgEpic + LeftRound + Reset)
-	sb.WriteString(BgEpic + FgEpicInk + Bold + " " + label + " " + itoa(list.Done()) + "/" + itoa(list.Total()) + Reset)
-	// Only the epic under way, only while it moves, shows its cells
-	if expanded {
-		renderEpicCells(sb, list)
-		// Always name a task: the one under way, else the next one
-		if subject, _ := list.Headline(); subject != "" {
-			sb.WriteString(BgEpic + FgEpicInk + " " + subject + Reset)
-		}
-	}
-	// The subagents started for this epic travel with it
-	if epic.Subagents > 0 {
-		sb.WriteString(BgEpic + FgEpicInk + Bold + " " + glyphs.Subagents + " " + itoa(epic.Subagents) + Reset)
-	}
-	sb.WriteString(BgEpic + " " + Reset + FgEpic + RightRound + Reset)
-}
-
-// renderEpicCells renders one cell per task, filled from the left: done, then
-// under way, then everything else, whatever the ids — a task created late and
-// finished early must not light a cell on the far right of an empty bar.
-//
-// Params:
-//   - sb: string builder to write to
-//   - list: tasks of the expanded epic
-func renderEpicCells(sb *strings.Builder, list model.TaskList) {
-	// An epic focused before its first task has no cell to draw
-	if list.Total() == 0 {
-		return
-	}
-	done, active := list.Done(), list.Active()
-	sb.WriteString(BgEpic + " " + FgEpicInk + strings.Repeat(glyphs.TaskDone, done) + Reset)
-	// The started cells pulse, one frame per second: the line is a still image
-	// between redraws, and a refresh interval of one second is the fastest
-	// cadence the host offers, so every other frame draws them brighter
-	activeInk := FgEpicActive
-	if pulseOn() {
-		activeInk = FgEpicPulse
-	}
-	sb.WriteString(BgEpic + activeInk + strings.Repeat(glyphs.TaskDone, active) + Reset)
-	// Only the task under way stands out; pending and waiting share the track
-	sb.WriteString(BgEpic + FgEpicTrack + strings.Repeat(glyphs.TaskOpen, list.Total()-done-active) + Reset)
-}
-
-// clockNow is the wall clock the pulse reads; tests replace it.
-var clockNow = time.Now
-
-// pulseOn reports whether the current frame draws the started tasks bright.
-//
-// Returns:
-//   - bool: true on even seconds
-func pulseOn() bool {
-	// Alternate on the wall clock so consecutive redraws differ
-	return clockNow().Unix()%2 == 0
-}
-
 // OSSegmentData is everything the OS segment draws.
 type OSSegmentData struct {
 	// System names the operating system behind the icon.
@@ -326,10 +184,6 @@ type OSSegmentData struct {
 	ShowIcon bool
 	// Health is the state of Claude's services, beside the icon when known.
 	Health model.ServiceHealth
-	// MCP holds the servers to sum up after the health glyph, nil for none.
-	MCP model.MCPServers
-	// Subagents counts the running subagents tied to no epic on line two.
-	Subagents int
 	// NextBg is the background of the segment that follows.
 	NextBg string
 	// Fit says how much of the segment the line has room for.
@@ -338,9 +192,8 @@ type OSSegmentData struct {
 
 // renderOSSegment renders the operating system segment.
 //
-// It gives way in four steps, richest to soberest: the subagent count, the
-// MCP count, the MCP glyph, then the health light. The OS icon always stays —
-// it is what tells the reader the bar is the bar.
+// It gives way in one step, the last of the whole line: the health light.
+// The OS icon always stays — it is what tells the reader the bar is the bar.
 //
 // Params:
 //   - sb: string builder to write to
@@ -361,12 +214,6 @@ func (r *Powerline) renderOSSegment(sb *strings.Builder, data *OSSegmentData) {
 	// The health glyph sits inside the same white ground, coloured by state
 	if color := healthColor(data.Health); color != "" && !isHidden(hideHealth) && !fit.dropHealth() {
 		sb.WriteString(BgWhite + color + glyphs.Health + " " + Reset)
-	}
-	// The MCP servers the session can reach, between health and subagents
-	writeMCPInline(sb, summarizeMCP(data.MCP), fit)
-	// Subagents working for no epic on show belong to the session as a whole
-	if data.Subagents > 0 && !fit.dropSubagents() {
-		sb.WriteString(BgWhite + FgBlack + Bold + glyphs.Subagents + " " + itoa(data.Subagents) + " " + Reset)
 	}
 	// Write separator to next segment
 	sb.WriteString(data.NextBg + FgWhite + SepRight + Reset)
@@ -616,12 +463,24 @@ func (r *Powerline) renderUpdatePill(sb *strings.Builder, update model.UpdateInf
 	// Add space before pill
 	sb.WriteString(" ")
 
-	// Write left rounded cap (white)
-	sb.WriteString(FgWhite + LeftRound + Reset)
-	// Write update icon and version on white background
-	sb.WriteString(BgWhite + FgBlack + Bold + " " + IconUpdate + " " + update.Version + " " + Reset)
+	// The failure variant swaps the glyph and the ground; both variants keep
+	// one ground for the whole pill
+	bg, edge, ink, icon := BgWhite, FgWhite, FgBlack, IconUpdate
+	if update.Failed {
+		bg, edge, ink, icon = BgRed, FgRedSep, FgRedText, IconUpdateFailed
+	}
+	label := " " + icon + " "
+	// Name the release when one is pending
+	if update.Version != "" {
+		label += update.Version + " "
+	}
+
+	// Write left rounded cap
+	sb.WriteString(edge + LeftRound + Reset)
+	// Write icon and version on the pill's ground
+	sb.WriteString(bg + ink + Bold + label + Reset)
 	// Write right rounded cap
-	sb.WriteString(FgWhite + RightRound + Reset)
+	sb.WriteString(edge + RightRound + Reset)
 }
 
 // itoa converts an integer to string.

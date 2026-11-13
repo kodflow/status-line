@@ -2,6 +2,9 @@
 package application
 
 import (
+	"fmt"
+	"os"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -67,18 +70,26 @@ func (s *StatusLineService) GenerateWithUpdate(input port.InputProvider, update 
 		gitChanges  model.CodeChanges
 		systemInfo  model.SystemInfo
 		terminalNfo model.TerminalInfo
-		mcpServers  model.MCPServers
 		health      model.ServiceHealth
-		taskBoard   model.TaskBoard
-		working     bool
 	)
 
+	stderr := s.deps.Stderr
+	if stderr == nil {
+		stderr = os.Stderr
+	}
 	gather := func(fn func()) {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
+			// A provider that panics on its own goroutine would take the
+			// whole process down before the frame is written: its value
+			// stays zero and the rest of the bar still renders
+			defer func() {
+				// Report the panic and let the other providers finish
+				if r := recover(); r != nil {
+					fmt.Fprintf(stderr, "status-line: provider panic: %v\n%s", r, debug.Stack())
+				}
+			}()
 			fn()
-		}()
+		})
 	}
 
 	// An unreachable API only costs the enrichment it would have added
@@ -87,15 +98,6 @@ func (s *StatusLineService) GenerateWithUpdate(input port.InputProvider, update 
 	gather(func() { gitChanges = s.deps.Git.DiffStats() })
 	gather(func() { systemInfo = s.deps.System.Info() })
 	gather(func() { terminalNfo = s.deps.Terminal.Info() })
-	gather(func() { mcpServers = s.deps.MCP.Servers().WithBusy(busyServers(s.deps.MCPCalls)) })
-	// The task list is optional as well
-	if s.deps.Tasks != nil {
-		gather(func() { taskBoard = s.deps.Tasks.Board() })
-	}
-	// Whether the session is working only decides how much the board shows
-	if s.deps.Activity != nil {
-		gather(func() { working = s.deps.Activity.Working() })
-	}
 	// Service health is optional: without a provider nothing is drawn
 	if s.deps.Health != nil {
 		gather(func() { health = s.deps.Health.Health() })
@@ -127,32 +129,14 @@ func (s *StatusLineService) GenerateWithUpdate(input port.InputProvider, update 
 		Dir:         dir,
 		Time:        time.Now().Format(timeFormat),
 		Changes:     gitChanges,
-		MCP:         mcpServers,
 		Update:      update,
 		Effort:      input.EffortLevel(),
 		Cost:        input.SessionCost(),
 		FastMode:    input.IsFastMode(),
 		SessionName: input.SessionLabel(),
 		Health:      health,
-		Tasks:       taskBoard,
-		Working:     working,
 	}
 
 	// Delegate rendering to the renderer
 	return s.renderer.Render(data)
-}
-
-// busyServers asks which MCP servers are being called, when anyone can tell.
-//
-// Params:
-//   - calls: optional provider
-//
-// Returns:
-//   - []string: tool-name keys of the busy servers, nil without a provider
-func busyServers(calls port.MCPCallsProvider) []string {
-	// Lighting servers up is optional
-	if calls == nil {
-		return nil
-	}
-	return calls.Busy()
 }

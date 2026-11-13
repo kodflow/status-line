@@ -54,10 +54,10 @@ Entry point. Responsibilities:
 
 Pure data types and interfaces. No I/O, no concurrency.
 
-- `model/` — `Input`, `Progress`, `Usage`, `Git`, `MCPServer`,
+- `model/` — `Input`, `Progress`, `Usage`, `Git`,
   `OSInfo`, `TerminalInfo`, etc. All value types.
 - `port/` — `InputProvider`, `Renderer`, `GitRepository`,
-  `MCPDetector`, `SystemInfoProvider`,
+  `SystemInfoProvider`,
   `TerminalDetector`, `Updater`, `UsageProvider`. Every external
   collaborator the application service needs.
 
@@ -66,7 +66,8 @@ Pure data types and interfaces. No I/O, no concurrency.
 `StatusLineService` orchestrates the ports to build the domain model
 that the renderer consumes. Steps:
 
-1. Run port calls in parallel where possible (git + MCP + system + usage).
+1. Run port calls in parallel (git + system + usage + health), each
+   under its own `recover` (`sync.WaitGroup.Go`).
 2. Tolerate per-port errors (skip that segment).
 3. Pass the assembled domain model to the renderer.
 
@@ -78,7 +79,6 @@ One adapter per external concern. Each implements one port from
 | Adapter        | Port implemented      | What it talks to                                |
 |----------------|-----------------------|-------------------------------------------------|
 | `git`          | `GitRepository`       | `git` CLI (status, diff stats)                  |
-| `mcp`          | `MCPDetector`         | managed, host `--mcp-config` (/proc), `~/.claude.json`, project `.mcp.json`, plugin `.mcp.json` |
 | `system`       | `SystemInfoProvider`  | `runtime.GOOS`, `/.dockerenv`                   |
 | `terminal`     | `TerminalDetector`    | `COLUMNS` set by the host (width, default 120)   |
 | `updater`      | `Updater`             | GitHub Releases API                             |
@@ -96,12 +96,11 @@ condensing rules (line one fits `TerminalInfo.Width`, see `fit.go`), and pill st
 1. Claude Code emits JSON to `stdin` (model, session id, cwd, ...).
 2. `cmd/statusline/` parses to `domain.Input`.
 3. `application.StatusLineService` fans out port calls in parallel:
-   - `git.Status()`, `git.DiffStats()` for line 1.
-   - `mcp.ActiveServers()` for line 2.
+   - `git.Status()`, `git.DiffStats()` for the repository segments.
    - `usage.SessionAndWeekly()` for the burn-rate bars.
-   - `terminal.Info()` (`COLUMNS`) for line-one condensing.
+   - `terminal.Info()` (`COLUMNS`) for condensing.
 4. Per-port errors are dropped; the corresponding segment is omitted.
-5. Renderer composes the two-line output as a single ANSI string.
+5. Renderer composes the one-line output as a single ANSI string.
 6. `stdout` ← rendered string. Exit 0.
 
 ## Technology Stack
@@ -132,5 +131,5 @@ condensing rules (line one fits `TerminalInfo.Width`, see `fit.go`), and pill st
 - **Single static binary** — no runtime dependencies on the user's
   system (apart from the optional `git` and `task` CLIs the adapters
   query — both gracefully skipped if absent).
-- **Two-line output** — exactly two lines. Adding a third changes the
+- **One-line output** — exactly one line. Adding a second changes the
   Claude Code render layout and breaks expectation.

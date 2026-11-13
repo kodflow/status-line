@@ -27,14 +27,24 @@ const (
 	weightsEnv string = "STATUSLINE_WEIGHTS"
 	// branchEllipsis ends a shortened branch name.
 	branchEllipsis string = "\u2026"
+	// updateWeight is the weight of the update pill: it gives way early, in
+	// the first pass — a pending release is news, not an alarm.
+	updateWeight int = 45
+	// updateFailedWeight is the weight of the update pill in its failure
+	// variant. It sits above the first pass, so the bars, the path and the
+	// branch shrink before a pill that says the bar stopped updating itself;
+	// and, with the default weights, below the OS step, so the health light
+	// still outlives it. A higher user weight for "update" is kept as is
+	// (failedWeights takes the max), and may then pass the OS step.
+	updateFailedWeight int = 345
 )
 
-// segID names a line-one segment that can shrink. Every segment of line one
-// is one, the OS segment included: a segment that could not shrink left the
+// segID names a segment of the line that can shrink. Every segment of the
+// line is one, the OS segment included: a segment that could not shrink left the
 // line wider than the host's box, which the host then cut on every redraw.
 type segID int
 
-// Shrinkable segments of line one.
+// Shrinkable segments of the line.
 const (
 	segContext segID = iota
 	segScoped
@@ -45,6 +55,7 @@ const (
 	segOS
 	segChanges
 	segModel
+	segUpdate
 	segCount
 )
 
@@ -65,16 +76,17 @@ var (
 	branchBudgets = [...]int{0, 20, 12, 8}
 )
 
-// condensePolicy is the condensing policy of line one, one row per segment.
+// condensePolicy is the condensing policy of the line, one row per segment.
 //
 // The condenser works in passes: pass n lowers every segment that still has
 // an n-th step by one level, lowest weight first, and stops as soon as the
 // line fits. With the default weights the steps run in the order the user
-// set: the bars (context, scoped, weekly, session), the path and branch to
-// 20, the countdowns, the path to its last element and the branch to 12,
-// the quota names to their initial; then changes (240), the hidden path,
-// the model icon (255) and the branch to 8, held back to the third pass by
-// their weight. STATUSLINE_WEIGHTS=name=weight,… overrides weights.
+// set: the bars (context, scoped, weekly, session), the update pill (45),
+// the path and branch to 20, the countdowns, the path to its last
+// element and the branch to 12, the quota names to their initial; then
+// changes (240), the hidden path, the model icon (255) and the branch to 8,
+// held back to the third pass by their weight; the health light (370) goes
+// last of all. STATUSLINE_WEIGHTS=name=weight,… overrides weights.
 var condensePolicy = [segCount]segPolicy{
 	segContext: {name: "context", weight: 10, levels: []string{"bar + label + %", "icon + %"}},
 	segScoped:  {name: "scoped", weight: 20, levels: []string{"bar + label + % + countdown", "label + % + countdown", "label + %", "initial + %"}},
@@ -82,15 +94,10 @@ var condensePolicy = [segCount]segPolicy{
 	segSession: {name: "session", weight: 40, levels: []string{"bar + % + countdown", "% + countdown", "%"}},
 	segPath:    {name: "path", weight: 50, levels: []string{"30 cells", "20 cells", "last element", "hidden (inside a repository)"}},
 	segBranch:  {name: "branch", weight: 60, levels: []string{"whole", "20 runes", "12 runes", "8 runes"}},
-	segOS: {name: "os", weight: 70, levels: []string{
-		"health + MCP + count + subagents",
-		"health + MCP + count",
-		"health + MCP glyph",
-		"health",
-		"OS icon alone",
-	}},
+	segOS:      {name: "os", weight: 370, levels: []string{"health", "OS icon alone"}},
 	segChanges: {name: "changes", weight: 240, levels: []string{"shown", "hidden"}},
 	segModel:   {name: "model", weight: 255, levels: []string{"icon + name", "name"}},
+	segUpdate:  {name: "update", weight: updateWeight, levels: []string{"pill", "hidden"}},
 }
 
 // lineFit is the level of every shrinkable segment; the zero value draws
@@ -113,8 +120,43 @@ func (s fitStep) Describe() string {
 }
 
 // fitSteps and fitLevels are resolved once, from the policy and the
-// weights in the environment.
-var fitSteps, fitLevels = buildFitLevels(weightsFromEnv(os.Getenv(weightsEnv)))
+// weights in the environment; failLevels is the same ladder with the update
+// pill in its failure variant, held to updateFailedWeight.
+var (
+	fitSteps, fitLevels = buildFitLevels(weightsFromEnv(os.Getenv(weightsEnv)))
+	_, failLevels       = buildFitLevels(failedWeights(weightsFromEnv(os.Getenv(weightsEnv))))
+)
+
+// failedWeights lifts the update pill to the weight of its failure variant.
+//
+// A weight set above it in STATUSLINE_WEIGHTS is kept: the failure variant
+// never gives way sooner than the plain pill would.
+//
+// Params:
+//   - weights: weight per segment
+//
+// Returns:
+//   - [segCount]int: the same weights, the update pill at least updateFailedWeight
+func failedWeights(weights [segCount]int) [segCount]int {
+	weights[segUpdate] = max(weights[segUpdate], updateFailedWeight)
+	return weights
+}
+
+// levelsFor returns the ladder the data condenses along.
+//
+// Params:
+//   - data: status line data
+//
+// Returns:
+//   - []lineFit: the full line, then the state after each step
+func levelsFor(data model.StatusLineData) []lineFit {
+	// A pill that says the updates fail holds out longer than one that
+	// only says an update is on its way
+	if data.Update.Failed {
+		return failLevels
+	}
+	return fitLevels
+}
 
 // weightsFromEnv reads STATUSLINE_WEIGHTS over the default weights.
 //
@@ -280,46 +322,23 @@ func (f lineFit) branchMax() int {
 	return branchBudgets[f[segBranch]]
 }
 
-// dropSubagents reports whether the subagent count gives way.
-//
-// It goes first of the OS segment's four steps: a running subagent is already
-// drawn inside its epic's pill on line two, so the count beside the OS icon
-// is the most redundant thing the segment carries.
-//
-// Returns:
-//   - bool: true from the first level on
-func (f lineFit) dropSubagents() bool {
-	return f[segOS] >= 1
-}
-
-// dropMCPCount reports whether the MCP server count gives way, glyph kept.
-//
-// The glyph alone still says the session can reach MCP servers, and the chip
-// still lights up on it while a call is in flight.
-//
-// Returns:
-//   - bool: true from the second level on
-func (f lineFit) dropMCPCount() bool {
-	return f[segOS] >= 2
-}
-
-// dropMCPIndicator reports whether the MCP indicator goes altogether.
-//
-// Returns:
-//   - bool: true from the third level on
-func (f lineFit) dropMCPIndicator() bool {
-	return f[segOS] >= 3
-}
-
 // dropHealth reports whether the service health glyph gives way.
 //
 // Last of all, and deliberately: the one moment the light matters is the one
 // moment it must not be the thing that was dropped to save four cells.
 //
 // Returns:
-//   - bool: true at the last level
+//   - bool: true from the first level on
 func (f lineFit) dropHealth() bool {
-	return f[segOS] >= 4
+	return f[segOS] >= 1
+}
+
+// dropUpdate reports whether the update pill gives way.
+//
+// Returns:
+//   - bool: true from the first level on
+func (f lineFit) dropUpdate() bool {
+	return f[segUpdate] >= 1
 }
 
 // dropChanges reports whether the added/removed lines are hidden.
@@ -362,27 +381,13 @@ func presentSegments(data model.StatusLineData) [segCount]bool {
 	present[segBranch] = data.Git.IsInRepo()
 	present[segChanges] = data.Changes.HasChanges()
 	present[segModel] = data.Icons.Model
-	present[segOS] = osSegmentHasSlack(data)
+	// The OS icon itself never gives way: only the health light can
+	present[segOS] = healthColor(data.Health) != "" && !isHidden(hideHealth)
+	present[segUpdate] = data.Update.Available
 	return present
 }
 
-// osSegmentHasSlack reports whether the OS segment draws anything it could
-// give up. The OS icon itself is never given up, so a segment holding only
-// the icon has no step to report.
-//
-// Params:
-//   - data: status line data
-//
-// Returns:
-//   - bool: true when health, the MCP indicator or the subagents are on show
-func osSegmentHasSlack(data model.StatusLineData) bool {
-	// The MCP indicator only counts while it sits in this segment
-	mcpShown := !mcpOnLine2 && len(data.MCP) > 0
-	healthShown := healthColor(data.Health) != "" && !isHidden(hideHealth)
-	return healthShown || mcpShown || data.Tasks.Unattributed > 0
-}
-
-// Condensed describes where line one stands after fitting the data:
+// Condensed describes where the line stands after fitting the data:
 // "context: icon + %", one entry per segment that shrank, in policy order.
 //
 // Params:
@@ -391,10 +396,11 @@ func osSegmentHasSlack(data model.StatusLineData) bool {
 // Returns:
 //   - []string: shrunken segments and their level, empty for a full line
 func Condensed(data model.StatusLineData) []string {
-	_, level, _ := fitLine1(lineBudget(data.Terminal.Width), func(sb *strings.Builder, fit lineFit) {
+	levels := levelsFor(data)
+	_, level, _ := fitLine1(lineBudget(data.Terminal.Width), levels, func(sb *strings.Builder, fit lineFit) {
 		(&Powerline{}).renderLine1Fit(sb, data, fit)
 	})
-	fit := fitLevels[level]
+	fit := levels[level]
 	present := presentSegments(data)
 	var out []string
 	// Name every segment on show below its richest level
@@ -408,7 +414,7 @@ func Condensed(data model.StatusLineData) []string {
 	return out
 }
 
-// LineBudget returns the columns line one may take, for a caller outside the
+// LineBudget returns the columns the line may take, for a caller outside the
 // package — the byte trace, which records the budget beside the width actually
 // emitted so an overflowing frame says so on its own.
 //
@@ -421,7 +427,7 @@ func LineBudget(width int) int {
 	return lineBudget(width)
 }
 
-// lineBudget returns the columns line one may take.
+// lineBudget returns the columns the line may take.
 //
 // The margin is not a guess: the host lays the status line out in a box of
 // `terminal columns - 2 * 2` (measured in Claude Code 2.1.283) and truncates
@@ -441,26 +447,28 @@ func lineBudget(width int) int {
 	return max(width-lineMargin, 1)
 }
 
-// fitLine1 renders line one at the first level that fits the budget.
+// fitLine1 renders the line at the first level that fits the budget.
 //
 // Every state only gives up more than the one before it, so the widths
 // never grow along them; the result is the one a step-by-step walk that
 // re-measures after each step would reach, and the first level that fits is found by
 // bisection: the full line first (the usual case, one render), then at
-// most four more renders over the remaining levels.
+// most five bisection probes over the remaining levels, plus one redraw of
+// the last level when none of them fits.
 //
 // Params:
-//   - budget: cells line one may take, 0 for no limit
-//   - render: draws line one with the given fit
+//   - budget: cells the line may take, 0 for no limit
+//   - levels: the ladder to walk, fitLevels or failLevels
+//   - render: draws the line with the given fit
 //
 // Returns:
 //   - string: the rendered line
-//   - int: the level chosen, len(fitLevels)-1 when even the last overflows
+//   - int: the level chosen, len(levels)-1 when even the last overflows
 //   - bool: false when even the last level overflows
-func fitLine1(budget int, render func(*strings.Builder, lineFit)) (string, int, bool) {
+func fitLine1(budget int, levels []lineFit, render func(*strings.Builder, lineFit)) (string, int, bool) {
 	draw := func(level int) string {
 		var sb strings.Builder
-		render(&sb, fitLevels[level])
+		render(&sb, levels[level])
 		return sb.String()
 	}
 	full := draw(0)
@@ -468,7 +476,7 @@ func fitLine1(budget int, render func(*strings.Builder, lineFit)) (string, int, 
 	if budget <= 0 || VisibleWidth(full) <= budget {
 		return full, 0, true
 	}
-	last := len(fitLevels) - 1
+	last := len(levels) - 1
 	best, bestLine := last, ""
 	lo, hi := 1, last
 	// Narrow down to the first level that fits

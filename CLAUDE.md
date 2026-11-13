@@ -1,4 +1,4 @@
-<!-- updated: 2026-09-22T18:00:00Z -->
+<!-- updated: 2026-11-13T18:00:00Z -->
 # Status Line
 
 CLI Go pour afficher une status line Powerline personnalisée dans Claude Code.
@@ -10,18 +10,19 @@ cmd/statusline/              # Point d'entrée CLI (stdin JSON → stdout ANSI)
 internal/
 ├── application/             # Service orchestration (StatusLineService)
 ├── domain/
-│   ├── model/               # Entités (Input, Limit, LimitSet, Progress, Git, MCP...)
+│   ├── model/               # Entités (Input, Limit, LimitSet, Progress, Git...)
 │   └── port/                # Interfaces (InputProvider, Renderer, GitRepository...)
 ├── adapter/                 # Adaptateurs externes
+│   ├── activity/            # Répertoire où la session travaille (transcript)
+│   ├── detach/              # Processus détachés (--refresh-*, --check-update)
+│   ├── diskcache/           # Caches disque privés (usage, santé)
 │   ├── git/                 # Git status + diff stats
-│   ├── mcp/                 # Serveurs MCP (config, --mcp-config de l'hôte, plugins)
-│   ├── mcpcalls/            # Serveurs MCP appelés en ce moment (transcripts)
-│   ├── sessionstate/        # Session occupée + pid hôte (<config>/sessions/<pid>.json)
+│   ├── health/              # État des services Claude (status page, cache)
 │   ├── system/              # Info système (OS, Docker)
 │   ├── terminal/            # Largeur du terminal (COLUMNS)
 │   ├── trace/               # STATUSLINE_TRACE : octets de chaque cadre
 │   ├── transcript/          # Lecture de la fin d'un transcript JSONL
-│   ├── updater/             # Auto-update binaire (GitHub releases)
+│   ├── updater/             # Auto-update détaché (état caché, enfants sous flock)
 │   └── usage/               # Usage API Anthropic (OAuth, burn-rate)
 └── presentation/
     └── renderer/            # Rendu Powerline ANSI (segments, couleurs, icônes)
@@ -45,43 +46,85 @@ renderer.
 
 ## Affichage
 
-`STATUSLINE_LINE_GAP` = lignes vides entre les deux rangées, 0-3 (défaut `0`)
-— **sans effet dans Claude Code**, qui supprime les lignes vides (voir
-« Contrat avec l'hôte »)
-`STATUS_LINE_NO_SELF_UPDATE` = `1` désactive l'auto-update (images managées)
+`STATUS_LINE_NO_SELF_UPDATE` = toute valeur non vide désactive l'auto-update
+(images managées) : aucun enfant lancé, pastille masquée
 `STATUSLINE_TRACE` = fichier où tracer les cadres qui prouvent quelque chose
-(puce allumée, écriture courte, erreur, `cut=yes`) — voir « Tracer les octets »
+(écriture courte, erreur, `cut=yes`) — voir « Tracer les octets »
 
 L'auto-update vérifie le `.sha256` publié avec l'asset avant de remplacer le
 binaire : une somme absente, malformée ou différente annule la mise à jour.
+
+**La trame ne touche jamais le réseau.** L'hôte annule la commande en cours dès
+qu'une nouvelle mise à jour de la barre arrive : l'ancien téléchargement fait
+dans la trame était tué à mi-course (9 `status-line-update-*` partiels mesurés
+sur le poste, v0.20.7/v0.20.8 jamais installées). Désormais :
+
+- `cmd/statusline` : `run(args, stdin, stdout, *deps)` ; les drapeaux
+  (`--version`, `--refresh-usage`, `--refresh-health`, `--check-update`,
+  `--apply-update=<v>`) passent avant stdin et avant le `recover`. La trame lit
+  `<dossier réel du binaire>/.status-line-update.json` (sous son propre
+  `recover` : une panique y vaut « contrôle dû ») et lance
+  `detach.Spawn("--check-update", STATUS_LINE_UPDATING)` **avant** le rendu,
+  seulement si `next_attempt_at` est atteint, jamais sous l'opt-out, pour un
+  build dev, ni si le dossier n'est pas inscriptible.
+- `adapter/updater` : `Check` et `Apply` tiennent un `flock LOCK_EX|LOCK_NB`
+  sur `.status-line-update.lock` (`lock_unix.go`, `linux || darwin` ; stub
+  ailleurs : rien n'est remplacé sous Windows ; un fichier de verrou
+  impossible à ouvrir repousse `next_attempt_at` d'1 h). Sous le verrou, `Check`
+  supprime les temporaires d'état orphelins, relit l'état et sort s'il n'est
+  plus dû (sauf `--check-update=force`), écrit `next_attempt_at` avant l'appel
+  (succès +1 h ; échec 5 min doublés jusqu'à 1 h ; 403/429 : `Retry-After` puis
+  `X-RateLimit-Reset` ne font qu'allonger ce délai, plafond 24 h), valide
+  `^v\d+\.\d+\.\d+$`, et applique un tag plus récent dans le même processus.
+  `Due` tient pour périmé un `next_attempt_at` à plus de 24 h (horloge dans le
+  futur). Avant le `rename`, le binaire téléchargé est lancé avec `--version`
+  (5 s) et doit annoncer le tag attendu (poste sans AVX2, `-X main.version`
+  erroné).
+  L'état s'écrit en `.status-line-update.json.tmp-<pid>` puis `rename` : le point
+  initial le tient hors du nettoyage des `status-line-update-*` de plus d'1 h.
+  `apiURL` et `downloadURLFor` sont des variables pour les tests.
+- Champs de l'état : `checked_at`, `tag`, `next_attempt_at`, `check_error`,
+  `apply_error`, plus `check_failing_since` (début de la série d'échecs) et
+  `failures` (compteur du backoff).
+- Pastille (en fin de ligne, après les changements) : allumée tant que `tag` > version
+  compilée ; variante échec (`\uf071` sur fond rouge) si `apply_error` sur un tag
+  encore en attente, ou si les contrôles échouent depuis plus d'1 h.
+- Code de sortie suivi par un écrivain compteur : 0 octet sorti → trame de
+  secours en texte brut sans SGR, exit 0 ; trame entière → 0 ; partielle → 1.
+  `gather` (application) lance chaque fournisseur par `sync.WaitGroup.Go`
+  (Go 1.25) ; chaque fermeture porte son propre `recover`, pile sur stderr :
+  un fournisseur qui panique laisse sa valeur à zéro, les autres arrivent.
 `STATUSLINE_GLYPHS` = `nerd` (défaut) | `text` (repli ASCII, sans Nerd Font)
 `STATUSLINE_COLORS` = `truecolor` | `256` force la profondeur de couleur ;
 absent, elle suit `COLORTERM` (`truecolor`/`24bit` → 24 bits, sinon 256)
-`STATUSLINE_MCP_LINE` = `2` sort les serveurs MCP du segment OS vers une
-pastille en ligne 2 (défaut : dans le segment OS de la ligne 1)
-`STATUSLINE_WEIGHTS` = poids de condensation de la ligne 1 (voir plus bas)
+`STATUSLINE_WEIGHTS` = poids de condensation de la ligne (voir plus bas)
 `STATUSLINE_HIDE` = pastilles à masquer, séparées par des virgules :
 `context`, `session`, `weekly`, `model`, `credits`, `health`
 
 Les glyphes viennent tous des plages Nerd Font, comme le reste de la ligne : un
 symbole Unicode générique retombe sur une autre police et devient illisible.
 
-**Ligne 1 — tout ce qui concerne la session :**
+**Une seule ligne — tout ce qui concerne la session :**
 
 | Segment | Description |
 |---------|-------------|
-| OS | Icône système + étincelles 󰙴 = état de Claude (vert/orange/rouge), puis `󰒍 N` serveurs MCP, puis `󰚩 N` sous-agents hors épic affiché — cède en 4 étapes (voir condensation) |
+| OS | Icône système + étincelles 󰙴 = état de Claude (vert/orange/rouge) — la santé est le dernier pas de toute la condensation |
 | Model | Pill colorée (Haiku/Sonnet/Opus/Fable) + jauge d'effort + fast mode |
 | Path | Répertoire où la session travaille réellement (voir ci-dessous) |
 | Git | Branche + modifiés/non-trackés + nombre de worktrees liés (hors prunable) |
 | Changes | Lignes ajoutées/supprimées |
+| Update | Pastille de mise à jour, en fin de ligne (voir « Affichage ») |
+
+Épics, serveurs MCP et compteur de sous-agents ne sont plus dessinés : la
+status line n'en montre rien (le HUD garde l'arbre des épics). Les
+adaptateurs `mcp`, `mcpcalls`, `sessionstate` et `tasks`, le port `tasks`,
+les modèles `mcp`/`tasks`, la puce MCP (`mcppill.go`, `ChipLit`,
+`mergeSGR`), `STATUSLINE_MCP_LINE` et `STATUSLINE_LINE_GAP` ont été retirés
+avec eux.
 
 Les quotas du compte (session 5h, hebdo, quota scopé au modèle courant) sont
-rendus dans le segment du modèle, séparés par un `\ue0b1`. Un quota scopé à une
+rendus dans le segment du modèle, séparés par un ``. Un quota scopé à une
 famille de modèles ne s'affiche que si ce modèle est en cours d'utilisation.
-
-| Segment | Description |
-|---------|-------------|
 
 | Pastille | Description |
 |----------|-------------|
@@ -91,7 +134,7 @@ famille de modèles ne s'affiche que si ce modèle est en cours d'utilisation.
 | *modèle* | Quota 7j scopé par famille de modèle (`limits[]`) |
 | coût / credits | Coût cumulé de la session, solde de crédits |
 
-**Largeur (ligne 1 seulement)** : `adapter/terminal` lit `COLUMNS` (posé
+**Largeur** : `adapter/terminal` lit `COLUMNS` (posé
 par l'hôte pour la commande de status line, = `process.stdout.columns`, sans
 rien en retrancher) ; absent, non entier, ≤ 0 ou > 10000 → 120. Pas de
 `/dev/tty` ni d'exec. Budget = `COLUMNS − 4` (`lineMargin`). **Ce 4 n'est pas
@@ -114,76 +157,57 @@ poids — plus il est bas, plus tôt le segment cède) :
 | scoped | 20 | barre + libellé + % + rebours → libellé + % + rebours → libellé + % → initiale + % |
 | weekly | 30 | idem scoped |
 | session | 40 | barre + % + rebours → % + rebours → % |
+| update | 45 (échec : 345) | pastille → cachée |
 | path | 50 | 30 → 20 → dernier élément → caché (dans un dépôt seulement) |
 | branch | 60 | entière → 20 → 12 → 8 runes (`…`, compteurs `!3 ?1` toujours gardés) |
-| OS | 70 | santé + MCP + nombre + sous-agents → sans les sous-agents → sans le nombre MCP → santé seule → icône OS seule |
 | changes | 240 | affichés → cachés |
 | model | 255 | icône + nom → nom (la jauge d'effort reste) |
+| OS | 370 | santé → icône OS seule |
 
 Passes : l'étape n d'un segment de poids w a le rang (n−1)·100 + w ; la passe
 n baisse d'un palier chaque segment qui en a encore un, poids croissant ; un
-poids > 100 retient un segment pour une passe ultérieure (changes, model).
-Ordre par défaut : barres (context, scoped, weekly, session), chemin et
-branche à 20, **sous-agents**, rebours (scoped, weekly, session), chemin au
-dernier élément et branche à 12, **nombre MCP**, initiales, changements,
-chemin caché, icône du modèle, branche à 8, **glyphe MCP**, **santé**.
-`STATUSLINE_WEIGHTS=context=10,weekly=30,…`
+poids > 100 retient un segment pour une passe ultérieure (changes, model, OS).
+Ordre par défaut : barres (context, scoped, weekly, session), **pastille
+update**, chemin et branche à 20, rebours (scoped, weekly, session), chemin au
+dernier élément et branche à 12, initiales, changements, chemin caché, icône
+du modèle, branche à 8, **santé**. `STATUSLINE_WEIGHTS=context=10,weekly=30,…`
 remplace des poids (noms ci-dessus, entiers 0-999 ; entrée inconnue ou
-malformée ignorée). Les états successifs (`fitLevels`, 22 : la ligne pleine + 21 étapes) sont cumulatifs et
-de largeur décroissante, donc le premier qui tient est trouvé par
-bissection — même résultat qu'une marche pas à pas qui remesure après chaque
-étape : 1 rendu si la ligne tient, 6 au plus sinon. Aucun état ne tient →
-le dernier. Largeur 0 (tests) = pas de contrainte. `renderer.Condensed`
-dit quels segments ont cédé (utilisé par `demo/widths`).
+malformée ignorée). Les états successifs (`fitLevels`, 20 : la ligne pleine +
+19 étapes) sont cumulatifs et de largeur décroissante, donc le premier qui
+tient est trouvé par bissection — même résultat qu'une marche pas à pas qui
+remesure après chaque étape : 1 rendu si la ligne tient, 6 au plus sinon.
+Aucun état ne tient → le dernier. Largeur 0 (tests) = pas de contrainte.
+`renderer.Condensed` dit quels segments ont cédé (utilisé par `demo/widths`).
 
-**Le segment OS cède désormais aussi**, en quatre étapes (il ne l'a pas
-toujours fait : il était intouchable, et c'est ce qui laissait la ligne plus
-large que la boîte de l'hôte, donc coupée à chaque redraw). Ordre choisi par
-l'utilisateur, du plus riche au plus sobre :
+**La santé cède en dernier, sur les deux échelles.** Poids 370 : au-dessus
+de tout autre pas (le plus haut est la branche à 8 runes, rang 260). Le seul
+moment où la lumière compte est le seul moment où il ne faut pas l'avoir
+perdue pour gagner deux cellules. L'icône OS ne cède jamais : c'est elle qui
+dit que la barre est la barre. `TestHealthIsTheLastStep` verrouille l'ordre
+et la marge de poids.
 
-```
-󰙴 󰒍 7 󰚩 2     complet
-󰙴 󰒍 7          le nombre de sous-agents cède en premier
-󰙴 󰒍            le nombre MCP cède, le glyphe reste
-󰙴              le glyphe MCP cède
-               la santé cède, l'icône OS seule
-```
+**La pastille update** (`segUpdate`) est dessinée dans `renderLine1Fit`
+après les changements. Allumée (une version plus récente est connue), elle
+cède tôt, au rang 45 : c'est une information, pas une alerte. Sa **variante
+échec** (application échouée, ou contrôles en échec depuis plus d'1 h) suit
+une seconde échelle (`failLevels`, choisie par `levelsFor`) où la pastille
+pèse `updateFailedWeight` = 345 : au-dessus du premier passage, donc barres,
+chemin et branche cèdent avant elle, et sous la santé. Un poids
+`STATUSLINE_WEIGHTS=update=…` plus haut que 345 vaut aussi pour la variante
+échec (`failedWeights` prend le max).
+`TestFailedUpdateHoldsOutPastTheFirstPass` le vérifie.
 
-Le nombre de sous-agents part d'abord parce qu'il est le plus redondant : un
-sous-agent en cours est déjà dessiné dans la pastille de son épic en ligne 2.
-La santé part en dernier parce que le seul moment où elle compte est le seul
-moment où il ne faut pas l'avoir perdue. L'icône OS ne cède jamais : c'est
-elle qui dit que la barre est la barre. Le glyphe MCP allumé reste une puce
-tant qu'il est dessiné, même sans son nombre.
-
-Avec poids 70, les quatre étapes tombent aux rangs 70 / 170 / 270 / 370 :
-sous-agents dans la passe 1, nombre MCP dans la passe 2, glyphe MCP dans la
-passe 3, santé seule dans la passe 4 — donc **dernière étape de toute
-l'échelle**. Conséquence assumée : à 120 colonnes le nombre MCP part avant
-que les libellés de quota ne passent à leur initiale. `STATUSLINE_WEIGHTS=os=245`
-repousse tout le segment après les autres si ce compromis ne plaît pas.
-
-**Mesuré** (session chargée de `busyLine`, `󰚩 3`, 7 serveurs dont 2
-désactivés) : la ligne la plus serrée passe de 76 à **67 cellules**, donc
-80 colonnes tient (75 pour un budget de 76) là où elle débordait à 80. Le
-plancher est **71 colonnes** : en dessous, les 34 cellules du segment modèle
-(nom + jauge d'effort + deux quotas à l'initiale) et les 18 de git sont
-incompressibles avec les paliers actuels.
-`TestLineOneNeverOverflowsTheHostsBox` vérifie les deux moitiés : ça tient
-partout où le budget le permet, et là où c'est impossible la ligne est
-exactement le palier le plus serré — jamais un cran de trop.
-
-**Mais ce n'était pas la cause du bug de fond vert.** Le terminal du poste
-fait **344 colonnes** : la ligne y émet 120 à 200 cellules pour un budget de
-340, donc elle n'a jamais été près d'une coupure sur cette machine. Le
-débordement corrigé ci-dessus était un vrai défaut — coupé à chaque redraw
-sous 71 colonnes — mais il ne s'est jamais produit là où le bug a été
-observé. C'est la trace qui l'a établi : 15 h d'enregistrement, aucun cadre
-avec `cut=yes`.
-
-**Ligne 2 :** une pastille par épic ouvert mène la ligne, puis la pastille
-MCP si `STATUSLINE_MCP_LINE=2`, puis la mise à jour. Nous ne tronquons rien
-nous-mêmes ; c'est l'hôte qui coupe (voir ci-dessous), un titre long compris.
+**Mesuré** (`busyLine` : Opus 5 xhigh, trois quotas avec fenêtres, chemin
+profond, branche longue, `+12 -3`) : la ligne la plus serrée fait
+**67 cellules**, le plancher est donc **71 colonnes**, inchangé — le segment
+OS au palier le plus serré était déjà l'icône seule, et la pastille update y
+est cachée. En dessous, les 34 cellules du segment modèle (nom + jauge
+d'effort + deux quotas à l'initiale) et les 18 de git sont incompressibles
+avec les paliers actuels. `TestTheFloorIsMeasured` épingle ce 71 ;
+`TestLineOneNeverOverflowsTheHostsBox` vérifie les deux moitiés, sans
+pastille, pastille allumée et variante échec : ça tient partout où le budget
+le permet, et là où c'est impossible la ligne est exactement le palier le
+plus serré — jamais un cran de trop.
 
 ## Tracer les octets
 
@@ -198,7 +222,7 @@ STATUSLINE_TRACE=~/statusline.trace  # puis relancer la session
 ```
 
 ```
-\x1e frame ts=<RFC3339Nano> bytes=1166 wrote=1166 lines=2 cols=213 budget=209 emitted=175 cut=no chip=lit render=14593us err=-
+\x1e frame ts=<RFC3339Nano> bytes=1166 wrote=1166 lines=1 cols=213 budget=209 emitted=175 cut=no render=14593us err=-
 <les 1166 octets du cadre>
 ```
 
@@ -207,27 +231,21 @@ STATUSLINE_TRACE=~/statusline.trace  # puis relancer la session
 - `wrote=` est ce que l'écriture sur stdout a réellement pris. `wrote < bytes`
   ou `err` ≠ `-` **est** la preuve d'un cadre coupé chez nous.
 - `budget=` = ce que le condenseur visait, `emitted=` = la largeur visible que
-  la ligne 1 fait réellement, `cut=yes` quand la seconde dépasse la première.
+  la ligne fait réellement, `cut=yes` quand la seconde dépasse la première.
   Comme le budget **est** la largeur de la boîte de l'hôte (voir « Contrat
-  avec l'hôte »), `cut=yes` veut dire : l'hôte a tronqué ce cadre. Les deux
-  nombres répondent d'un coup d'œil à « est-ce l'hôte qui nous a coupés ».
-- `chip=lit` marque les cadres où la puce MCP était allumée
-  (`renderer.ChipLit`) : dans une trace d'une journée, ce sont les seuls à
-  regarder. `chip=rest` couvre les deux autres cas — au repos, ou pas
-  dessinée du tout parce que le segment OS a cédé son indicateur.
+  avec l'hôte »), `cut=yes` veut dire : l'hôte a tronqué ce cadre.
+- Le champ `chip=` a disparu avec la puce MCP ; les autres champs gardent leur
+  ordre, un lecteur d'une ancienne trace lit encore les nouvelles.
 - Toute erreur d'écriture est avalée — la barre ne doit jamais casser à cause
-  de son propre journal. Plafond 192 Mio en garde-fou (voir le filtre : une
-  journée coûte désormais des kilo-octets, mais une session qui rendrait tous
-  ses cadres intéressants doit quand même s'arrêter).
+  de son propre journal. Plafond 192 Mio en garde-fou.
 
 **La trace ne garde que les cadres qui prouvent quelque chose**
 (`Frame.worthKeeping`). La barre se redessine chaque seconde et a presque
 toujours raison ; garder ces cadres-là, c'est remplir un disque avec la preuve
-que tout va bien. Quatre cas seuls sont retenus :
+que tout va bien. Trois cas seuls sont retenus :
 
 | Gardé quand | Ce que ça prouve |
 |-------------|------------------|
-| `chip=lit` | la puce MCP était allumée — le seul fond non-segment de la ligne, donc le seul qu'une coupure pourrait laisser ouvert (à n'importe quel palier de l'échelle OS : la puce sans son nombre compte aussi, `TestChipLitAtEveryRungItIsDrawn`) |
 | `wrote < bytes` | l'écriture est partie en morceaux : la coupure est chez nous |
 | `err` ≠ `-` | idem, avec la raison |
 | `cut=yes` | la ligne dépassait la boîte de l'hôte : c'est l'hôte qui a coupé |
@@ -236,8 +254,7 @@ que tout va bien. Quatre cas seuls sont retenus :
 **0 octet** — le fichier n'est même pas créé. Sans filtre, les mêmes 400
 cadres font 523 600 octets (1 309 octets par enregistrement). Sur les 15 h
 réellement enregistrées sur le poste — 152 367 cadres, 192 Mio, plafond
-atteint, dont **9** avec la puce allumée — le filtre aurait écrit ces 9
-cadres, soit **≈ 11,5 Kio au lieu de 192 Mio**.
+atteint — aucun cadre n'avait `cut=yes`.
 
 Conséquence pratique : un fichier absent ou vide **est** le résultat normal,
 pas une panne de câblage. Pour vérifier que la trace est bien armée, forcer un
@@ -250,54 +267,31 @@ grep -a -c 'frame ts=' ~/statusline.trace
 ```
 
 ```bash
-# le cadre allumé qui a en plus été tronqué : le suspect
-grep -a 'chip=lit' ~/statusline.trace | grep 'cut=yes'
 # combien de cadres l'hôte tronque, et de combien
 grep -a -o 'budget=[0-9]* emitted=[0-9]* cut=yes' ~/statusline.trace | sort | uniq -c
 ```
 
-## État de l'enquête : fond vert du segment OS
+## Enquête close : fond vert du segment OS
 
 Épic #6. Symptôme rapporté : le fond sarcelle de la puce MCP (`BgMCPLabel`,
-lu « vert » à l'écran) s'étend au-delà de la puce et remplit la fin du segment
-blanc, texte en blanc. Intermittent, « régulièrement », uniquement sur ce
-fragment.
+lu « vert » à l'écran) s'étendait au-delà de la puce et remplissait la fin du
+segment blanc, texte en blanc. Intermittent, uniquement sur ce fragment.
 
-**Écarté, avec preuve :**
+**Close : la cause est retirée.** La puce MCP allumée était le seul endroit
+de toute la ligne qui changeait de fond au milieu d'un segment, donc le seul
+fond qu'un cadre coupé ou mal rendu pouvait laisser ouvert sur le reste de la
+rangée. La décision D1 a retiré l'indicateur MCP de la status line : il n'y a
+plus de fond étranger à un segment, et l'invariant de rendu l'exige
+désormais (voir « Règle des fonds »). La seconde rangée a disparu avec les
+épics, donc le report d'attributs d'une ligne sur la suivante n'a plus de
+ligne suivante sur laquelle peindre.
 
-| Hypothèse | Ce qui l'écarte |
-|-----------|-----------------|
-| Un `Reset` manquant dans le renderer | Balayage par mutation des 64 `Reset` du paquet : 20 sont porteurs, 44 sont redondants parce que chaque écriture repose son propre fond et sa propre encre. Retirer celui qui ferme la puce ne change **aucun octet visible**. |
-| Le condenseur qui couperait une ligne | Aucun palier ne coupe : `fitLine1` re-rend et rend un rendu entier, vérifié sur les 22 paliers. |
-| Un cadre partiel affiché par l'hôte | L'hôte lit stdout jusqu'à EOF et ne dessine que si on sort 0 ; aucun rendu incrémental. Et `emit` sort 1 sur écriture courte. |
-| Une coupure de l'hôte au milieu d'un échappement | La coupe est une tranche **par cellule** (`Bun.sliceAnsi`), elle ne peut pas tomber dans un échappement. |
-| Un débordement de notre ligne chez l'utilisateur | 344 colonnes, 120-200 cellules émises pour 340 : jamais `cut=yes` en 15 h. |
-| Un timeout | 600 000 ms côté hôte, 15-75 ms de rendu. |
-
-**Les 9 cadres allumés capturés en 15 h étaient tous parfaits au niveau
-octet** : `48;5;23;38;5;255;1m 󰒍 7 ␛[0m ␛[48;5;255m` — une seule séquence
-d'ouverture, charge utile, reset, puis le fond blanc reposé.
-
-**Suspects restants**, dans cet ordre :
-
-1. **Le terminal.** C'est le seul acteur qui n'a pas été instrumenté. Il
-   reçoit des octets corrects et pourrait les mal rendre (redimensionnement
-   en cours de dessin, `ambiguousIsNarrow` divergent sur le glyphe PUA,
-   effacement de fin de ligne peint avec le fond courant). Il faudrait savoir
-   quel émulateur, et si le bug survit à un autre.
-2. **Le report d'attributs entre lignes par l'hôte** (voir « Contrat avec
-   l'hôte ») : il préfixe chaque ligne de tous les échappements SGR des
-   lignes précédentes. Notre `\033[0m` final l'empêche aujourd'hui, et un
-   invariant le verrouille — mais ce mécanisme est le seul chemin connu par
-   lequel un fond peut voyager au-delà de là où il a été ouvert.
-
-**Non mesuré**, assumé comme tel : si `Bun.sliceAnsi` referme les attributs
-ouverts à l'endroit d'une coupe. Sans pertinence tant qu'aucun cadre ne
-déborde, et la trace le dira — un cadre bavé avec `cut=no` écarte la coupe
-définitivement.
-
-**Prochain pas** : la trace est armée et ne coûte plus rien. Le premier cadre
-bavé donnera ses octets ; s'ils sont corrects, l'enquête passe au terminal.
+Ce que l'enquête avait établi, gardé pour mémoire : aucun `Reset` manquant
+(balayage par mutation des 64 `Reset` du paquet), aucun palier du condenseur
+qui coupe, aucun cadre partiel affiché par l'hôte, aucune coupe de l'hôte au
+milieu d'un échappement (tranche par cellule), jamais `cut=yes` en 15 h à 344
+colonnes, et les 9 cadres allumés capturés étaient parfaits au niveau octet.
+Le suspect restant était le terminal ; il n'a plus rien à mal rendre.
 
 ## Contrat avec l'hôte
 
@@ -313,16 +307,16 @@ ne renifle la première ligne que pour y chercher un marqueur de hook async.
 **Conséquence : l'hôte ne peut pas afficher un cadre partiel — sauf si nous
 sortons 0 après n'avoir écrit qu'une partie de la ligne.** C'est pour ça que
 `emit` (`cmd/statusline/main.go`) traite une écriture courte comme une erreur
-et que `main` sort 1 : mieux vaut un redraw vide qu'une barre bavée.
+et que `run` sort 1 : mieux vaut un redraw vide qu'une barre bavée.
 
 **Budget d'octets.** Tout le cadre part en un seul `fmt`/`Write`. `os.File.Write`
 reboucle sur une écriture courte, donc `n < len` n'arrive qu'avec une erreur,
 et un `EPIPE` sur le fd 1 lève `SIGPIPE` qui tue le process (donc `status != 0`,
 donc cadre jeté). L'atomicité de `PIPE_BUF` (4096) n'est donc *pas* ce qui nous
-protège — c'est le code de sortie. Pour mémoire : cadre typique ≈ 1,2-1,5 Ko ;
-pire cas mesuré (40 serveurs MCP, 99 sous-agents, épic déplié, 24 bits,
-`COLUMNS=400`) = 2052 octets à 1 épic, **+140 octets par épic ouvert, donc
-4096 franchi à 16 épics ouverts**.
+protège — c'est le code de sortie. Pour mémoire : avec une seule ligne et
+plus aucune pastille par épic, le cadre ne grandit plus avec la session ;
+mesuré sur `demo/sample` à `COLUMNS=400` (pastille update comprise) :
+**1559 octets** en 24 bits, 1425 en 256 couleurs.
 
 **Timeout.** 600 000 ms par défaut pour la commande de status line (`Fa`). Un
 rendu prend 15-75 ms : le timeout n'est jamais la cause de quoi que ce soit.
@@ -341,139 +335,52 @@ d'un échappement. Une ligne déjà assez courte n'est pas touchée du tout
 glyphes Nerd Font (PUA) à 1 cellule, comme `VisibleWidth`.
 
 Corollaire opérationnel : **il ne faut jamais tendre à l'hôte une ligne qu'il
-doit couper.** Or c'est ce qui arrive dès que `fitLevels` est épuisé — avec
-`󰚩 N` à 80 colonnes (80 cellules émises pour un budget de 76), et à toute
-largeur sous 80. `STATUSLINE_TRACE` écrit `budget=`, `emitted=` et `cut=yes`
-précisément pour rendre ça visible sans avoir à le déduire. Ce qui reste
-**non mesuré** : si `Bun.sliceAnsi` referme ou non les attributs encore
-ouverts à l'endroit de la coupe. Ça ne se joue que dans les 10 octets de la
-puce allumée (voir « Règle des fonds »), et la coupe réelle tombe ~67
-cellules plus loin, dans le segment des changements — donc hors de la puce.
+doit couper.** C'est ce qui arrive dès que `fitLevels` est épuisé, sous le
+plancher de 71 colonnes. `STATUSLINE_TRACE` écrit `budget=`, `emitted=` et
+`cut=yes` précisément pour rendre ça visible sans avoir à le déduire.
 
 **Nettoyage.** Avant l'affichage l'hôte fait
 `stdout.trim().split("\n").map(trim).filter(non vide).join("\n")` : il
-**supprime les lignes vides**, donc `STATUSLINE_LINE_GAP` n'a aucun effet
-dans Claude Code, et il rogne l'espace de tête de la ligne 2.
+**supprime les lignes vides** — c'est pourquoi l'ancien `STATUSLINE_LINE_GAP`
+n'a jamais eu d'effet, et il a été retiré.
 
 **Report d'attributs.** L'hôte **reporte nos attributs d'une ligne sur la
 suivante**, en préfixant chaque ligne de la concaténation de tous les
-échappements SGR des lignes précédentes. Le `\033[0m` final de la ligne 1 est
-donc la seule chose qui empêche la puce MCP allumée de peindre la ligne 2 —
-c'est un invariant, pas un hasard : `bleed_internal_test.go` le vérifie.
+échappements SGR des lignes précédentes. Avec une seule ligne il n'y a plus
+de suivante ; le `\033[0m` final reste exigé par l'invariant
+(`bleed_internal_test.go`) au cas où l'hôte ajouterait ses propres lignes.
 
 ## Règle des fonds : un seul fond par segment
 
-**La puce MCP allumée est le seul endroit de toute la ligne qui change de
-fond au milieu d'un segment.** Tous les autres accents (encre de quota, jauge
-d'effort, compteurs git, cases d'épic) ne changent que l'encre, sur le fond du
-segment. C'est donc le seul endroit où une coupure peut laisser un fond
-« étranger » ouvert sur le reste de la rangée — et la seule raison pour
-laquelle ce bug n'existe nulle part ailleurs.
+**Aucun segment ne change de fond en son milieu.** Tous les accents (encre de
+quota, jauge d'effort, compteurs git, lumière de santé) ne changent que
+l'encre, sur le fond du segment. La puce MCP allumée était l'unique
+exception ; elle est partie, et avec elle `mergeSGR` et toute la mesure de la
+plage d'octets « sarcelle ouverte ».
 
 Règle à suivre pour tout nouveau segment :
 
 1. **Chaque écriture pose son propre fond et sa propre encre**, sans se fier à
-   l'état ambiant laissé par un `Reset` précédent. C'est déjà le cas partout ;
-   c'est ce qui rend 44 des 64 `Reset` du paquet redondants (retirer l'un
-   d'eux ne change aucun octet visible).
-2. **Fond et encre dans une seule séquence SGR** (`mergeSGR`, `mcppill.go`)
-   dès qu'il s'agit d'un fond qui n'est pas celui du segment. Deux séquences
-   laissent une fenêtre où le nouveau fond porte l'ancienne encre ; une seule
-   séquence est appliquée en entier ou, coupée, pas du tout. C'est aussi plus
-   court, donc plus loin du budget d'octets.
-3. **Fermer par un `Reset` nu collé au dernier octet utile.** `\033[0m` fait
-   4 octets, c'est la fermeture la plus courte possible ; la fondre avec
-   l'ouverture suivante l'allongerait et agrandirait la fenêtre.
+   l'état ambiant laissé par un `Reset` précédent.
+2. **Un seul fond par segment.** Un second fond au milieu d'un segment est un
+   défaut, quel qu'il soit : l'invariant le refuse.
+3. **Fermer par un `Reset` nu collé au dernier octet utile.**
 
-Résultat mesuré pour la puce : la plage d'octets où une coupure laisse la
-sarcelle ouverte passe de **25 à 10 octets** (glyphes Nerd) — la charge utile
-(`󰒍 7`, 6 octets) plus le reset (4). Ces 10 octets sont irréductibles : on ne
-peut pas dessiner du blanc sur sarcelle sans que la sarcelle soit ouverte
-au-dessus du glyphe. `TestACutNeverLeavesTealOpenBeyondTheChip` mesure cette
-plage et échoue si elle grandit.
+La pastille update n'est pas un segment de la chaîne : elle vient après la
+dernière flèche, précédée d'un espace sans attribut, entre deux capuchons
+arrondis, et son fond reste entre ses capuchons.
 
-**Invariants de rendu** (`bleed_internal_test.go`) : un automate SGR rejoue
-chaque ligne comme un terminal et exige que chaque ligne finisse sur un reset
-complet, qu'aucun échappement ne soit tronqué, que chaque segment de la ligne 1
-ouvre et ferme sur le même fond (un accent — la puce MCP allumée — est une
-plage contiguë qui ne touche aucun bord), que les pastilles de la ligne 2
-restent dans leurs capuchons (l'espace entre deux pastilles ne porte aucun
-attribut), que `\033[9m` ne barre que des chiffres, et qu'allumer la puce ne
-change pas la largeur de la ligne. La matrice couvre les deux jeux de glyphes,
-les deux profondeurs de couleur, les deux lignes possibles pour MCP, tous les
-états de santé, 16 formes de l'indicateur, les sous-agents, les formes de la
-ligne 2 et les paliers de condensation.
-
-À quoi s'ajoute `TestACutNeverLeavesTealOpenBeyondTheChip`, qui ne juge pas un
-cadre entier mais **tous ses préfixes** : pour chaque décalage d'octet de la
-ligne 1, il rejoue le préfixe et demande quel fond le terminal garderait en
-main. La réponse doit être « la sarcelle seulement à l'intérieur des octets de
-la puce », en une seule plage contiguë (voir « Règle des fonds »).
-
-## Serveurs MCP
-
-`adapter/mcp` lit, par ordre de priorité (le premier qui nomme un serveur
-gagne, dédoublonnage par nom) :
-
-1. **managed** — `/etc/claude-code/managed-mcp.json` (macOS : `/Library/Application Support/ClaudeCode`)
-2. **ligne de commande** — `--mcp-config` de l'hôte : `sessionstate` retrouve
-   le pid dans `<config>/sessions/<pid>.json` (un seul scan, partagé avec
-   `Working`), puis `/proc/<pid>/cmdline`. Répétable, variadique jusqu'au
-   flag suivant, `--mcp-config=v` accepté ; valeur = JSON si elle commence par
-   `{`, sinon chemin (relatif au `cwd` de l'hôte). `--strict-mcp-config` = seuls
-   managed + ligne de commande comptent. Hors Linux (pas de `/proc`) : ignoré.
-3. **local** — `projects[<dir>].mcpServers` du fichier global
-4. **projet** — `<dir>/.mcp.json`, repli `mcp.json`
-5. **user** — `mcpServers` du fichier global
-6. **plugins** — `<config>/plugins/installed_plugins.json` ; activé si
-   `enabledPlugins["<plugin>@<marketplace>"]` vaut `true` (`<config>/settings.json`,
-   puis `<dir>/.claude/settings.json`, puis `settings.local.json`) ;
-   serveurs dans `<installPath>/.mcp.json` (`mcpServers` ou map nue), marqués
-   `Plugin`.
-
-Fichier global = `$CLAUDE_CONFIG_DIR/.claude.json`, sinon `~/.claude.json`
-puis `~/.claude/.claude.json`. `<config>` = `$CLAUDE_CONFIG_DIR` ou `~/.claude`.
-Désactivé = `"disabled": true`, ou listé dans `projects[<dir>].disabledMcpServers`
-(nom nu ou `plugin:<plugin>:<serveur>`) ; `disabledMcpjsonServers` vise
-`.mcp.json`. Tout fichier illisible ou malformé est ignoré ; pas d'exec.
-
-**Indicateur (défaut)** : dans le segment OS de la ligne 1, sur son fond
-blanc 255, après l'étincelle de santé et avant `󰚩 N` : glyphe MCP
-`\U000F048D` (󰒍, présent dans MesloLGS NF — `fc-list ":charset=f048d"`)
-en sarcelle 23 gras (6.46:1), puis le **total** des serveurs actifs en encre
-OS 232 gras : `󰒍 7` (glyphes texte : `MCP 7`). Aucun détail par portée, pas
-de capuchons. Des serveurs désactivés ajoutent `·N`, gris 241 (5.26:1 ; 242
-ne tient que 4.53, 244 tombe à 3.4), N barré. Aucun serveur, rien.
-
-L'indicateur **cède quand la ligne manque de place** : d'abord son nombre (et
-donc `·N`, qui compte aussi des serveurs), puis le glyphe. Voir l'échelle du
-segment OS dans « Politique de condensation ». Il ne quitte jamais le segment
-OS pour autant (`TestMCPIndicatorNeverMovesOutOfTheOSSegment`).
-
-**Pastille (ligne 2, `STATUSLINE_MCP_LINE=2`)** : même contenu, pastille à
-capuchons arrondis 116, encre 23 gras sur 116 ; `·N` en 239 (240 ne tient
-que 4.31:1 sur 116).
-
-L'adaptateur garde la portée (`MCPServer.Source`, `WithSource`, posée sur
-chaque source avant la fusion) : donnée utile, non affichée.
-
-**Appels en cours** (`adapter/mcpcalls`, sans hook) : 128 Ko de fin de
-`transcript_path` et des transcripts des sous-agents en cours
-(`agents.json`, `<dir transcript>/<session>/subagents/agent-<id>.jsonl`).
-Appel en vol = `tool_use` `mcp__<clé>__<outil>` sans `tool_result` plus loin ;
-il reste allumé 2 s après le `timestamp` du résultat (la ligne se redessine
-chaque seconde, un appel court ne se verrait jamais). Un appel sans résultat
-depuis 30 min est tenu pour perdu. Clé → serveur (`model.WithBusy`) :
-nom normalisé (`[^A-Za-z0-9_-]` → `_`), `plugin_<plugin>_<serveur>` → serveur ;
-une clé inconnue est ajoutée, allumée, sans portée, comptée active. Un appel
-en vol (ou dans les 2 s) allume l'indicateur : glyphe et nombre deviennent
-une puce 255 gras sur 23 (7.5:1), sur exactement les mêmes cellules (la
-ligne ne bouge pas) ; `·N` reste, gris sur blanc. Fond, encre et graisse
-partent en **une seule séquence** (`mcpLitOpen`) — voir « Règle des fonds :
-un seul fond par segment », c'est le seul fond non-segment de la ligne. En
-pastille de ligne 2,
-toute la pastille s'allume (capuchons 23) et `·N` passe en 116 sur 23
-(4.54:1). Lecture de queue partagée avec `activity` : `adapter/transcript`.
+**Invariants de rendu** (`bleed_internal_test.go`, automate dans
+`sgrreplay_internal_test.go`) : un automate SGR rejoue la ligne comme un
+terminal et exige qu'elle finisse sur un reset complet, qu'aucun échappement
+ne soit tronqué, que la sortie soit **une seule ligne** terminée par un `\n`,
+que chaque segment tienne sur **un seul fond** d'un bout à l'autre, que la
+pastille update reste dans ses capuchons (l'espace qui la précède ne porte
+aucun attribut), qu'aucune cellule ne soit barrée, et qu'aucun séparateur
+n'hérite de la graisse du bloc précédent. La matrice couvre les deux jeux de
+glyphes, les deux profondeurs de couleur, tous les états de santé, les quatre
+états de la pastille update, les formes de la ligne (segments absents) et
+chaque palier des deux échelles de condensation.
 
 ## Effort
 
@@ -484,53 +391,6 @@ l'encre de la pastille, les autres un disque dans sa teinte pâle
 (`GetModelTrack`). Un niveau hors échelle s'écrit en clair (`· ultra`), jamais
 sur une jauge fausse.
 
-## Tâches, épics et sous-agents
-
-`adapter/tasks` lit deux sources, par session :
-
-1. **MCP tasks de `kodflow-hooks`** (prioritaire dès que le fichier existe) :
-   `<config>/kodflow/sessions/<session_id>/tasks.json`. v2 = liste `epics`
-   (`id`, `agent`, `title` ≤ 20, `touched`) + `active` (agent → épic) ; un
-   fichier v1 (`epics` en dict agent → épic courant) est converti à la
-   lecture (`touched` = maintenant, `active[agent]` = son épic). Seules les
-   tâches de `main` comptent ; `epic: 0` = hors épic ; une tâche d'un épic
-   absent du fichier (épic fini, v1) est ignorée. Un fichier illisible
-   n'affiche rien — il ne rebascule pas sur la source native.
-2. **Outils natifs** (repli, fichier MCP absent) : `<config>/tasks/<liste>/<n>.json`,
-   liste = `CLAUDE_CODE_TASK_LIST_ID` sinon `session-` + 8 premiers caractères,
-   rendue comme la pastille `Tâches`.
-
-**Épic ouvert** = au moins une tâche non terminée, ou l'épic actif encore
-vide (il disparaît dès que le focus passe ailleurs). Un épic fini n'est plus
-dessiné ; une tâche ajoutée à un épic fini le rouvre. `active.main` à 0,
-absent ou pointant nulle part = aucun épic actif : la pastille `Tâches`
-(tâches `epic: 0`) devient l'active. Ordre : l'actif, puis par `touched`
-décroissant (`Tâches` : dernier `created`/`updated` de ses tâches).
-
-**Pastilles (ligne 2)** : fond mauve 182, capuchons arrondis, encre prune 53.
-
-- *Repliée* : `titre fait/total` (+ `󰚩 N`).
-- *Dépliée* — seulement l'épic actif, seulement **pendant que la session
-  travaille** : `titre fait/total cases titre-de-tâche` (+ `󰚩 N`). Cases
-  triées : fait ■ encre 53, en cours ■ ambre `#82480b` qui **pulse** en
-  `#9e5204` gras les secondes paires (horloge murale, `clockNow`), le reste
-  (à faire, en attente) □ sur la piste pâle `#b48cb4`. Titre = la tâche en
-  cours, sinon la première en attente de l'utilisateur, sinon la prochaine.
-  Replis 256 : 94, 94 gras (le cube n'a pas d'ambre plus clair qui tienne
-  3:1 sur le mauve — 130 tombe à 2.47:1), 139.
-- Le pulse suppose `statusLine.refreshInterval: 1` — le minimum de l'hôte ;
-  le clignotement ANSI (SGR 5) est filtré et ne sert à rien.
-
-**Session occupée** : `adapter/sessionstate` lit `<config>/sessions/*.json`
-(écrits par l'hôte) ; le premier dont `sessionId` = le `session_id` de stdin
-décide : `status == "busy"`. Fichiers illisibles ignorés, pas d'exec.
-
-**Sous-agents** : `agents.json` (hooks SubagentStart/Stop), `epic` = l'épic
-actif de `main` au démarrage (absent = 0). En cours = pas de `stop` et
-démarré il y a < 12 h. Un sous-agent dont l'épic est affiché va dans sa
-pastille ; les autres (épic 0 ou épic non affiché) vont en **ligne 1**, dans
-le segment OS après le glyphe de santé : `󰚩 N`.
-
 ## Répertoire actif
 
 `workspace.current_dir` ne bouge pas quand l'agent travaille par `cd X && …`
@@ -538,7 +398,7 @@ ou par chemins absolus. `adapter/activity` lit les 256 derniers Ko de
 `transcript_path` et prend le dernier emplacement nommé par un appel d'outil
 (`file_path`/`path`, `cd X` en tête, `git -C X`), remonté à sa racine git.
 `~/.claude/projects` (journaux, mémoire) est ignoré. Git s'exécute dans ce
-répertoire ; MCP garde le répertoire de session.
+répertoire.
 
 ## État de Claude
 

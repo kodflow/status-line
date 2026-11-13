@@ -1,6 +1,8 @@
 package application_test
 
 import (
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -21,10 +23,6 @@ func (m *mockSystemProv) Info() model.SystemInfo { return model.SystemInfo{OS: m
 type mockTerminalProv struct{}
 
 func (m *mockTerminalProv) Info() model.TerminalInfo { return model.TerminalInfo{Width: 120} }
-
-type mockMCPProv struct{}
-
-func (m *mockMCPProv) Servers() model.MCPServers { return model.MCPServers{} }
 
 type mockUsageProv struct{}
 
@@ -65,7 +63,6 @@ func TestNewStatusLineService(t *testing.T) {
 				Git:      &mockGitRepo{},
 				System:   &mockSystemProv{},
 				Terminal: &mockTerminalProv{},
-				MCP:      &mockMCPProv{},
 				Usage:    &mockUsageProv{},
 			}
 			svc := application.NewStatusLineService(deps, &mockRenderer{})
@@ -89,7 +86,6 @@ func TestStatusLineService_Generate(t *testing.T) {
 				Git:      &mockGitRepo{},
 				System:   &mockSystemProv{},
 				Terminal: &mockTerminalProv{},
-				MCP:      &mockMCPProv{},
 				Usage:    &mockUsageProv{},
 			}
 			svc := application.NewStatusLineService(deps, &mockRenderer{})
@@ -132,7 +128,6 @@ func TestGenerate_WorkDirAndHealth(t *testing.T) {
 				Git:      &mockGitRepo{},
 				System:   &mockSystemProv{},
 				Terminal: &mockTerminalProv{},
-				MCP:      &mockMCPProv{},
 				Usage:    &mockUsageProv{},
 				Health:   tt.health,
 				WorkDir:  tt.workDir,
@@ -148,54 +143,78 @@ func TestGenerate_WorkDirAndHealth(t *testing.T) {
 	}
 }
 
-type mockTasksProv struct{ board model.TaskBoard }
+type panickingHealthProv struct{}
 
-func (m *mockTasksProv) Board() model.TaskBoard { return m.board }
+func (p *panickingHealthProv) Health() model.ServiceHealth { panic("health exploded") }
 
-type mockActivityProv struct{ working bool }
-
-func (m *mockActivityProv) Working() bool { return m.working }
-
-func TestGenerate_Tasks(t *testing.T) {
+func TestGenerate_ProviderPanicStillRenders(t *testing.T) {
+	var stderr strings.Builder
 	rend := &capturingRenderer{}
-	list := model.TaskList{Items: []model.TaskItem{{ID: "1", Subject: "x", Status: model.TaskPending}}}
-	board := model.TaskBoard{Epics: []model.Epic{{ID: 1, Title: "SDK", Active: true, Tasks: list}}, Unattributed: 2}
 	deps := application.ServiceDeps{
-		Git: &mockGitRepo{}, System: &mockSystemProv{}, Terminal: &mockTerminalProv{},
-		MCP: &mockMCPProv{}, Usage: &mockUsageProv{}, Tasks: &mockTasksProv{board: board},
-		Activity: &mockActivityProv{working: true},
+		Git:      &mockGitRepo{},
+		System:   &mockSystemProv{},
+		Terminal: &mockTerminalProv{},
+		Usage:    &mockUsageProv{},
+		Health:   &panickingHealthProv{},
+		Stderr:   &stderr,
 	}
 	application.NewStatusLineService(deps, rend).Generate(&mockInputProvider{})
-	if len(rend.data.Tasks.Epics) != 1 || rend.data.Tasks.Epics[0].Tasks.Total() != 1 {
-		t.Errorf("Tasks = %+v, want the one epic", rend.data.Tasks)
+	// The panicking provider's value stays zero, the others still arrive
+	if rend.data.Git.Branch != "main" {
+		t.Errorf("git branch = %q, want the other providers to still render", rend.data.Git.Branch)
 	}
-	if rend.data.Tasks.Unattributed != 2 {
-		t.Errorf("Unattributed = %d, want 2", rend.data.Tasks.Unattributed)
+	if rend.data.Health != model.HealthUnknown {
+		t.Errorf("health = %v, want zero after a panic", rend.data.Health)
 	}
-	if !rend.data.Working {
-		t.Error("Working = false, want the activity provider's answer")
+	if !strings.Contains(stderr.String(), "health exploded") || !strings.Contains(stderr.String(), "goroutine") {
+		t.Errorf("stderr = %q, want the panic and its stack", stderr.String())
 	}
 }
 
-type listMCPProv struct{ servers model.MCPServers }
+type panickingGitRepo struct{}
 
-func (m *listMCPProv) Servers() model.MCPServers { return m.servers }
+func (p *panickingGitRepo) Status() model.GitStatus      { panic("status exploded") }
+func (p *panickingGitRepo) DiffStats() model.CodeChanges { panic("diff exploded") }
 
-type mockCallsProv struct{ busy []string }
+// lockedWriter serialises writes: several providers report their panic at
+// once, each from its own goroutine.
+type lockedWriter struct {
+	mu sync.Mutex
+	sb strings.Builder
+}
 
-func (m *mockCallsProv) Busy() []string { return m.busy }
+func (w *lockedWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.sb.Write(p)
+}
 
-func TestGenerate_MCPBusy(t *testing.T) {
+func (w *lockedWriter) String() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.sb.String()
+}
+
+func TestGenerate_EveryProviderRecoversOnItsOwn(t *testing.T) {
+	stderr := &lockedWriter{}
 	rend := &capturingRenderer{}
 	deps := application.ServiceDeps{
-		Git: &mockGitRepo{}, System: &mockSystemProv{}, Terminal: &mockTerminalProv{},
-		MCP:      &listMCPProv{servers: model.MCPServers{{Name: "github", Enabled: true}, {Name: "tasks", Enabled: true, Plugin: "kodflow-hooks"}}},
-		MCPCalls: &mockCallsProv{busy: []string{"plugin_kodflow-hooks_tasks", "surprise"}},
+		Git:      &panickingGitRepo{},
+		System:   &mockSystemProv{},
+		Terminal: &mockTerminalProv{},
 		Usage:    &mockUsageProv{},
+		Health:   &panickingHealthProv{},
+		Stderr:   stderr,
 	}
 	application.NewStatusLineService(deps, rend).Generate(&mockInputProvider{})
-	got := rend.data.MCP
-	if len(got) != 3 || got[0].Busy || !got[1].Busy || got[2].Name != "surprise" || !got[2].Busy {
-		t.Errorf("MCP = %+v, want tasks and the unknown surprise busy", got)
+	// Three closures panic: each recover is its own, so all three are
+	// reported and the providers that did not panic still arrive
+	for _, msg := range []string{"status exploded", "diff exploded", "health exploded"} {
+		if !strings.Contains(stderr.String(), msg) {
+			t.Errorf("stderr misses %q: %q", msg, stderr.String())
+		}
+	}
+	if rend.data.System.OS != model.OSLinux || rend.data.Terminal.Width != 120 {
+		t.Errorf("system = %+v, terminal = %+v, want them despite the panics", rend.data.System, rend.data.Terminal)
 	}
 }
