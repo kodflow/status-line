@@ -20,11 +20,8 @@ type StatusLineData struct {
 	FastMode    bool
 	SessionName string
 	Changes     CodeChanges
-	MCP         MCPServers
 	Update      UpdateInfo
 	Health      ServiceHealth
-	Tasks       TaskBoard
-	Working     bool
 }
 
 // UpdateInfo contains information about available updates.

@@ -33,7 +33,7 @@ type failWriter struct{ err error }
 func (w *failWriter) Write(_ []byte) (int, error) { return 0, w.err }
 
 func TestEmitReportsACutFrame(t *testing.T) {
-	frame := "\033[48;5;23;38;5;255;1m\U000F048D 7\033[0m rest of the bar\n"
+	frame := "\033[48;5;255;38;5;232;1m \uf17c \033[0m rest of the bar\n"
 	broken := errors.New("broken pipe")
 	tests := []struct {
 		name    string
@@ -43,8 +43,8 @@ func TestEmitReportsACutFrame(t *testing.T) {
 	}{
 		{name: "the whole frame goes out", writer: &shortWriter{limit: len(frame)}, want: len(frame)},
 		{
-			name: "a frame cut inside the chip is an error",
-			// Ten bytes in: past the chip's opening sequence, before its reset
+			name: "a frame cut inside a segment is an error",
+			// Past the segment's opening sequence, before its reset
 			writer:  &shortWriter{limit: 24},
 			want:    24,
 			wantErr: io.ErrShortWrite,

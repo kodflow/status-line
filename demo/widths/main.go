@@ -1,6 +1,5 @@
 // Command widths renders the sample state at several terminal widths, to
-// see the adaptive condensing of line one at work. Line two is printed when
-// it carries something (the MCP pill, with STATUSLINE_MCP_LINE=2).
+// see the adaptive condensing of the line at work.
 //
 //	go run ./demo/widths            # coloured, then stripped
 //	go run ./demo/widths 100 72     # chosen widths only
@@ -51,18 +50,13 @@ func main() {
 		start := time.Now()
 		out := r.Render(data)
 		took := time.Since(start)
-		line1, rest, _ := strings.Cut(out, "\n")
-		line2 := strings.TrimRight(rest, "\n")
+		line1, _, _ := strings.Cut(out, "\n")
 		fmt.Printf("── COLUMNS=%d  visible=%d  render=%s\n", w, renderer.VisibleWidth(line1), took)
 		fmt.Println(line1)
 		fmt.Println(ansi.ReplaceAllString(line1, ""))
 		// Say which segments gave way, and how far
 		if shrunk := renderer.Condensed(data); len(shrunk) > 0 {
 			fmt.Println("   condensed: " + strings.Join(shrunk, " | "))
-		}
-		// Line two only carries something when the MCP pill is asked there
-		if line2 != "" {
-			fmt.Println("   line 2: " + ansi.ReplaceAllString(line2, ""))
 		}
 	}
 }
