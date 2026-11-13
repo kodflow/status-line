@@ -10,8 +10,8 @@ A customizable status line for Claude Code, displaying model info, context usage
   an end-of-window projection and a reset countdown
 - **Git Integration** - Branch name, modified files, untracked files
 - **Code Changes** - Lines added/removed in current session
-- **MCP Servers** - Display configured MCP server status
-- **Auto-Update** - Automatically updates to latest release
+- **Service Health** - Claude's status page, as a light beside the OS icon
+- **Auto-Update** - Updates itself to the latest release, out of band
 
 ## Installation
 
@@ -65,48 +65,40 @@ Configure in your Claude Code settings to use as the status line provider.
 ## The line
 
 ```
-  Opus 5 ━━━━────●─ 47%  59m  Weekly ━━━━━●──── 58%  2d23h    Context ━───────── 10% 102k/1M    ~/project   main !3 ?1  +142  -37
- github · gitlab
+ 󰙴  Opus 5 ━━━━────●─ 47%  59m  Weekly ━━━━━●──── 58%  2d23h    Context ━───────── 10%    ~/project   main !3 ?1  +142  -37   v0.30.0
 ```
 
-Line one carries everything about the session: the model with its own rate
-limits beside it, the context window, then where you are. Line two carries the
-open epics, then the update notice. The MCP servers show in the OS segment that opens
-line one (`󰒍 7`: the number of enabled servers); `STATUSLINE_MCP_LINE=2`
-moves them to a pill on line two.
+The status line is one line: the OS icon and the health light, the model with
+its own rate limits beside it, the context window, then where you are, and
+the update notice at the very end when a newer release is known.
 
-Line one fits the terminal: the host gives the status line its width in
+The line fits the terminal: the host gives the status line its width in
 `COLUMNS` (120 when absent). Each segment has levels, from richest to leanest,
 and a weight; a line too wide lowers segments one level at a time, lightest
 first, every segment once before any twice. By default: the context, scoped,
-weekly and session bars, the path and branch to 20, the countdowns, the path
-to its last element and the branch to 12, quota names to their initial, the
-changes, the path, the model icon, the branch to 8. The OS segment never
-shrinks. Line two is never shortened.
+weekly and session bars, the update notice, the path and branch to 20, the
+countdowns, the path to its last element and the branch to 12, quota names to
+their initial, the changes, the path, the model icon, the branch to 8, and
+last of all the health light. The OS icon never goes. An update notice that
+reports a failure holds out past the first pass, just before the health light.
 
 Each bar marks where an even burn would sit right now (`●`). The fill behind
 that mark means room to spare; ahead of it means the quota runs out before it
 refills.
 
 A quota scoped to one model family shows only while that model is in use.
-dashboard:
-  [OS 󰙴 󰒍 7 ·1] [Opus 5 ●] [/path] [git branch !2 ?1] [+50] [-10]
-  [ctx ██░░ 10% 103k/1M] [session ██░│░ 15% ▸33% ⟳2h46] [⛁ 95% ⟳47m] [$1.83]
-  [ v0.4.0]
-```
 
 ### Segments
 
 | Segment | Description |
 |---------|-------------|
-| OS Icon | Linux, macOS, Windows, or Docker |
+| OS Icon | Linux, macOS, Windows, or Docker, then the health light of Claude's services |
 | Model Pill | Colored by model (pink=Haiku, purple=Sonnet, orange=Opus) |
 | Progress Bar | Context window usage with burn-rate cursor (●) |
 | Path | Current working directory |
 | Git | Branch name, modified (!), untracked (?) |
 | Changes | Lines added (+) and removed (-) |
-| MCP | Inside the OS segment, after the health sparkle: MCP glyph and the number of enabled servers (`MCP 7` without a Nerd Font); disabled servers add a muted, crossed `·N`; glyph and count light up as a dark teal chip while a call is in flight (read from the transcripts) and 2 s after. Sources: managed, `--mcp-config` of the running session (Linux), local, project, user, enabled plugins. `STATUSLINE_MCP_LINE=2` shows it as a pill on line two instead |
-| Update | Lit while a newer release is known and the running binary is older; turns red with a warning glyph when the install failed or checks have failed for over an hour |
+| Update | At the end of the line. Lit while a newer release is known and the running binary is older; turns red with a warning glyph when the install failed or checks have failed for over an hour |
 
 ## Environment Variables
 
@@ -116,11 +108,9 @@ dashboard:
 | `STATUSLINE_ICON_MODEL` | Show model icon | `true` |
 | `STATUSLINE_ICON_PATH` | Show folder icon | `true` |
 | `STATUSLINE_ICON_GIT` | Show git branch icon | `true` |
-| `STATUSLINE_LINE_GAP` | Blank lines between the two rows (0-3) | `0` |
 | `STATUSLINE_GLYPHS` | `nerd` or `text` (no Nerd Font required) | `nerd` |
-| `STATUSLINE_HIDE` | Comma-separated segments to leave out: `context`, `session`, `weekly`, `model` | — |
-| `STATUSLINE_WEIGHTS` | Line-one condensing weights, e.g. `context=10,weekly=30` (lower shrinks first; segments: context, scoped, weekly, session, path, branch, changes, model) | built-in policy |
-| `STATUSLINE_MCP_LINE` | `2` shows the MCP servers as a pill on line two instead of inside the OS segment | OS segment |
+| `STATUSLINE_HIDE` | Comma-separated segments to leave out: `context`, `session`, `weekly`, `model`, `credits`, `health` | — |
+| `STATUSLINE_WEIGHTS` | Condensing weights, e.g. `context=10,weekly=30` (lower shrinks first; segments: context, scoped, weekly, session, path, branch, os, changes, model, update) | built-in policy |
 
 ## Auto-Update
 

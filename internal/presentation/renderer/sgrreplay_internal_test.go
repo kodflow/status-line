@@ -188,9 +188,8 @@ func extendedColor(params []string, i int) (string, int) {
 }
 
 // checkLine asserts what every rendered line must hold, whatever the data: no
-// escape is cut, the line closes every attribute it opened, a strike only ever
-// crosses out digits, and no separator inherits weight from the block before
-// it. It returns the cells so the caller can go on to the segment invariants.
+// escape is cut, the line closes every attribute it opened, nothing is
+// crossed out, and no separator inherits weight from the block before it. It returns the cells so the caller can go on to the segment invariants.
 func checkLine(t *testing.T, label, line string) []cell {
 	t.Helper()
 	cells, end := parseCells(t, label, line)
@@ -199,10 +198,10 @@ func checkLine(t *testing.T, label, line string) []cell {
 		t.Errorf("%s: the line ends with %+v in force, not with a full reset", label, end)
 	}
 	for idx, c := range cells {
-		// The strike escape is only closed by a full reset, so a leak of it
-		// would cross out whatever the line draws next
-		if c.state.strike && (c.r < '0' || c.r > '9') {
-			t.Errorf("%s: cell %d %q is crossed out; only the disabled-server count is", label, idx, string(c.r))
+		// Nothing on the line is crossed out since the MCP indicator, and
+		// its disabled count, left it
+		if c.state.strike {
+			t.Errorf("%s: cell %d %q is crossed out; nothing on the line is", label, idx, string(c.r))
 		}
 		// A separator is drawn between two blocks and belongs to neither
 		if capGlyphs[c.r] && (c.state.bold || c.state.strike) {
@@ -212,33 +211,33 @@ func checkLine(t *testing.T, label, line string) []cell {
 	return cells
 }
 
-// checkLine1Grounds asserts that every segment of line one keeps one ground.
+// checkLine1Grounds asserts that every segment of the line keeps one ground,
+// and that the update pill closing it stays inside its caps.
 //
 // A powerline segment is one block of colour: the arrow that closes it is
 // drawn in the next segment's ground, and every cell between two arrows sits
-// on the segment's own. An accent inside a segment — the MCP chip, lit while a
-// call is in flight — is a run of cells in the middle of it. It may reach
-// neither edge: if it did, the ground it replaced was never given back and the
-// rest of the segment wears the accent instead. That is the bug this whole
-// file exists for.
+// on the segment's own — no accent ground anywhere. The MCP chip was the one
+// accent the line ever drew; it went with the indicator, so a second ground
+// inside a segment is now a defect wherever it shows up. Whatever follows the
+// last arrow is the update pill, judged as a pill on the terminal's ground.
 func checkLine1Grounds(t *testing.T, label string, cells []cell) {
 	t.Helper()
 	arrow := firstRune(SepRight)
 	start := 0
-	// Walk one past the end so the stretch after the last arrow is checked too
-	for idx := 0; idx <= len(cells); idx++ {
-		// A segment runs up to the arrow that hands over to the next one
-		if idx < len(cells) && cells[idx].r != arrow {
+	// Every segment runs up to the arrow that hands over to the next one
+	for idx := range cells {
+		// Only an arrow ends a segment
+		if cells[idx].r != arrow {
 			continue
 		}
 		checkSegmentGround(t, label, cells[start:idx])
 		start = idx + 1
 	}
+	checkPillGrounds(t, label+" tail", cells[start:])
 }
 
-// checkSegmentGround asserts that one segment of line one opens and closes on
-// the same ground, that no cell of it falls back to the terminal's own, and
-// that it carries at most one accent run, touching neither edge.
+// checkSegmentGround asserts that one segment of the line sits on a single
+// ground from its first cell to its last, none of them on the terminal's own.
 func checkSegmentGround(t *testing.T, label string, seg []cell) {
 	t.Helper()
 	// The rounded cap that opens line one belongs to no ground
@@ -256,42 +255,27 @@ func checkSegmentGround(t *testing.T, label string, seg []cell) {
 		t.Errorf("%s: segment %q opens on the terminal's own ground", label, text)
 		return
 	}
-	// The ground the segment opened on is the one it must hand back
-	if last := seg[len(seg)-1].state.bg; last != ground {
-		t.Errorf("%s: segment %q opens on ground %q and ends on %q: the accent never gave the ground back", label, text, ground, last)
-		return
-	}
-	runs, inRun := 0, false
 	for _, c := range seg {
 		// A cell with no ground shows the terminal's own colour through it
 		if c.state.bg == "" {
 			t.Errorf("%s: cell %q of segment %q sits on the terminal's own ground", label, string(c.r), text)
 			return
 		}
-		// Count the accent runs rather than the accent cells
+		// One ground per segment: a second one is a colour out of place
 		if c.state.bg != ground {
-			// A run only counts where it begins
-			if !inRun {
-				runs++
-			}
-			inRun = true
-			continue
+			t.Errorf("%s: cell %q of segment %q sits on ground %q, the segment's is %q", label, string(c.r), text, c.state.bg, ground)
+			return
 		}
-		inRun = false
-	}
-	// One segment holds at most one accent: the MCP chip in the OS segment
-	if runs > 1 {
-		t.Errorf("%s: segment %q carries %d separate accent grounds, at most one is drawn", label, text, runs)
 	}
 }
 
-// checkLine2Grounds asserts that line two's pills stay inside their caps.
+// checkPillGrounds asserts that pills stay inside their caps.
 //
-// Line two is a row of pills on the terminal's own ground, separated by bare
-// spaces written with no escape at all. A pill that leaks its ground past its
-// closing cap therefore paints that gap, and everything after it, in its own
-// colour — the same failure as an accent escaping a segment on line one.
-func checkLine2Grounds(t *testing.T, label string, cells []cell) {
+// A pill sits on the terminal's own ground, after a bare space written with
+// no escape at all. A pill that leaks its ground past its closing cap
+// therefore paints everything after it in its own colour — the same failure
+// as a ground escaping its segment.
+func checkPillGrounds(t *testing.T, label string, cells []cell) {
 	t.Helper()
 	inside := false
 	for idx, c := range cells {
@@ -319,40 +303,14 @@ func checkLine2Grounds(t *testing.T, label string, cells []cell) {
 	}
 }
 
-// checkRendered runs every invariant over one full two-line render.
+// checkRendered runs every invariant over one full render, which is one line.
 func checkRendered(t *testing.T, label, out string) {
 	t.Helper()
-	lines := strings.Split(strings.TrimSuffix(out, "\n"), "\n")
-	for idx, line := range lines {
-		cells := checkLine(t, label+" line"+itoa(idx+1), line)
-		// Line one is a chained ribbon of segments; line two a row of pills
-		if idx == 0 {
-			checkLine1Grounds(t, label+" line1", cells)
-		} else {
-			checkLine2Grounds(t, label+" line"+itoa(idx+1), cells)
-		}
+	line, rest, found := strings.Cut(out, "\n")
+	// One line, ended by the one newline
+	if !found || rest != "" {
+		t.Errorf("%s: want one line ended by a newline, got %q", label, out)
+		return
 	}
-}
-
-// replayPrefix returns the attributes a terminal is left holding after the
-// first cut bytes of a line — the state a cut frame would bleed.
-func replayPrefix(prefix string) sgrState {
-	var state sgrState
-	for i := 0; i < len(prefix); {
-		// Anything but an escape prints and changes nothing
-		if prefix[i] != escapeByte {
-			_, size := utf8.DecodeRuneInString(prefix[i:])
-			i += size
-			continue
-		}
-		end := skipEscape(prefix, i)
-		seq := prefix[i:end]
-		// A sequence the cut left incomplete is never applied
-		if end > len(prefix) || len(seq) < 3 || seq[len(seq)-1] != 'm' {
-			break
-		}
-		state = applySGR(state, seq[2:len(seq)-1])
-		i = end
-	}
-	return state
+	checkLine1Grounds(t, label, checkLine(t, label, line))
 }

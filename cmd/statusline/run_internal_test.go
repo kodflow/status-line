@@ -17,7 +17,7 @@ import (
 )
 
 // frameText is a frame with escapes, as the renderer emits.
-const frameText = "\033[48;5;255m line one \033[0m\n\033[48;5;23m line two \033[0m"
+const frameText = "\033[48;5;255m the bar \033[0m\n"
 
 // fakeGen renders a fixed frame, or panics.
 type fakeGen struct {
