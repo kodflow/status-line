@@ -8,8 +8,10 @@ import (
 	"time"
 
 	"github.com/florent/status-line/internal/adapter/detach"
+	"github.com/florent/status-line/internal/adapter/health"
 	"github.com/florent/status-line/internal/adapter/trace"
 	"github.com/florent/status-line/internal/adapter/updater"
+	"github.com/florent/status-line/internal/adapter/usage"
 	"github.com/florent/status-line/internal/domain/model"
 )
 
@@ -32,6 +34,10 @@ type deps struct {
 	stderr io.Writer
 	// now is the clock.
 	now func() time.Time
+	// refreshUsage refreshes the usage cache for --refresh-usage.
+	refreshUsage func() error
+	// refreshHealth refreshes the health cache for --refresh-health.
+	refreshHealth func() error
 }
 
 // productionDeps wires run to the real binary, the real state and the real
@@ -54,6 +60,12 @@ func productionDeps() deps {
 		traceWrite: trace.Write,
 		stderr:     os.Stderr,
 		now:        time.Now,
+		refreshUsage: func() error {
+			return usage.NewProvider().Refresh()
+		},
+		refreshHealth: func() error {
+			return health.NewProvider().Refresh()
+		},
 	}
 }
 

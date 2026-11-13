@@ -30,6 +30,8 @@ import (
 const (
 	// checkUpdateFlag runs the detached update check.
 	checkUpdateFlag string = "--check-update"
+	// forceCheckFlag runs the check by hand, even before next_attempt_at.
+	forceCheckFlag string = "--check-update=force"
 	// applyUpdateFlag runs the detached install of one release: --apply-update=<tag>.
 	applyUpdateFlag string = "--apply-update="
 	// updatingEnv marks a detached updater child, so it never spawns another.
@@ -130,21 +132,48 @@ func run(args []string, stdin io.Reader, stdout io.Writer, d *deps) (code int) {
 // Returns:
 //   - bool: true when arg was a flag and has been handled
 func runFlag(arg string, stdout io.Writer, d *deps) bool {
-	switch {
+	switch arg {
 	// Print the version and exit
-	case arg == "-v" || arg == "--version":
+	case "-v", "--version":
 		printVersion(stdout, d.version)
 	// Refresh the usage cache out of band and exit
-	case arg == "--refresh-usage":
+	case "--refresh-usage":
 		// A refresh failure only leaves the cache stale
-		_ = usage.NewProvider().Refresh()
+		if err := d.refreshUsage(); err != nil {
+			fmt.Fprintln(d.stderr, "status-line: usage:", err)
+		}
 	// Refresh the service health cache out of band and exit
-	case arg == health.RefreshFlag:
+	case health.RefreshFlag:
 		// A refresh failure only leaves the cache stale
-		_ = health.NewProvider().Refresh()
+		if err := d.refreshHealth(); err != nil {
+			fmt.Fprintln(d.stderr, "status-line: health:", err)
+		}
+	// The updater's own flags, or a frame
+	default:
+		return runUpdateFlag(arg, d)
+	}
+	return true
+}
+
+// runUpdateFlag runs one of the updater's flags.
+//
+// Params:
+//   - arg: first command-line argument
+//   - d: version, clock and stderr
+//
+// Returns:
+//   - bool: true when arg was an updater flag and has been handled
+func runUpdateFlag(arg string, d *deps) bool {
+	switch {
 	// Detached check, applying a newer release in the same process
 	case arg == checkUpdateFlag:
 		runUpdater(d, func(cfg updater.Config) error { return updater.Check(cfg) })
+	// Manual check that ignores next_attempt_at
+	case arg == forceCheckFlag:
+		runUpdater(d, func(cfg updater.Config) error {
+			cfg.Force = true
+			return updater.Check(cfg)
+		})
 	// Detached install of one named release
 	case strings.HasPrefix(arg, applyUpdateFlag):
 		tag := strings.TrimPrefix(arg, applyUpdateFlag)

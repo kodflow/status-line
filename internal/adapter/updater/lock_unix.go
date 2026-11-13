@@ -35,7 +35,7 @@ func withLock(dir string, fn func() error) (err error) {
 	file, err := os.OpenFile(filepath.Join(dir, lockFileName), os.O_CREATE|os.O_RDWR, lockPerm)
 	// Without a lock file there is no way to serialise: refuse
 	if err != nil {
-		return fmt.Errorf("opening lock: %w", err)
+		return fmt.Errorf("%w: %w", errLockUnusable, err)
 	}
 	defer func() {
 		// Releasing the lock cannot fail in a way worth more than fn's error

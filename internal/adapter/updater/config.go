@@ -16,6 +16,9 @@ type Config struct {
 	Version string
 	// Now is the clock, time.Now when nil.
 	Now func() time.Time
+	// Force runs a check even before next_attempt_at, for a manual
+	// --check-update=force; frames never set it.
+	Force bool
 }
 
 // dir is the directory holding the binary, its state and its lock.

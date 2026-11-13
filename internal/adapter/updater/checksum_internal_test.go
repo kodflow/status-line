@@ -129,7 +129,7 @@ func TestDownloadAndReplace_RejectsMismatch(t *testing.T) {
 }
 
 func TestDownloadAndReplace_AcceptsMatch(t *testing.T) {
-	payload := []byte("the real binary")
+	payload := fakeBinary("v1.0.1")
 	srv := serveRelease(t, payload, digestOf(payload), http.StatusOK)
 
 	saved := downloadURLFor

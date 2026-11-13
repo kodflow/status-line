@@ -56,10 +56,13 @@ func Allowed(version, dir string) bool {
 //   - now: current time
 //
 // Returns:
-//   - bool: true once now reaches NextAttemptAt
+//   - bool: true once now reaches NextAttemptAt, or when NextAttemptAt lies
+//     beyond the longest wait ever recorded
 func (s *State) Due(now time.Time) bool {
-	// A zero date, from a missing or broken file, is always due
-	return !now.Before(s.NextAttemptAt)
+	// A zero date, from a missing or broken file, is always due; so is a
+	// date further out than any wait we ever record, which only a clock set
+	// in the future could have written and which would stop updates for good
+	return !now.Before(s.NextAttemptAt) || s.NextAttemptAt.After(now.Add(maxRetryWait))
 }
 
 // Pill derives the update pill from the cached state.

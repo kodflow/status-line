@@ -71,10 +71,17 @@ sur le poste, v0.20.7/v0.20.8 jamais installées). Désormais :
   build dev, ni si le dossier n'est pas inscriptible.
 - `adapter/updater` : `Check` et `Apply` tiennent un `flock LOCK_EX|LOCK_NB`
   sur `.status-line-update.lock` (`lock_unix.go`, `linux || darwin` ; stub
-  ailleurs : rien n'est remplacé sous Windows). `Check` écrit
-  `next_attempt_at` avant l'appel (succès +1 h ; échec 5 min doublés jusqu'à
-  1 h ; 403/429 : `Retry-After` puis `X-RateLimit-Reset`, plafond 24 h), valide
+  ailleurs : rien n'est remplacé sous Windows ; un fichier de verrou
+  impossible à ouvrir repousse `next_attempt_at` d'1 h). Sous le verrou, `Check`
+  supprime les temporaires d'état orphelins, relit l'état et sort s'il n'est
+  plus dû (sauf `--check-update=force`), écrit `next_attempt_at` avant l'appel
+  (succès +1 h ; échec 5 min doublés jusqu'à 1 h ; 403/429 : `Retry-After` puis
+  `X-RateLimit-Reset` ne font qu'allonger ce délai, plafond 24 h), valide
   `^v\d+\.\d+\.\d+$`, et applique un tag plus récent dans le même processus.
+  `Due` tient pour périmé un `next_attempt_at` à plus de 24 h (horloge dans le
+  futur). Avant le `rename`, le binaire téléchargé est lancé avec `--version`
+  (5 s) et doit annoncer le tag attendu (poste sans AVX2, `-X main.version`
+  erroné).
   L'état s'écrit en `.status-line-update.json.tmp-<pid>` puis `rename` : le point
   initial le tient hors du nettoyage des `status-line-update-*` de plus d'1 h.
   `apiURL` et `downloadURLFor` sont des variables pour les tests.

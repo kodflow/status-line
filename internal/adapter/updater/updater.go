@@ -247,6 +247,10 @@ func (u *Updater) downloadAndReplace(version string) error {
 	// exactly what landed on disk rather than what was meant to
 	hasher := sha256.New()
 	_, err = io.Copy(io.MultiWriter(tmpFile, hasher), resp.Body)
+	// Flush to disk before the rename can make it the binary
+	if err == nil {
+		err = tmpFile.Sync()
+	}
 	tmpFile.Close()
 	// Check for write errors
 	if err != nil {
@@ -265,13 +269,37 @@ func (u *Updater) downloadAndReplace(version string) error {
 		return fmt.Errorf("checksum mismatch: expected %s, got %s", expected, actual)
 	}
 
+	// Make it the binary only once it proved it runs
+	return commit(tmpPath, execPath, version)
+}
+
+// commit makes a verified download the binary: chmod, a trial run, rename.
+// The download is removed on any failure, leaving the running binary as is.
+//
+// Params:
+//   - tmpPath: the verified download
+//   - execPath: the binary to replace
+//   - version: the release it must report
+//
+// Returns:
+//   - error: any chmod, trial-run or rename error
+func commit(tmpPath, execPath, version string) error {
 	// Make executable
-	err = os.Chmod(tmpPath, executablePerm)
+	err := os.Chmod(tmpPath, executablePerm)
 	// Check for chmod errors
 	if err != nil {
 		os.Remove(tmpPath)
 		// Return chmod error
 		return fmt.Errorf("setting permissions: %w", err)
+	}
+
+	// Run it once before it replaces anything: an asset that dies at load
+	// (a CPU feature this machine lacks) or that was built with the wrong
+	// version would otherwise break, or re-download, on every redraw
+	if err := probeVersion(tmpPath, version); err != nil {
+		os.Remove(tmpPath)
+		// Return probe error
+		return err
 	}
 
 	// Replace old binary

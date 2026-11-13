@@ -72,11 +72,23 @@ func testDeps(t *testing.T, log *[]string) *deps {
 		traceWrite: func(trace.Frame) {},
 		stderr:     &strings.Builder{},
 		now:        time.Now,
+		refreshUsage: func() error {
+			*log = append(*log, "refresh usage")
+			return nil
+		},
+		refreshHealth: func() error {
+			*log = append(*log, "refresh health")
+			return nil
+		},
 	}
 }
 
 func TestFlagsNeverReadStdin(t *testing.T) {
-	for _, flag := range []string{"--version", "-v", "--check-update", "--apply-update=v9.9.9"} {
+	wants := map[string]string{
+		"--version": "", "-v": "", "--check-update": "", "--check-update=force": "", "--apply-update=v9.9.9": "",
+		"--refresh-usage": "refresh usage", "--refresh-health": "refresh health",
+	}
+	for flag, want := range wants {
 		t.Run(flag, func(t *testing.T) {
 			var log []string
 			d := testDeps(t, &log)
@@ -86,8 +98,8 @@ func TestFlagsNeverReadStdin(t *testing.T) {
 			if code := run([]string{flag}, refuseStdin{t}, &out, d); code != 0 {
 				t.Errorf("exit %d, want 0", code)
 			}
-			if len(log) != 0 {
-				t.Errorf("a flag rendered or spawned: %v", log)
+			if strings.Join(log, ",") != want {
+				t.Errorf("calls = %v, want only %q", log, want)
 			}
 			if strings.HasPrefix(flag, "-v") || flag == "--version" {
 				if out.String() != "status-line v1.0.0\n" {

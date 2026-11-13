@@ -73,8 +73,17 @@ func Check(cfg Config) error {
 	if !enabled(cfg.Version) {
 		return nil
 	}
+	err := withLock(cfg.dir(), func() error { return checkLocked(cfg) })
+	// A lock file that cannot even be opened would fail every child the
+	// same way: hold frames off for the longest backoff instead of letting
+	// each one spawn another child
+	if errors.Is(err, errLockUnusable) {
+		st := ReadState(cfg.dir())
+		st.NextAttemptAt = cfg.now().Add(maxBackoff)
+		return errors.Join(err, writeState(cfg.dir(), &st))
+	}
 	// Another child already at work makes this one leave at once
-	return withLock(cfg.dir(), func() error { return checkLocked(cfg) })
+	return err
 }
 
 // checkLocked runs the check; the caller holds the lock.
@@ -86,7 +95,12 @@ func Check(cfg Config) error {
 //   - error: why nothing was checked or applied, nil when up to date
 func checkLocked(cfg Config) error {
 	dir := cfg.dir()
+	removeStateTemps(dir)
 	st := ReadState(dir)
+	// A child that waited behind another finds the check already done
+	if !cfg.Force && !st.Due(cfg.now()) {
+		return nil
+	}
 	// Assume the worst before the request: a child killed during it must
 	// still push the next attempt out
 	st.NextAttemptAt = cfg.now().Add(failureBackoff(st.Failures))
@@ -133,8 +147,8 @@ func recordCheckFailure(st *State, err error, now time.Time) {
 	st.NextAttemptAt = now.Add(failureBackoff(st.Failures))
 	st.Failures++
 	var refused *statusError
-	// A rate limit says how long to wait: honour it over our own backoff
-	if errors.As(err, &refused) && !refused.retryAt.IsZero() &&
+	// A rate limit can only lengthen our own backoff, never shorten it
+	if errors.As(err, &refused) && refused.retryAt.After(st.NextAttemptAt) &&
 		(refused.code == http.StatusForbidden || refused.code == http.StatusTooManyRequests) {
 		st.NextAttemptAt = refused.retryAt
 	}
@@ -176,6 +190,7 @@ func applyLocked(cfg Config, tag string) error {
 		return nil
 	}
 	dir := cfg.dir()
+	removeStateTemps(dir)
 	sweep(dir, cfg.now())
 	err := newUpdater(cfg.Version, cfg.ExecPath, applyTimeout).downloadAndReplace(tag)
 	st := ReadState(dir)
@@ -214,5 +229,22 @@ func sweep(dir string, now time.Time) {
 		}
 		// A file that cannot be removed is retried at the next apply
 		os.Remove(filepath.Join(dir, e.Name()))
+	}
+}
+
+// removeStateTemps removes the state temporaries a killed child left behind.
+// The caller holds the lock, so no other writer can own one.
+//
+// Params:
+//   - dir: directory holding the binary
+func removeStateTemps(dir string) {
+	leftovers, err := filepath.Glob(filepath.Join(dir, stateTempPrefix+"*"))
+	// A malformed pattern cannot happen with a constant prefix
+	if err != nil {
+		return
+	}
+	for _, path := range leftovers {
+		// A temporary that cannot be removed is overwritten by the next write
+		os.Remove(path)
 	}
 }

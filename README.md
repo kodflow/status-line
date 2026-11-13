@@ -135,16 +135,22 @@ binary (`os.Executable()` resolved through its symlinks), and only when its
 --check-update`, in its own session. That child:
 
 - takes a non-blocking `flock` on `.status-line-update.lock` (another child at
-  work: it exits);
+  work: it exits; a lock file it cannot even open pushes the next attempt out
+  by an hour), then re-reads the state and leaves if the check is no longer
+  due, so two children spawned back to back make one request
+  (`--check-update=force` skips that test, for a manual run);
 - records `next_attempt_at` **before** the request, so a killed child still
   holds frames off: +1 h after a success, 5 min doubled up to 1 h after
-  failures in a row, or what `Retry-After` / `X-RateLimit-Reset` asks on a 403
-  or 429;
+  failures in a row, lengthened (never shortened) by `Retry-After` /
+  `X-RateLimit-Reset` on a 403 or 429. A `next_attempt_at` more than 24 h
+  ahead, which only a clock set in the future could write, counts as stale;
 - asks the GitHub API (10 s), accepts only a `vMAJOR.MINOR.PATCH` tag, records
   `check_error` on any failure and clears it on success;
 - when the tag is newer, installs it in the same process under the same lock:
   sweeps `status-line-update-*` partial downloads older than an hour,
-  downloads (2 min), verifies the checksum, `chmod`, `rename`, and records or
+  downloads (2 min), verifies the checksum, `chmod`, runs the download once
+  with `--version` and requires it to name the tag (an asset that dies at load,
+  or one built with the wrong version, is refused), `rename`, and records or
   clears `apply_error`.
 
 `status-line --apply-update=<tag>` is the same install as a standalone entry

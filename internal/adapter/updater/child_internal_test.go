@@ -97,6 +97,11 @@ func binary(t *testing.T, cfg Config) string {
 
 var epoch = time.Date(2026, 11, 13, 12, 0, 0, 0, time.UTC)
 
+// fakeBinary is a release asset that answers --version with the given text.
+func fakeBinary(version string) []byte {
+	return []byte("#!/bin/sh\necho 'status-line " + version + "'\n")
+}
+
 func TestCheckRecordsNextAttemptBeforeTheRequest(t *testing.T) {
 	c := &clock{t: epoch}
 	cfg := install(t, "v1.0.0", c)
@@ -150,7 +155,8 @@ func TestCheckHonoursRateLimits(t *testing.T) {
 		header http.Header
 		want   time.Duration
 	}{
-		{name: "403 Retry-After seconds", status: http.StatusForbidden, header: http.Header{"Retry-After": {"120"}}, want: 2 * time.Minute},
+		{name: "403 Retry-After seconds", status: http.StatusForbidden, header: http.Header{"Retry-After": {"600"}}, want: 10 * time.Minute},
+		{name: "429 Retry-After shorter than the backoff", status: http.StatusTooManyRequests, header: http.Header{"Retry-After": {"1"}}, want: firstBackoff},
 		{name: "429 Retry-After date", status: http.StatusTooManyRequests, header: http.Header{"Retry-After": {epoch.Add(30 * time.Minute).Format(http.TimeFormat)}}, want: 30 * time.Minute},
 		{name: "403 X-RateLimit-Reset", status: http.StatusForbidden, header: http.Header{"X-Ratelimit-Reset": {strconv.FormatInt(epoch.Add(45*time.Minute).Unix(), 10)}}, want: 45 * time.Minute},
 		{name: "403 without a hint", status: http.StatusForbidden, want: firstBackoff},
@@ -192,7 +198,7 @@ func TestCheckRefusesAnInvalidTag(t *testing.T) {
 func TestCheckAppliesANewerReleaseInTheSameProcess(t *testing.T) {
 	c := &clock{t: epoch}
 	cfg := install(t, "v1.0.0", c)
-	payload := []byte("v1.1.0 binary")
+	payload := fakeBinary("v1.1.0")
 	r := &release{tag: "v1.1.0", payload: payload, checksum: digestOf(payload)}
 	r.serve(t)
 
@@ -310,7 +316,7 @@ func TestApplyRecordsABadChecksum(t *testing.T) {
 	}
 
 	// A good release later clears the error
-	payload := []byte("genuine")
+	payload := fakeBinary("v1.1.0")
 	r.payload, r.checksum = payload, digestOf(payload)
 	if err := Apply(cfg, "v1.1.0"); err != nil {
 		t.Fatalf("Apply() = %v", err)
@@ -418,5 +424,183 @@ func TestAHalfWrittenStateIsStale(t *testing.T) {
 	st := ReadState(dir)
 	if st.Tag != "" || !st.Due(epoch) {
 		t.Errorf("half-written state read as %+v", st)
+	}
+}
+
+func TestRateLimitOfOneSecondStillWaitsTheBackoff(t *testing.T) {
+	c := &clock{t: epoch}
+	cfg := install(t, "v1.0.0", c)
+	r := &release{status: http.StatusTooManyRequests, header: http.Header{"Retry-After": {"1"}}}
+	r.serve(t)
+	for range 100 {
+		st := ReadState(cfg.dir())
+		if Allowed(cfg.Version, cfg.dir()) && st.Due(c.now()) {
+			_ = Check(cfg)
+		}
+		c.advance(time.Second)
+	}
+	if n := r.apiCalls.Load(); n != 1 {
+		t.Errorf("%d API calls in 100 s, want 1", n)
+	}
+}
+
+func TestAStateFromTheFarFutureIsStale(t *testing.T) {
+	st := State{NextAttemptAt: epoch.AddDate(5, 0, 0)}
+	if !st.Due(epoch) {
+		t.Error("a next attempt 5 years ahead stops self-update for good")
+	}
+	st = State{NextAttemptAt: epoch.Add(maxRetryWait)}
+	if st.Due(epoch) {
+		t.Error("the longest legitimate wait was treated as stale")
+	}
+}
+
+func TestBackToBackChildrenMakeOneCall(t *testing.T) {
+	c := &clock{t: epoch}
+	cfg := install(t, "v1.0.0", c)
+	r := &release{tag: "v1.0.0"}
+	r.serve(t)
+	// Two children spawned by two frames: the second runs once the first
+	// released the lock and finds the check already done
+	_ = Check(cfg)
+	_ = Check(cfg)
+	if n := r.apiCalls.Load(); n != 1 {
+		t.Errorf("%d API calls, want 1", n)
+	}
+	// A manual forced check still goes through
+	cfg.Force = true
+	_ = Check(cfg)
+	if n := r.apiCalls.Load(); n != 2 {
+		t.Errorf("%d API calls after a forced check, want 2", n)
+	}
+}
+
+func TestAnUnopenableLockHoldsFramesOff(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root opens any file")
+	}
+	c := &clock{t: epoch}
+	cfg := install(t, "v1.0.0", c)
+	r := &release{tag: "v1.0.0"}
+	r.serve(t)
+	// A lock file left by another user, unreadable to this one
+	if err := os.WriteFile(filepath.Join(cfg.dir(), lockFileName), nil, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	spawns := 0
+	for range 100 {
+		st := ReadState(cfg.dir())
+		if Allowed(cfg.Version, cfg.dir()) && st.Due(c.now()) {
+			spawns++
+			_ = Check(cfg)
+		}
+		c.advance(time.Second)
+	}
+	if spawns != 1 || r.apiCalls.Load() != 0 {
+		t.Errorf("%d spawns and %d API calls in 100 s, want 1 and 0", spawns, r.apiCalls.Load())
+	}
+	if got := ReadState(cfg.dir()).NextAttemptAt; !got.Equal(epoch.Add(maxBackoff)) {
+		t.Errorf("next_attempt_at = %v, want +%v", got, maxBackoff)
+	}
+}
+
+func TestApplyRefusesABinaryReportingAnotherVersion(t *testing.T) {
+	tests := []struct {
+		name    string
+		payload []byte
+	}{
+		{name: "wrong version", payload: fakeBinary("v1.0.0")},
+		{name: "dies at load", payload: []byte("#!/bin/sh\nexit 132\n")},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &clock{t: epoch}
+			cfg := install(t, "v1.0.0", c)
+			r := &release{tag: "v1.1.0", payload: tt.payload, checksum: digestOf(tt.payload)}
+			r.serve(t)
+			if err := Check(cfg); err == nil {
+				t.Fatal("Check() installed a binary that failed its trial run")
+			}
+			if binary(t, cfg) != "original" {
+				t.Error("binary replaced despite a failed trial run")
+			}
+			if st := ReadState(cfg.dir()); st.ApplyError == "" {
+				t.Errorf("state = %+v, want an apply error", st)
+			}
+			entries, _ := os.ReadDir(cfg.dir())
+			for _, e := range entries {
+				if len(e.Name()) > len(tempPrefix) && e.Name()[:len(tempPrefix)] == tempPrefix {
+					t.Errorf("download %s left behind", e.Name())
+				}
+			}
+		})
+	}
+}
+
+func TestCheckRemovesLeftoverStateTemporaries(t *testing.T) {
+	c := &clock{t: epoch}
+	cfg := install(t, "v1.0.0", c)
+	(&release{tag: "v1.0.0"}).serve(t)
+	leftover := filepath.Join(cfg.dir(), stateTempPrefix+"99999")
+	if err := os.WriteFile(leftover, []byte("{"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := Check(cfg); err != nil {
+		t.Fatalf("Check() = %v", err)
+	}
+	if _, err := os.Stat(leftover); !os.IsNotExist(err) {
+		t.Error("a leftover state temporary survived the check")
+	}
+}
+
+func TestCheckWithANewerTagSweepsStaleDownloads(t *testing.T) {
+	c := &clock{t: epoch}
+	cfg := install(t, "v1.0.0", c)
+	payload := fakeBinary("v1.1.0")
+	(&release{tag: "v1.1.0", payload: payload, checksum: digestOf(payload)}).serve(t)
+	stale := filepath.Join(cfg.dir(), tempPrefix+"x")
+	if err := os.WriteFile(stale, []byte("partial"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	old := epoch.Add(-2 * time.Hour)
+	_ = os.Chtimes(stale, old, old)
+	if err := Check(cfg); err != nil {
+		t.Fatalf("Check() = %v", err)
+	}
+	if _, err := os.Stat(stale); !os.IsNotExist(err) {
+		t.Error("the apply did not sweep a stale partial download")
+	}
+}
+
+func TestWriteStateIsTempThenRename(t *testing.T) {
+	dir := t.TempDir()
+	first := State{Tag: "v1.0.0"}
+	if err := writeState(dir, &first); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan struct{})
+	var torn atomic.Int32
+	go func() {
+		defer close(done)
+		// A reader racing the writer sees a whole state every time
+		for range 2000 {
+			if st := ReadState(dir); st.Tag == "" {
+				torn.Add(1)
+			}
+		}
+	}()
+	for i := range 2000 {
+		st := State{Tag: fmt.Sprintf("v1.0.%d", i), CheckError: string(make([]byte, i%512))}
+		if err := writeState(dir, &st); err != nil {
+			t.Fatal(err)
+		}
+	}
+	<-done
+	if n := torn.Load(); n != 0 {
+		t.Errorf("a reader saw a partial state %d times", n)
+	}
+	entries, _ := os.ReadDir(dir)
+	if len(entries) != 1 || entries[0].Name() != stateFileName {
+		t.Errorf("directory holds %d entries, want only the state file", len(entries))
 	}
 }
