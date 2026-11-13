@@ -226,6 +226,25 @@ func TestWeightsFromEnv(t *testing.T) {
 	}
 }
 
+func TestUpdateWeightFromEnvAndFailedWeights(t *testing.T) {
+	// The update pill takes a weight from the environment like any segment
+	if got := weightsFromEnv("update=7")[segUpdate]; got != 7 {
+		t.Errorf("weightsFromEnv(update=7) = %d, want 7", got)
+	}
+	// Its failure variant never weighs less than updateFailedWeight, and a
+	// higher user weight is kept as is
+	for _, tt := range []struct{ weight, want int }{{7, updateFailedWeight}, {500, 500}} {
+		var w [segCount]int
+		w[segUpdate] = tt.weight
+		if got := failedWeights(w)[segUpdate]; got != tt.want {
+			t.Errorf("failedWeights(update=%d) = %d, want %d", tt.weight, got, tt.want)
+		}
+	}
+	if updateFailedWeight != 345 {
+		t.Errorf("updateFailedWeight = %d, the documentation says 345", updateFailedWeight)
+	}
+}
+
 func TestWeightOverrideReordersTheSteps(t *testing.T) {
 	w := weightsFromEnv("context=65,weekly=5")
 	steps, _ := buildFitLevels(w)
