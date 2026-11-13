@@ -33,16 +33,18 @@ const (
 	// updateFailedWeight is the weight of the update pill in its failure
 	// variant. It sits above the first pass, so the bars, the path and the
 	// branch shrink before a pill that says the bar stopped updating itself;
-	// and below the OS step, so the health light still outlives it.
+	// and, with the default weights, below the OS step, so the health light
+	// still outlives it. A higher user weight for "update" is kept as is
+	// (failedWeights takes the max), and may then pass the OS step.
 	updateFailedWeight int = 345
 )
 
-// segID names a line-one segment that can shrink. Every segment of line one
-// is one, the OS segment included: a segment that could not shrink left the
+// segID names a segment of the line that can shrink. Every segment of the
+// line is one, the OS segment included: a segment that could not shrink left the
 // line wider than the host's box, which the host then cut on every redraw.
 type segID int
 
-// Shrinkable segments of line one.
+// Shrinkable segments of the line.
 const (
 	segContext segID = iota
 	segScoped
@@ -74,7 +76,7 @@ var (
 	branchBudgets = [...]int{0, 20, 12, 8}
 )
 
-// condensePolicy is the condensing policy of line one, one row per segment.
+// condensePolicy is the condensing policy of the line, one row per segment.
 //
 // The condenser works in passes: pass n lowers every segment that still has
 // an n-th step by one level, lowest weight first, and stops as soon as the
@@ -385,7 +387,7 @@ func presentSegments(data model.StatusLineData) [segCount]bool {
 	return present
 }
 
-// Condensed describes where line one stands after fitting the data:
+// Condensed describes where the line stands after fitting the data:
 // "context: icon + %", one entry per segment that shrank, in policy order.
 //
 // Params:
@@ -412,7 +414,7 @@ func Condensed(data model.StatusLineData) []string {
 	return out
 }
 
-// LineBudget returns the columns line one may take, for a caller outside the
+// LineBudget returns the columns the line may take, for a caller outside the
 // package — the byte trace, which records the budget beside the width actually
 // emitted so an overflowing frame says so on its own.
 //
@@ -425,7 +427,7 @@ func LineBudget(width int) int {
 	return lineBudget(width)
 }
 
-// lineBudget returns the columns line one may take.
+// lineBudget returns the columns the line may take.
 //
 // The margin is not a guess: the host lays the status line out in a box of
 // `terminal columns - 2 * 2` (measured in Claude Code 2.1.283) and truncates
@@ -445,18 +447,19 @@ func lineBudget(width int) int {
 	return max(width-lineMargin, 1)
 }
 
-// fitLine1 renders line one at the first level that fits the budget.
+// fitLine1 renders the line at the first level that fits the budget.
 //
 // Every state only gives up more than the one before it, so the widths
 // never grow along them; the result is the one a step-by-step walk that
 // re-measures after each step would reach, and the first level that fits is found by
 // bisection: the full line first (the usual case, one render), then at
-// most four more renders over the remaining levels.
+// most five bisection probes over the remaining levels, plus one redraw of
+// the last level when none of them fits.
 //
 // Params:
-//   - budget: cells line one may take, 0 for no limit
+//   - budget: cells the line may take, 0 for no limit
 //   - levels: the ladder to walk, fitLevels or failLevels
-//   - render: draws line one with the given fit
+//   - render: draws the line with the given fit
 //
 // Returns:
 //   - string: the rendered line

@@ -46,7 +46,7 @@ type Frame struct {
 	Err error
 	// Elapsed is how long the frame took to build.
 	Elapsed time.Duration
-	// Budget is the cells the condenser was told line one could take. It is
+	// Budget is the cells the condenser was told the line could take. It is
 	// also the width the host lays the status line out in, so a frame wider
 	// than this is one the host truncates.
 	Budget int
@@ -139,7 +139,7 @@ func record(f Frame) string {
 	sb.WriteString(" lines=" + strconv.Itoa(strings.Count(f.Out, "\n")))
 	sb.WriteString(" cols=" + columns())
 	// The two numbers this whole hunt turned on: what the condenser aimed at,
-	// and what line one actually came out as
+	// and what the line actually came out as
 	sb.WriteString(" budget=" + strconv.Itoa(f.Budget))
 	sb.WriteString(" emitted=" + strconv.Itoa(f.Emitted))
 	sb.WriteString(" cut=" + yesNo(f.overflows()))
