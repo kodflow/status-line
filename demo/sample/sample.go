@@ -11,7 +11,7 @@ import (
 
 // Data returns a busy session: Opus 5 at effort xhigh, session, weekly and
 // Opus-scoped quotas with their windows, 42 % of the context, a long path,
-// a long branch and +12 -3 of changes.
+// a long branch, +12 -3 of changes and an update waiting to be applied.
 //
 // Returns:
 //   - model.StatusLineData: state to render
@@ -36,15 +36,6 @@ func Data() model.StatusLineData {
 		Dir:     filepath.Join(home, "Documents", "worktrees", "status-line-adaptive", "internal", "presentation", "renderer"),
 		Git:     model.GitStatus{Branch: "feat/adaptive-line-condense-to-terminal-width", Modified: 3, Untracked: 1},
 		Changes: model.CodeChanges{Added: 12, Removed: 3},
-		MCP: model.MCPServers{
-			{Name: "github", Enabled: true, Source: model.MCPSourceCLI},
-			{Name: "gitlab", Enabled: true, Source: model.MCPSourceCLI},
-			{Name: "context7", Enabled: true, Source: model.MCPSourceCLI},
-			{Name: "playwright", Enabled: true, Source: model.MCPSourceCLI},
-			{Name: "grepai", Enabled: true, Source: model.MCPSourceCLI},
-			{Name: "GitKraken", Enabled: true, Source: model.MCPSourceUser},
-			{Name: "tasks", Enabled: true, Source: model.MCPSourcePlugin, Plugin: "kodflow-hooks"},
-			{Name: "legacy", Enabled: false, Source: model.MCPSourceUser},
-		},
+		Update:  model.UpdateInfo{Available: true, Version: "v0.30.0"},
 	}
 }

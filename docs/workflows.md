@@ -81,7 +81,7 @@ Single static binary distribution.
   publishes the release, and dispatches a rebuild event to
   `kodflow/devcontainer-template`.
 - **Self-update** — `internal/adapter/updater` polls the GitHub
-  Releases API and surfaces an update segment on line 2 when a newer
+  Releases API and surfaces an update pill at the end of the line when a newer
   version is available. The user runs `status-line --update` (or the
   shipped equivalent) to swap the binary in place.
 

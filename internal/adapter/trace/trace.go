@@ -46,20 +46,15 @@ type Frame struct {
 	Err error
 	// Elapsed is how long the frame took to build.
 	Elapsed time.Duration
-	// ChipLit is true when the MCP indicator was drawn as a lit chip: the
-	// one place in the line that opens a ground of its own mid-segment, and
-	// so the only frame worth hunting for in a long trace.
-	ChipLit bool
-	// Budget is the cells the condenser was told line one could take. It is
+	// Budget is the cells the condenser was told the line could take. It is
 	// also the width the host lays the status line out in, so a frame wider
 	// than this is one the host truncates.
 	Budget int
-	// Emitted is the cells line one actually takes. Line two is never
-	// condensed, so only line one has a budget to be judged against.
+	// Emitted is the cells the line actually takes.
 	Emitted int
 }
 
-// overflows reports whether line one came out wider than the host's box.
+// overflows reports whether the line came out wider than the host's box.
 //
 // Returns:
 //   - bool: true when the host has to truncate this frame
@@ -81,13 +76,9 @@ func (f Frame) cutShort() bool {
 //
 // Almost every frame is the bar being right, and a trace of those proves
 // nothing while filling a disk: 152 367 records over fifteen hours on the
-// workstation, 192 MB, the cap reached — and nine of them carried a lit chip.
-// Only four kinds of frame can settle where a colour that escaped its segment
-// came from:
+// workstation, 192 MB, the cap reached. Only three kinds of frame can settle
+// where a colour that escaped its segment came from:
 //
-//   - the MCP chip lit, at any rung of the OS ladder: the one ground in the
-//     line that is not its segment's own, so the only one a cut could leave
-//     open over the rest of the row;
 //   - a write that went out in part, which is the cut being ours;
 //   - a write that errored, for the same reason;
 //   - a line wider than the host's box, which is the host cutting it.
@@ -95,7 +86,7 @@ func (f Frame) cutShort() bool {
 // Returns:
 //   - bool: true when the frame is worth the disk it would take
 func (f Frame) worthKeeping() bool {
-	return f.ChipLit || f.cutShort() || f.overflows()
+	return f.cutShort() || f.overflows()
 }
 
 // Write appends one frame to the trace file, if one is configured.
@@ -148,11 +139,10 @@ func record(f Frame) string {
 	sb.WriteString(" lines=" + strconv.Itoa(strings.Count(f.Out, "\n")))
 	sb.WriteString(" cols=" + columns())
 	// The two numbers this whole hunt turned on: what the condenser aimed at,
-	// and what line one actually came out as
+	// and what the line actually came out as
 	sb.WriteString(" budget=" + strconv.Itoa(f.Budget))
 	sb.WriteString(" emitted=" + strconv.Itoa(f.Emitted))
 	sb.WriteString(" cut=" + yesNo(f.overflows()))
-	sb.WriteString(" chip=" + chipState(f.ChipLit))
 	sb.WriteString(" render=" + strconv.FormatInt(f.Elapsed.Microseconds(), 10) + "us")
 	sb.WriteString(" err=" + writeError(f.Err) + "\n")
 	sb.WriteString(f.Out)
@@ -186,21 +176,6 @@ func yesNo(on bool) string {
 		return "yes"
 	}
 	return "no"
-}
-
-// chipState names whether the MCP indicator was lit.
-//
-// Params:
-//   - lit: true while a call was in flight
-//
-// Returns:
-//   - string: "lit" or "rest"
-func chipState(lit bool) string {
-	// A lit frame is the rare one; name it so a trace can be grepped for it
-	if lit {
-		return "lit"
-	}
-	return "rest"
 }
 
 // writeError renders the write error for the header.

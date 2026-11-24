@@ -29,10 +29,6 @@ type GlyphSet struct {
 	Cost      string
 	Health    string
 	Worktree  string
-	TaskOpen  string
-	TaskDone  string
-	Subagents string
-	MCP       string
 }
 
 // nerdGlyphs is the default set, drawn from the Nerd Font ranges.
@@ -53,10 +49,6 @@ var nerdGlyphs = GlyphSet{
 	Cost:      "\uf155",
 	Health:    "\U000F0674",
 	Worktree:  "\uf126",
-	TaskOpen:  "\u25a1",
-	TaskDone:  "\u25a0",
-	Subagents: "\U000F06A9",
-	MCP:       "\U000F048D",
 }
 
 // textGlyphs is the fallback set: nothing outside printable ASCII, so it
@@ -78,10 +70,6 @@ var textGlyphs = GlyphSet{
 	Cost:      "$",
 	Health:    "*",
 	Worktree:  "wt",
-	TaskOpen:  "-",
-	TaskDone:  "#",
-	Subagents: "agents",
-	MCP:       "MCP",
 }
 
 // glyphs is the active set, resolved once at startup.

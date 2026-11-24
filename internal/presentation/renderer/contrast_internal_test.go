@@ -77,14 +77,8 @@ func TestEverySegmentInkIsReadableOnItsOwnGround(t *testing.T) {
 		{name: "git", bg: BgGit, fg: FgGitInk},
 		{name: "lines added", bg: BgGreen, fg: FgGreenText},
 		{name: "lines removed", bg: BgRed, fg: FgRedText},
-		{name: "mcp pill", bg: BgMCPEnabled, fg: FgMCPEnabledText},
-		{name: "mcp pill, disabled count", bg: BgMCPEnabled, fg: FgMCPMuted},
-		{name: "mcp pill during a call", bg: BgMCPLabel, fg: FgWhite},
-		{name: "mcp pill during a call, disabled count", bg: BgMCPLabel, fg: FgMCPEnabled},
-		{name: "mcp glyph in the os segment", bg: BgWhite, fg: FgMCPOnWhite},
-		{name: "mcp count in the os segment", bg: BgWhite, fg: FgBlack},
-		{name: "mcp disabled count in the os segment", bg: BgWhite, fg: FgMCPMutedOnWhite},
-		{name: "epic pill", bg: BgEpic, fg: FgEpicInk},
+		{name: "update pill", bg: BgWhite, fg: FgBlack},
+		{name: "update pill, failure", bg: BgRed, fg: FgRedText},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -128,38 +122,5 @@ func TestHealthGlyphIsReadableOnTheOSGround(t *testing.T) {
 				t.Errorf("contrast %.2f:1 is below the %.1f:1 floor", got, minRatio)
 			}
 		})
-	}
-}
-
-func TestEpicCellsAreVisibleOnTheMauve(t *testing.T) {
-	// The cells are graphical objects: done and under way, in both frames and
-	// both colour depths, hold the 3:1 floor. The track of the cells not under
-	// way is deliberately pale, yet must not melt into the ground.
-	tests := []struct {
-		name string
-		fg   string
-		min  float64
-	}{
-		{name: "done", fg: FgEpicInk, min: 3.0},
-		{name: "under way", fg: epicActiveTrue, min: 3.0},
-		{name: "under way 256", fg: epicActive256, min: 3.0},
-		{name: "pulse", fg: epicPulseTrue, min: 3.0},
-		{name: "pulse 256", fg: epicPulse256, min: 3.0},
-		{name: "track", fg: epicTrackTrue, min: 1.4},
-		{name: "track 256", fg: epicTrack256, min: 1.4},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := contrast(t, tt.fg, BgEpic); got < tt.min {
-				t.Errorf("contrast %.2f:1 is below the %.1f:1 floor", got, tt.min)
-			}
-		})
-	}
-}
-
-func TestEpicPulseFramesDiffer(t *testing.T) {
-	// A pulse whose two frames are the same escape does not pulse
-	if epicActiveTrue == epicPulseTrue || epicActive256 == epicPulse256 {
-		t.Error("the plain and bright frames of the cell under way are identical")
 	}
 }

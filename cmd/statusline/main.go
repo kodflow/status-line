@@ -13,11 +13,7 @@ import (
 	"github.com/florent/status-line/internal/adapter/activity"
 	"github.com/florent/status-line/internal/adapter/git"
 	"github.com/florent/status-line/internal/adapter/health"
-	"github.com/florent/status-line/internal/adapter/mcp"
-	"github.com/florent/status-line/internal/adapter/mcpcalls"
-	"github.com/florent/status-line/internal/adapter/sessionstate"
 	"github.com/florent/status-line/internal/adapter/system"
-	"github.com/florent/status-line/internal/adapter/tasks"
 	"github.com/florent/status-line/internal/adapter/terminal"
 	"github.com/florent/status-line/internal/adapter/trace"
 	"github.com/florent/status-line/internal/adapter/updater"
@@ -111,7 +107,6 @@ func run(args []string, stdin io.Reader, stdout io.Writer, d *deps) (code int) {
 		Written: written,
 		Err:     err,
 		Elapsed: d.now().Sub(started),
-		ChipLit: renderer.ChipLit(frame),
 		Budget:  renderer.LineBudget(terminal.NewProvider().Info().Width),
 		Emitted: renderer.VisibleWidth(line1),
 	})
@@ -281,10 +276,9 @@ func fallbackFrame(v string, update model.UpdateInfo) string {
 //
 // A frame that went out in part must never be reported as a success. The host
 // reads our stdout to end of file and draws it only when we exit zero, and it
-// carries any attribute still open at the end of one line onto the next: a
-// frame cut inside the lit MCP chip — the one ground in the line that is not
-// its segment's own — would paint the rest of the bar teal until the next
-// redraw. A short write with no error of its own is therefore an error here.
+// would draw a bar cut in the middle of a segment, its ground still open,
+// until the next redraw. A short write with no error of its own is therefore
+// an error here.
 //
 // Params:
 //   - w: where the frame goes, os.Stdout in production
@@ -349,28 +343,20 @@ func readInput(stdin io.Reader) *model.Input {
 // Returns:
 //   - *application.StatusLineService: fully configured service instance
 func buildService(input *model.Input) *application.StatusLineService {
-	// MCP servers are configured for the session's own directory, while git
-	// follows wherever the session is actually working
-	sessionDir := input.WorkingDir()
-	workDir := activity.Dir(input.TranscriptPath(), sessionDir)
+	// Git follows wherever the session is actually working, not where it
+	// was started
+	workDir := activity.Dir(input.TranscriptPath(), input.WorkingDir())
 	// Without a real directory git keeps the process working directory
 	gitDir := workDir
 	if !filepath.IsAbs(gitDir) {
 		gitDir = ""
 	}
-	// The session registry names the host process, whose command line may
-	// carry MCP servers; one scan serves both adapters
-	session := sessionstate.NewProvider(input.Session())
 	deps := application.ServiceDeps{
 		Git:      git.NewRepository(gitDir),
 		System:   system.NewProvider(),
 		Terminal: terminal.NewProvider(),
-		MCP:      mcp.NewProvider(sessionDir, session.PID),
-		MCPCalls: mcpcalls.NewProvider(input.TranscriptPath(), input.Session()),
 		Usage:    usage.NewProvider(),
 		Health:   health.NewProvider(),
-		Tasks:    tasks.NewProvider(input.Session()),
-		Activity: session,
 		WorkDir:  workDir,
 		Stderr:   os.Stderr,
 	}

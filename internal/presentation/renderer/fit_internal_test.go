@@ -1,7 +1,9 @@
 package renderer
 
 import (
+	"os"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -34,12 +36,21 @@ func busyLine(width int) model.StatusLineData {
 	}
 }
 
+// stripSGR removes every SGR escape from a rendered line.
+func stripSGR(s string) string {
+	return regexp.MustCompile("\033\\[[0-9;]*m").ReplaceAllString(s, "")
+}
+
 // line1At renders line one of data at one fit level, stripped.
 func line1At(data model.StatusLineData, fit lineFit) string {
 	var sb strings.Builder
 	(&Powerline{}).renderLine1Fit(&sb, data, fit)
 	return stripSGR(sb.String())
 }
+
+// failSteps is the ladder the failure variant of the update pill walks, in
+// the order its steps are taken.
+var failSteps, _ = buildFitLevels(failedWeights(weightsFromEnv(os.Getenv(weightsEnv))))
 
 // describeSteps names each step in the order it is taken.
 func describeSteps(steps []fitStep) []string {
@@ -56,22 +67,20 @@ func TestFitStepsFollowTheUsersOrder(t *testing.T) {
 		"scoped: label + % + countdown",
 		"weekly: label + % + countdown",
 		"session: % + countdown",
+		"update: hidden",
 		"path: 20 cells",
 		"branch: 20 runes",
-		"os: health + MCP + count",
 		"scoped: label + %",
 		"weekly: label + %",
 		"session: %",
 		"path: last element",
 		"branch: 12 runes",
-		"os: health + MCP glyph",
 		"scoped: initial + %",
 		"weekly: initial + %",
 		"changes: hidden",
 		"path: hidden (inside a repository)",
 		"model: name",
 		"branch: 8 runes",
-		"os: health",
 		"os: OS icon alone",
 	}
 	if got := describeSteps(fitSteps); !reflect.DeepEqual(got, want) {
@@ -79,6 +88,94 @@ func TestFitStepsFollowTheUsersOrder(t *testing.T) {
 	}
 	if len(fitLevels) != len(fitSteps)+1 || fitLevels[0] != (lineFit{}) {
 		t.Errorf("fitLevels starts at the full line and adds one state per step")
+	}
+}
+
+// TestHealthIsTheLastStep pins the one ordering the whole ladder is built
+// around: the health light outlives every other step, on both ladders, and
+// its weight keeps it there — above the highest rank any other step reaches.
+func TestHealthIsTheLastStep(t *testing.T) {
+	for name, steps := range map[string][]fitStep{"plain": fitSteps, "update failed": failSteps} {
+		last := steps[len(steps)-1]
+		if last.seg != segOS || last.level != 1 || !(lineFit{segOS: 1}).dropHealth() {
+			t.Errorf("%s ladder: the last step is %s, want the health light", name, last.Describe())
+		}
+		// No other step touches the OS segment
+		for _, st := range steps[:len(steps)-1] {
+			if st.seg == segOS {
+				t.Errorf("%s ladder: %s comes before the end", name, st.Describe())
+			}
+		}
+	}
+	// The weight is what keeps it last: above every other step's rank
+	osWeight := condensePolicy[segOS].weight
+	for id, pol := range condensePolicy {
+		if segID(id) == segOS {
+			continue
+		}
+		if top := (len(pol.levels)-2)*passStride + pol.weight; top >= osWeight {
+			t.Errorf("%s reaches rank %d, not below the health light's %d", pol.name, top, osWeight)
+		}
+	}
+	if top := max(condensePolicy[segUpdate].weight, updateFailedWeight); top >= osWeight {
+		t.Errorf("the failed update pill reaches rank %d, not below the health light's %d", top, osWeight)
+	}
+}
+
+// TestFailedUpdateHoldsOutPastTheFirstPass asserts the weight of the pill's
+// failure variant: the plain pill gives way inside the first pass, the
+// failure variant only after it, so the bars, the path and the branch shrink
+// before a pill saying the bar no longer updates itself.
+func TestFailedUpdateHoldsOutPastTheFirstPass(t *testing.T) {
+	index := func(steps []fitStep) int {
+		for i, st := range steps {
+			if st.seg == segUpdate {
+				return i
+			}
+		}
+		return -1
+	}
+	if updateFailedWeight <= passStride {
+		t.Errorf("updateFailedWeight = %d, want it above the first pass (%d)", updateFailedWeight, passStride)
+	}
+	plain, failed := index(fitSteps), index(failSteps)
+	if plain < 0 || failed < 0 {
+		t.Fatalf("the update pill is missing from a ladder: plain %d, failed %d", plain, failed)
+	}
+	// Every first-pass step comes before the failed pill: only the segments
+	// held back by a weight above the first pass may still wait after it
+	for _, st := range failSteps[failed+1:] {
+		if st.level == 1 && condensePolicy[st.seg].weight < passStride {
+			t.Errorf("%s still waits after the failed pill gave way", st.Describe())
+		}
+	}
+	if failed <= plain {
+		t.Errorf("the failed pill gives way at step %d, the plain one at %d: it must hold out longer", failed, plain)
+	}
+	// Each ladder is chosen from the data
+	data := busyLine(0)
+	data.Update = model.UpdateInfo{Available: true, Version: "v9.9.9", Failed: true}
+	if got := levelsFor(data); &got[0] != &failLevels[0] {
+		t.Error("a failed update does not walk the failure ladder")
+	}
+	data.Update.Failed = false
+	if got := levelsFor(data); &got[0] != &fitLevels[0] {
+		t.Error("a pending update does not walk the plain ladder")
+	}
+}
+
+func TestUpdatePillGivesWay(t *testing.T) {
+	data := busyLine(0)
+	data.Update = model.UpdateInfo{Available: true, Version: "v9.9.9"}
+	if line := line1At(data, lineFit{}); !strings.HasSuffix(line, "v9.9.9 "+RightRound) {
+		t.Errorf("the pill closes the full line, got %q", line)
+	}
+	if line := line1At(data, lineFit{segUpdate: 1}); strings.Contains(line, "v9.9.9") {
+		t.Errorf("the pill is gone at its hidden level, got %q", line)
+	}
+	// The pill counts as present only when it is drawn
+	if !presentSegments(data)[segUpdate] || presentSegments(busyLine(0))[segUpdate] {
+		t.Error("presentSegments misreports the update pill")
 	}
 }
 
@@ -99,7 +196,7 @@ func TestFitPassesLowerEverySegmentOnceBeforeTwice(t *testing.T) {
 			t.Errorf("step %d (%s) should come before %s: lower weight", i, cur.Describe(), prev.Describe())
 		}
 	}
-	if steps[0].seg != segModel {
+	if steps[0].seg != segUpdate {
 		t.Errorf("the lightest segment shrinks first, got %s", steps[0].Describe())
 	}
 	// Each state differs from the previous one by exactly one level
@@ -129,6 +226,25 @@ func TestWeightsFromEnv(t *testing.T) {
 	}
 }
 
+func TestUpdateWeightFromEnvAndFailedWeights(t *testing.T) {
+	// The update pill takes a weight from the environment like any segment
+	if got := weightsFromEnv("update=7")[segUpdate]; got != 7 {
+		t.Errorf("weightsFromEnv(update=7) = %d, want 7", got)
+	}
+	// Its failure variant never weighs less than updateFailedWeight, and a
+	// higher user weight is kept as is
+	for _, tt := range []struct{ weight, want int }{{7, updateFailedWeight}, {500, 500}} {
+		var w [segCount]int
+		w[segUpdate] = tt.weight
+		if got := failedWeights(w)[segUpdate]; got != tt.want {
+			t.Errorf("failedWeights(update=%d) = %d, want %d", tt.weight, got, tt.want)
+		}
+	}
+	if updateFailedWeight != 345 {
+		t.Errorf("updateFailedWeight = %d, the documentation says 345", updateFailedWeight)
+	}
+}
+
 func TestWeightOverrideReordersTheSteps(t *testing.T) {
 	w := weightsFromEnv("context=65,weekly=5")
 	steps, _ := buildFitLevels(w)
@@ -137,9 +253,9 @@ func TestWeightOverrideReordersTheSteps(t *testing.T) {
 		"weekly: label + % + countdown",
 		"scoped: label + % + countdown",
 		"session: % + countdown",
+		"update: hidden",
 		"path: 20 cells",
 		"branch: 20 runes",
-		"context: icon + %",
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("first pass = %q, want %q", got, want)
@@ -212,27 +328,15 @@ func TestSegmentLadders(t *testing.T) {
 }
 
 func TestOSSegmentGivesWayInOrder(t *testing.T) {
-	withMCPLine(t, false)
 	data := busyLine(0)
-	data.MCP = servers(7, 1)
-	data.Tasks.Unattributed = 2
 	osAt := func(level int) string {
 		var fit lineFit
 		fit[segOS] = level
 		head, _, _ := strings.Cut(line1At(data, fit), SepRight)
 		return head
 	}
-	// Richest to soberest, in the order the user chose: the subagent count
-	// first because line two already shows those subagents inside their
-	// epic, then the MCP count, then its glyph, and the health light last
-	// because the one time it matters is the one time not to lose it
-	want := []string{
-		" " + glyphs.Health + " " + glyphs.MCP + " 7 \u00b71 " + glyphs.Subagents + " 2 ",
-		" " + glyphs.Health + " " + glyphs.MCP + " 7 \u00b71 ",
-		" " + glyphs.Health + " " + glyphs.MCP + " ",
-		" " + glyphs.Health + " ",
-		" ",
-	}
+	// One step: the health light, last of the whole line
+	want := []string{" " + glyphs.Health + " ", " "}
 	for level, tail := range want {
 		// The OS icon is never given up: it is what says the bar is the bar
 		if got, expect := osAt(level), LeftRound+" "+IconLinux+tail; got != expect {
@@ -280,11 +384,11 @@ func TestFitLine1PicksTheFirstLevelThatFits(t *testing.T) {
 		{budget: 100, level: 0},
 		{budget: 99, level: 1},
 		{budget: 85, level: 15},
-		{budget: 80, level: 20},
+		{budget: 82, level: 18},
 		{budget: 1, level: len(fitLevels) - 1},
 	}
 	for _, tt := range tests {
-		line, level, fits := fitLine1(tt.budget, render)
+		line, level, fits := fitLine1(tt.budget, fitLevels, render)
 		if want := tt.budget != 1; fits != want {
 			t.Errorf("budget %d: fits = %v, want %v", tt.budget, fits, want)
 		}
@@ -338,16 +442,6 @@ func TestRenderLine1PathlessHandsOverToGit(t *testing.T) {
 	data.Git = model.GitStatus{}
 	if line := line1At(data, fitLevels[len(fitLevels)-1]); !strings.Contains(line, "renderer") {
 		t.Errorf("no repository: the path stays, got %q", line)
-	}
-}
-
-func TestLine2IsNeverCondensed(t *testing.T) {
-	data := busyLine(40)
-	data.Tasks = model.TaskBoard{Epics: []model.Epic{sampleEpic()}}
-	data.Working = true
-	out := (&Powerline{}).Render(data)
-	if !strings.Contains(out, "a rather long title that must never be shortened") {
-		t.Errorf("line two keeps full task titles at any width, got %q", out)
 	}
 }
 
@@ -419,8 +513,8 @@ func BenchmarkRenderLine1(b *testing.B) {
 		{name: "overflows-all", width: 20},
 	} {
 		data := busyLine(bc.width)
-		// The MCP indicator sits in the OS segment at every level
-		data.MCP = servers(7, 1)
+		// The update pill closes the line at every level that keeps it
+		data.Update = model.UpdateInfo{Available: true, Version: "v9.9.9"}
 		b.Run(bc.name, func(b *testing.B) {
 			for b.Loop() {
 				var sb strings.Builder
@@ -430,73 +524,74 @@ func BenchmarkRenderLine1(b *testing.B) {
 	}
 }
 
-// TestLineOneNeverOverflowsTheHostsBox is the acceptance the OS ladder exists
+// TestLineOneNeverOverflowsTheHostsBox is the acceptance the ladder exists
 // for. The host lays the status line out in a box of exactly lineBudget cells
 // and truncates every line longer than that, on every redraw — so a line over
 // budget is not a cosmetic overflow, it is a frame the host cuts each second.
-//
-// The subagent count was what pushed a loaded session over at 80 columns: 80
-// cells against a budget of 76. With the OS segment on the ladder the tightest
-// line loses nine cells, and 80 columns fits with one to spare.
 //
 // Below some width no ladder can help: the tightest level still has to draw
 // the model, its quotas and the branch. So the assertion is in two halves —
 // the line fits wherever the budget allows it, and where it cannot it is the
 // tightest line the policy can produce, never one rung short of it.
 func TestLineOneNeverOverflowsTheHostsBox(t *testing.T) {
-	withMCPLine(t, false)
 	savedGlyphs := glyphs
 	t.Cleanup(func() { glyphs = savedGlyphs })
-	rest := servers(7, 2)
-	lit := servers(7, 2)
-	lit[0].Busy = true
 	for _, set := range []struct {
 		name string
 		set  GlyphSet
 	}{{name: "glyphs:nerd", set: nerdGlyphs}, {name: "glyphs:text", set: textGlyphs}} {
 		glyphs = set.set
-		for _, chip := range []struct {
-			name string
-			list model.MCPServers
-		}{{name: "chip:rest", list: rest}, {name: "chip:lit", list: lit}} {
-			// The subagent count is the cell load the ladder exists to shed
-			for _, subagents := range []int{0, 3, 12} {
-				shape := func(width int) model.StatusLineData {
-					data := busyLine(width)
-					data.MCP = chip.list
-					data.Tasks.Unattributed = subagents
-					return data
-				}
-				// What the policy can reach when it has given up everything
-				tightest := VisibleWidth(line1At(shape(0), fitLevels[len(fitLevels)-1]))
-				floor := tightest + lineMargin
-				label := set.name + " " + chip.name + " agents:" + itoa(subagents)
-				// The defect was a loaded session at 80 columns: the ladder
-				// has to bring the floor under that and keep it there
-				if floor > 80 {
-					t.Errorf("%s: the tightest line is %d cells, so nothing under %d columns fits", label, tightest, floor)
-				}
-				for width := 40; width <= 200; width++ {
-					line1, _, _ := strings.Cut((&Powerline{}).Render(shape(width)), "\n")
-					emitted, budget := VisibleWidth(line1), lineBudget(width)
-					// Wide enough for the policy to fit: it must fit, which
-					// is cut=no in the byte trace
-					if width >= floor {
-						if emitted > budget {
-							t.Errorf("%s COLUMNS=%d: emitted %d cells for a budget of %d", label, width, emitted, budget)
-							return
-						}
-						continue
-					}
-					// Too narrow for any level: the tightest one, exactly —
-					// a wider line here would mean a rung left unused
-					if emitted != tightest {
-						t.Errorf("%s COLUMNS=%d: emitted %d cells, but the tightest level is %d",
-							label, width, emitted, tightest)
+		for _, update := range updateShapes() {
+			shape := func(width int) model.StatusLineData {
+				data := busyLine(width)
+				data.Update = update.update
+				return data
+			}
+			// What the policy can reach when it has given up everything
+			levels := levelsFor(shape(0))
+			tightest := VisibleWidth(line1At(shape(0), levels[len(levels)-1]))
+			floor := tightest + lineMargin
+			label := set.name + " " + update.name
+			// A loaded session at 80 columns overflowed once: the ladder
+			// has to keep the floor under that
+			if floor > 80 {
+				t.Errorf("%s: the tightest line is %d cells, so nothing under %d columns fits", label, tightest, floor)
+			}
+			for width := 40; width <= 200; width++ {
+				line1, _, _ := strings.Cut((&Powerline{}).Render(shape(width)), "\n")
+				emitted, budget := VisibleWidth(line1), lineBudget(width)
+				// Wide enough for the policy to fit: it must fit, which
+				// is cut=no in the byte trace
+				if width >= floor {
+					if emitted > budget {
+						t.Errorf("%s COLUMNS=%d: emitted %d cells for a budget of %d", label, width, emitted, budget)
 						return
 					}
+					continue
+				}
+				// Too narrow for any level: the tightest one, exactly —
+				// a wider line here would mean a rung left unused
+				if emitted != tightest {
+					t.Errorf("%s COLUMNS=%d: emitted %d cells, but the tightest level is %d",
+						label, width, emitted, tightest)
+					return
 				}
 			}
 		}
+	}
+}
+
+// measuredFloor is the narrowest terminal, in columns, the busy line fits in
+// whole at its tightest level; CLAUDE.md quotes it.
+const measuredFloor int = 71
+
+// TestTheFloorIsMeasured pins the narrowest terminal the busy line fits in,
+// as the documentation states it: a change in the ladder or in a segment
+// moves it, and the documentation has to move with it.
+func TestTheFloorIsMeasured(t *testing.T) {
+	data := busyLine(0)
+	tightest := VisibleWidth(line1At(data, fitLevels[len(fitLevels)-1]))
+	if floor := tightest + lineMargin; floor != measuredFloor {
+		t.Errorf("the busy line fits from %d columns, the documentation says %d", floor, measuredFloor)
 	}
 }

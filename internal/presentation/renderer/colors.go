@@ -70,38 +70,6 @@ const (
 	FgRedSep string = "\033[38;5;174m"
 	// ColorGray is the gray foreground for incomplete progress.
 	ColorGray string = "\033[38;5;245m"
-	// FgGreenDone is the green foreground for done tasks in segmented bar.
-	FgGreenDone string = "\033[38;5;34m"
-	// FgYellowWip is the yellow/orange foreground for WIP indicator.
-	FgYellowWip string = "\033[38;5;214m"
-	// FgGrayTodo is the dark gray foreground for todo tasks.
-	FgGrayTodo string = "\033[38;5;240m"
-	// FgGraySep is the separator color between epics.
-	FgGraySep string = "\033[38;5;245m"
-	// FgCyanTask is the cyan foreground for current task indicator.
-	FgCyanTask string = "\033[38;5;44m"
-	// BgMCPEnabled is the pale teal background for enabled MCP servers.
-	BgMCPEnabled string = "\033[48;5;116m"
-	// FgMCPEnabled is the pale teal foreground for enabled MCP pill caps.
-	FgMCPEnabled string = "\033[38;5;116m"
-	// FgMCPEnabledText is the dark teal for text on enabled MCP background.
-	FgMCPEnabledText string = "\033[38;5;23m"
-	// BgMCPLabel is the dark teal ground of the MCP pill while a call is
-	// in flight.
-	BgMCPLabel string = "\033[48;5;23m"
-	// FgMCPMuted is the gray ink of the disabled count inside the MCP pill.
-	// 240 only reaches 4.31:1 on the teal; 239 clears 4.5:1 (5.05:1).
-	FgMCPMuted string = "\033[38;5;239m"
-	// FgMCPOnWhite is the dark teal of the MCP glyph on the OS segment's
-	// white ground (6.46:1).
-	FgMCPOnWhite string = "\033[38;5;23m"
-	// FgMCPMutedOnWhite is the gray of the disabled count on the OS
-	// segment's white ground: 241 (5.26:1); 242 barely clears 4.5 and 244
-	// falls to 3.4:1.
-	FgMCPMutedOnWhite string = "\033[38;5;241m"
-	// StrikeMCP crosses out the disabled count; terminals without it keep
-	// the gray alone.
-	StrikeMCP string = "\033[9m"
 	// BgWeekly is the pale gray background for weekly usage segment.
 	BgWeekly string = "\033[48;5;252m"
 	// FgWeekly is the pale gray foreground for weekly usage separator.
