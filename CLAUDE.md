@@ -1,4 +1,4 @@
-<!-- updated: 2026-09-22T18:00:00Z -->
+<!-- updated: 2026-11-13T12:00:00Z -->
 # Status Line
 
 CLI Go pour afficher une status line Powerline personnalisée dans Claude Code.
@@ -21,7 +21,7 @@ internal/
 │   ├── terminal/            # Largeur du terminal (COLUMNS)
 │   ├── trace/               # STATUSLINE_TRACE : octets de chaque cadre
 │   ├── transcript/          # Lecture de la fin d'un transcript JSONL
-│   ├── updater/             # Auto-update binaire (GitHub releases)
+│   ├── updater/             # Auto-update détaché (état caché, enfants sous flock)
 │   └── usage/               # Usage API Anthropic (OAuth, burn-rate)
 └── presentation/
     └── renderer/            # Rendu Powerline ANSI (segments, couleurs, icônes)
@@ -48,12 +48,53 @@ renderer.
 `STATUSLINE_LINE_GAP` = lignes vides entre les deux rangées, 0-3 (défaut `0`)
 — **sans effet dans Claude Code**, qui supprime les lignes vides (voir
 « Contrat avec l'hôte »)
-`STATUS_LINE_NO_SELF_UPDATE` = `1` désactive l'auto-update (images managées)
+`STATUS_LINE_NO_SELF_UPDATE` = toute valeur non vide désactive l'auto-update
+(images managées) : aucun enfant lancé, pastille masquée
 `STATUSLINE_TRACE` = fichier où tracer les cadres qui prouvent quelque chose
 (puce allumée, écriture courte, erreur, `cut=yes`) — voir « Tracer les octets »
 
 L'auto-update vérifie le `.sha256` publié avec l'asset avant de remplacer le
 binaire : une somme absente, malformée ou différente annule la mise à jour.
+
+**La trame ne touche jamais le réseau.** L'hôte annule la commande en cours dès
+qu'une nouvelle mise à jour de la barre arrive : l'ancien téléchargement fait
+dans la trame était tué à mi-course (9 `status-line-update-*` partiels mesurés
+sur le poste, v0.20.7/v0.20.8 jamais installées). Désormais :
+
+- `cmd/statusline` : `run(args, stdin, stdout, *deps)` ; les drapeaux
+  (`--version`, `--refresh-usage`, `--refresh-health`, `--check-update`,
+  `--apply-update=<v>`) passent avant stdin et avant le `recover`. La trame lit
+  `<dossier réel du binaire>/.status-line-update.json` (sous son propre
+  `recover` : une panique y vaut « contrôle dû ») et lance
+  `detach.Spawn("--check-update", STATUS_LINE_UPDATING)` **avant** le rendu,
+  seulement si `next_attempt_at` est atteint, jamais sous l'opt-out, pour un
+  build dev, ni si le dossier n'est pas inscriptible.
+- `adapter/updater` : `Check` et `Apply` tiennent un `flock LOCK_EX|LOCK_NB`
+  sur `.status-line-update.lock` (`lock_unix.go`, `linux || darwin` ; stub
+  ailleurs : rien n'est remplacé sous Windows ; un fichier de verrou
+  impossible à ouvrir repousse `next_attempt_at` d'1 h). Sous le verrou, `Check`
+  supprime les temporaires d'état orphelins, relit l'état et sort s'il n'est
+  plus dû (sauf `--check-update=force`), écrit `next_attempt_at` avant l'appel
+  (succès +1 h ; échec 5 min doublés jusqu'à 1 h ; 403/429 : `Retry-After` puis
+  `X-RateLimit-Reset` ne font qu'allonger ce délai, plafond 24 h), valide
+  `^v\d+\.\d+\.\d+$`, et applique un tag plus récent dans le même processus.
+  `Due` tient pour périmé un `next_attempt_at` à plus de 24 h (horloge dans le
+  futur). Avant le `rename`, le binaire téléchargé est lancé avec `--version`
+  (5 s) et doit annoncer le tag attendu (poste sans AVX2, `-X main.version`
+  erroné).
+  L'état s'écrit en `.status-line-update.json.tmp-<pid>` puis `rename` : le point
+  initial le tient hors du nettoyage des `status-line-update-*` de plus d'1 h.
+  `apiURL` et `downloadURLFor` sont des variables pour les tests.
+- Champs de l'état : `checked_at`, `tag`, `next_attempt_at`, `check_error`,
+  `apply_error`, plus `check_failing_since` (début de la série d'échecs) et
+  `failures` (compteur du backoff).
+- Pastille (ligne 2 pour l'instant) : allumée tant que `tag` > version
+  compilée ; variante échec (`\uf071` sur fond rouge) si `apply_error` sur un tag
+  encore en attente, ou si les contrôles échouent depuis plus d'1 h.
+- Code de sortie suivi par un écrivain compteur : 0 octet sorti → trame de
+  secours en texte brut sans SGR, exit 0 ; trame entière → 0 ; partielle → 1.
+  `gather` (application) porte le seul `recover` des fournisseurs, pile sur
+  stderr.
 `STATUSLINE_GLYPHS` = `nerd` (défaut) | `text` (repli ASCII, sans Nerd Font)
 `STATUSLINE_COLORS` = `truecolor` | `256` force la profondeur de couleur ;
 absent, elle suit `COLORTERM` (`truecolor`/`24bit` → 24 bits, sinon 256)
@@ -313,7 +354,7 @@ ne renifle la première ligne que pour y chercher un marqueur de hook async.
 **Conséquence : l'hôte ne peut pas afficher un cadre partiel — sauf si nous
 sortons 0 après n'avoir écrit qu'une partie de la ligne.** C'est pour ça que
 `emit` (`cmd/statusline/main.go`) traite une écriture courte comme une erreur
-et que `main` sort 1 : mieux vaut un redraw vide qu'une barre bavée.
+et que `run` sort 1 : mieux vaut un redraw vide qu'une barre bavée.
 
 **Budget d'octets.** Tout le cadre part en un seul `fmt`/`Write`. `os.File.Write`
 reboucle sur une écriture courte, donc `n < len` n'arrive qu'avec une erreur,

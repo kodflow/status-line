@@ -1,6 +1,7 @@
 package application_test
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -197,5 +198,34 @@ func TestGenerate_MCPBusy(t *testing.T) {
 	got := rend.data.MCP
 	if len(got) != 3 || got[0].Busy || !got[1].Busy || got[2].Name != "surprise" || !got[2].Busy {
 		t.Errorf("MCP = %+v, want tasks and the unknown surprise busy", got)
+	}
+}
+
+type panickingHealthProv struct{}
+
+func (p *panickingHealthProv) Health() model.ServiceHealth { panic("health exploded") }
+
+func TestGenerate_ProviderPanicStillRenders(t *testing.T) {
+	var stderr strings.Builder
+	rend := &capturingRenderer{}
+	deps := application.ServiceDeps{
+		Git:      &mockGitRepo{},
+		System:   &mockSystemProv{},
+		Terminal: &mockTerminalProv{},
+		MCP:      &mockMCPProv{},
+		Usage:    &mockUsageProv{},
+		Health:   &panickingHealthProv{},
+		Stderr:   &stderr,
+	}
+	application.NewStatusLineService(deps, rend).Generate(&mockInputProvider{})
+	// The panicking provider's value stays zero, the others still arrive
+	if rend.data.Git.Branch != "main" {
+		t.Errorf("git branch = %q, want the other providers to still render", rend.data.Git.Branch)
+	}
+	if rend.data.Health != model.HealthUnknown {
+		t.Errorf("health = %v, want zero after a panic", rend.data.Health)
+	}
+	if !strings.Contains(stderr.String(), "health exploded") || !strings.Contains(stderr.String(), "goroutine") {
+		t.Errorf("stderr = %q, want the panic and its stack", stderr.String())
 	}
 }

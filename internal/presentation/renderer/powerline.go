@@ -616,12 +616,24 @@ func (r *Powerline) renderUpdatePill(sb *strings.Builder, update model.UpdateInf
 	// Add space before pill
 	sb.WriteString(" ")
 
-	// Write left rounded cap (white)
-	sb.WriteString(FgWhite + LeftRound + Reset)
-	// Write update icon and version on white background
-	sb.WriteString(BgWhite + FgBlack + Bold + " " + IconUpdate + " " + update.Version + " " + Reset)
+	// The failure variant swaps the glyph and the ground; both variants keep
+	// one ground for the whole pill
+	bg, edge, ink, icon := BgWhite, FgWhite, FgBlack, IconUpdate
+	if update.Failed {
+		bg, edge, ink, icon = BgRed, FgRedSep, FgRedText, IconUpdateFailed
+	}
+	label := " " + icon + " "
+	// Name the release when one is pending
+	if update.Version != "" {
+		label += update.Version + " "
+	}
+
+	// Write left rounded cap
+	sb.WriteString(edge + LeftRound + Reset)
+	// Write icon and version on the pill's ground
+	sb.WriteString(bg + ink + Bold + label + Reset)
 	// Write right rounded cap
-	sb.WriteString(FgWhite + RightRound + Reset)
+	sb.WriteString(edge + RightRound + Reset)
 }
 
 // itoa converts an integer to string.

@@ -106,7 +106,7 @@ dashboard:
 | Git | Branch name, modified (!), untracked (?) |
 | Changes | Lines added (+) and removed (-) |
 | MCP | Inside the OS segment, after the health sparkle: MCP glyph and the number of enabled servers (`MCP 7` without a Nerd Font); disabled servers add a muted, crossed `·N`; glyph and count light up as a dark teal chip while a call is in flight (read from the transcripts) and 2 s after. Sources: managed, `--mcp-config` of the running session (Linux), local, project, user, enabled plugins. `STATUSLINE_MCP_LINE=2` shows it as a pill on line two instead |
-| Update | Shows version when update is downloading |
+| Update | Lit while a newer release is known and the running binary is older; turns red with a warning glyph when the install failed or checks have failed for over an hour |
 
 ## Environment Variables
 
@@ -124,8 +124,48 @@ dashboard:
 
 ## Auto-Update
 
-Status-line checks for updates once per hour and downloads newer versions in the
-background. The update notification appears on line 2 while downloading.
+**A frame never touches the network.** The host cancels a status line command
+as soon as the next update triggers, so anything slow done inside a frame is
+killed half way: the old in-frame download left partial
+`status-line-update-*` files beside the binary and never installed anything.
+
+Instead each frame reads `.status-line-update.json`, kept beside the real
+binary (`os.Executable()` resolved through its symlinks), and only when its
+`next_attempt_at` is reached starts a detached child, `status-line
+--check-update`, in its own session. That child:
+
+- takes a non-blocking `flock` on `.status-line-update.lock` (another child at
+  work: it exits; a lock file it cannot even open pushes the next attempt out
+  by an hour), then re-reads the state and leaves if the check is no longer
+  due, so two children spawned back to back make one request
+  (`--check-update=force` skips that test, for a manual run);
+- records `next_attempt_at` **before** the request, so a killed child still
+  holds frames off: +1 h after a success, 5 min doubled up to 1 h after
+  failures in a row, lengthened (never shortened) by `Retry-After` /
+  `X-RateLimit-Reset` on a 403 or 429. A `next_attempt_at` more than 24 h
+  ahead, which only a clock set in the future could write, counts as stale;
+- asks the GitHub API (10 s), accepts only a `vMAJOR.MINOR.PATCH` tag, records
+  `check_error` on any failure and clears it on success;
+- when the tag is newer, installs it in the same process under the same lock:
+  sweeps `status-line-update-*` partial downloads older than an hour,
+  downloads (2 min), verifies the checksum, `chmod`, runs the download once
+  with `--version` and requires it to name the tag (an asset that dies at load,
+  or one built with the wrong version, is refused), `rename`, and records or
+  clears `apply_error`.
+
+`status-line --apply-update=<tag>` is the same install as a standalone entry
+point. The state file is written to a temporary then renamed, so a frame never
+reads half of it (a half-written or unreadable file counts as stale).
+
+The update pill is derived from that file on every frame: lit while the cached
+tag is newer than the running version, so it goes out by itself once the new
+binary renders; red with a warning glyph when the install failed or checks
+have been failing for over an hour. If rendering fails before a single byte
+went out, the frame is a plain line, `status-line <version> : erreur de rendu`,
+followed by `· mise à jour en attente` when a newer release is known.
+
+Self-replacement runs on Linux and macOS only; on Windows nothing is checked
+or replaced.
 
 **Every download is verified** against the `.sha256` asset published alongside
 it, fetched from the same release tag. A missing, malformed or mismatching
@@ -133,7 +173,10 @@ checksum aborts the update and leaves the running binary untouched — this
 process replaces itself in place, so an unverified payload would be executed on
 every redraw from then on.
 
-Set `STATUS_LINE_NO_SELF_UPDATE=1` to switch the updater off entirely. Managed
+Set `STATUS_LINE_NO_SELF_UPDATE` to any non-empty value to switch the updater
+off entirely: no child is started, a child started anyway exits at once, and
+the pill is hidden. A frame also never starts a child for a dev build or when
+the binary's directory is not writable. Managed
 images that verify the binary at build time and rebuild on their own schedule
 should set it, otherwise a runtime replacement voids that verification.
 

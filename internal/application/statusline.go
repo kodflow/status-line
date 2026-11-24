@@ -2,6 +2,9 @@
 package application
 
 import (
+	"fmt"
+	"os"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -73,10 +76,22 @@ func (s *StatusLineService) GenerateWithUpdate(input port.InputProvider, update 
 		working     bool
 	)
 
+	stderr := s.deps.Stderr
+	if stderr == nil {
+		stderr = os.Stderr
+	}
 	gather := func(fn func()) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			// A provider that panics on its own goroutine would take the
+			// whole process down before the frame is written: its value
+			// stays zero and the rest of the bar still renders
+			defer func() {
+				if r := recover(); r != nil {
+					fmt.Fprintf(stderr, "status-line: provider panic: %v\n%s", r, debug.Stack())
+				}
+			}()
 			fn()
 		}()
 	}

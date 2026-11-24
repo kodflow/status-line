@@ -39,6 +39,8 @@ const (
 	IconModel string = "\uf2db"
 	// IconUpdate is the download/update icon.
 	IconUpdate string = "\uf019"
+	// IconUpdateFailed is the warning sign of a self-update that failed.
+	IconUpdateFailed string = "\uf071"
 	// IconWeekly is the calendar/clock icon for weekly usage.
 	IconWeekly string = "\uf073"
 )

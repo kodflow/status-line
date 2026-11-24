@@ -30,6 +30,11 @@ type StatusLineData struct {
 // UpdateInfo contains information about available updates.
 // Used to display update notification in the status line.
 type UpdateInfo struct {
+	// Available lights the pill.
 	Available bool
-	Version   string
+	// Version is the pending release, empty when none is known.
+	Version string
+	// Failed switches the pill to its failure variant: an apply failed, or
+	// checks have been failing for over an hour.
+	Failed bool
 }
